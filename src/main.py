@@ -489,18 +489,36 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
 def upload_confirm(upload_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
+            # Atomically claim the upload: only succeeds if status is currently 'pending'.
+            # Concurrent requests will find no row to update and receive a 409.
             cur.execute(
-                "SELECT filename, row_count, parsed_rows, validation_errors, status FROM pending_uploads WHERE id = %s",
+                """
+                UPDATE pending_uploads
+                SET status = 'confirmed'
+                WHERE id = %s AND status = 'pending'
+                RETURNING parsed_rows, validation_errors
+                """,
                 (upload_id,),
             )
-            upload = cur.fetchone()
-            if upload is None:
-                raise HTTPException(status_code=404, detail="Upload not found")
+            claimed = cur.fetchone()
+            if claimed is None:
+                # Either not found or already confirmed/rejected
+                cur.execute(
+                    "SELECT 1 FROM pending_uploads WHERE id = %s",
+                    (upload_id,),
+                )
+                exists = cur.fetchone()
+                if exists is None:
+                    raise HTTPException(status_code=404, detail="Upload not found")
+                raise HTTPException(status_code=409, detail="Upload already confirmed or rejected")
 
-            if upload[3] or upload[4] != "pending":
-                raise HTTPException(status_code=400, detail="Upload is not valid for confirmation")
+            parsed_rows, validation_errors = claimed
+            if validation_errors:
+                # Roll back the status change — this upload has errors and cannot be confirmed
+                conn.rollback()
+                raise HTTPException(status_code=400, detail="Upload has validation errors and cannot be confirmed")
 
-            parsed_rows = upload[2] or []
+            parsed_rows = parsed_rows or []
             for index, row in enumerate(parsed_rows, start=1):
                 company_name = (row.get("company_name") or "").strip()
                 jurisdiction = (row.get("jurisdiction") or "").strip()
@@ -548,10 +566,6 @@ def upload_confirm(upload_id: UUID):
                     ),
                 )
 
-            cur.execute(
-                "UPDATE pending_uploads SET status = 'confirmed' WHERE id = %s",
-                (upload_id,),
-            )
             conn.commit()
 
     return RedirectResponse(url="/", status_code=303)
