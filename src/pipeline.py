@@ -3,11 +3,8 @@ Nightly pipeline orchestrator.
 Run directly: python -m src.pipeline
 Or via GitHub Actions cron.
 """
-import json
 import logging
-import sys
 import time
-from datetime import datetime, timezone
 
 from src.db import get_conn
 from src.ingestion.companies_house import fetch_uk_incorporations
@@ -77,39 +74,36 @@ def _score_new_companies(conn) -> int:
 def _refresh_queue(conn) -> int:
     """Atomic queue snapshot refresh. Returns new row count."""
     with conn.cursor() as cur:
-        cur.execute("BEGIN")
+        cur.execute("TRUNCATE queue_snapshot")
         cur.execute(
             """
-            CREATE TABLE queue_snapshot_new AS
+            INSERT INTO queue_snapshot (
+                canonical_company_id, company_name, jurisdiction, entity_type,
+                incorporation_date, verify_url, priority_score, tier,
+                reason_codes, reason_summary, scoring_version, refreshed_at
+            )
             SELECT
-                c.id              AS canonical_company_id,
+                c.id,
                 c.company_name,
                 c.jurisdiction,
                 c.entity_type,
                 c.incorporation_date,
                 c.verify_url,
-                ls.score          AS priority_score,
+                ls.score,
                 ls.tier,
                 ls.reason_codes,
                 ls.reason_summary,
                 ls.scoring_version,
-                NOW()             AS refreshed_at
+                NOW()
             FROM companies c
             JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
             WHERE c.canonical_company_id IS NULL
             ORDER BY ls.score DESC
             """
         )
-        cur.execute("DROP TABLE IF EXISTS queue_snapshot")
-        cur.execute(
-            "ALTER TABLE queue_snapshot_new RENAME TO queue_snapshot"
-        )
-        cur.execute(
-            "CREATE INDEX idx_queue_score ON queue_snapshot(priority_score DESC)"
-        )
         cur.execute("SELECT COUNT(*) FROM queue_snapshot")
         count = cur.fetchone()[0]
-        cur.execute("COMMIT")
+    conn.commit()
     return count
 
 
@@ -136,7 +130,7 @@ def run() -> None:
         try:
             if not _acquire_lock(conn):
                 logger.warning("pipeline_already_running_skipping")
-                sys.exit(0)
+                return
 
             uk_count = fetch_uk_incorporations(conn)
             mu_count = fetch_mauritius_incorporations(conn)

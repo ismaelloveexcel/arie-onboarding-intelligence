@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Arie Leads{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Audit Log</h1><small>{{ total }} entries</small></div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>When</th>
+        <th>Entity</th>
+        <th>Action</th>
+        <th>Actor</th>
+        <th>Detail</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td style="white-space:nowrap; color:#888">{{ row.created_at.strftime("%d %b %Y %H:%M") }}</td>
+        <td style="font-size:12px">{{ row.entity_type }}<br><span style="color:#aaa">{{ row.entity_id }}</span></td>
+        <td><strong>{{ row.action }}</strong></td>
+        <td>{{ row.actor }}</td>
+        <td style="font-size:12px; color:#555; max-width:320px">{{ row.new_value or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" style="text-align:center; padding:2rem; color:#888">No audit entries yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if page > 1 %}<a href="/audit?page={{ page-1 }}">‹ Prev</a>{% endif %}
+  <span>Page {{ page }} of {{ total_pages }}</span>
+  {% if page < total_pages %}<a href="/audit?page={{ page+1 }}">Next ›</a>{% endif %}
+</div>
+{% endif %}
+{% endblock %}

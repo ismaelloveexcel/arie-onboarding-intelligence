@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.company_name }} — Arie Leads{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ lead.company_name }}</h1>
+  <a href="/" style="font-size:13px">← Back to queue</a>
+</div>
+
+<div class="grid-2">
+  <!-- Left: Company info + score breakdown -->
+  <div>
+    <div class="card">
+      <h2>Company Details</h2>
+      <table style="width:100%; font-size:13px">
+        <tr><td style="color:#888;width:140px">Jurisdiction</td><td>{{ lead.jurisdiction }}</td></tr>
+        <tr><td style="color:#888">Entity Type</td><td>{{ lead.entity_type or "—" }}</td></tr>
+        <tr><td style="color:#888">Inc. Date</td><td>{{ lead.incorporation_date or "—" }}</td></tr>
+        <tr><td style="color:#888">Address</td><td>{{ lead.registered_address or "—" }}</td></tr>
+        <tr><td style="color:#888">Source</td><td>{{ lead.source_system }}</td></tr>
+        <tr><td style="color:#888">Ref</td><td>{{ lead.source_ref }}</td></tr>
+        {% if lead.verify_url %}
+        <tr><td style="color:#888">Registry</td><td><a href="{{ lead.verify_url }}" target="_blank">View ↗</a></td></tr>
+        {% endif %}
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Score Breakdown</h2>
+      <div style="font-size:28px; font-weight:700; margin-bottom:.5rem">
+        {{ score.score }}
+        <span class="tier tier-{{ score.tier }}" style="font-size:14px; vertical-align:middle">{{ score.tier }}</span>
+      </div>
+      <div style="font-size:12px; color:#555; margin-bottom:.75rem">{{ score.reason_summary or "No signals matched." }}</div>
+      <div class="codes">
+        {% for code in score.reason_codes %}
+          <span class="code">{{ code }}</span>
+        {% endfor %}
+      </div>
+      <div style="margin-top:.75rem; font-size:11px; color:#aaa">Scoring version {{ score.scoring_version }}</div>
+    </div>
+  </div>
+
+  <!-- Right: RM action panel -->
+  <div>
+    <div class="card" id="action-panel">
+      <h2>RM Actions</h2>
+      <form
+        hx-post="/leads/{{ lead.id }}/action"
+        hx-target="#action-panel"
+        hx-swap="outerHTML"
+        style="display:flex; flex-direction:column; gap:.75rem"
+      >
+        <div>
+          <label>Assign To</label>
+          <select name="assigned_to">
+            <option value="">— Unassigned —</option>
+            {% for rm in rm_names %}
+              <option value="{{ rm }}" {% if action and action.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Status</label>
+          <select name="status">
+            {% for s in statuses %}
+              <option value="{{ s }}" {% if action and action.status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Notes</label>
+          <textarea name="notes">{{ action.notes if action else "" }}</textarea>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>Contacted At</label>
+            <input type="date" name="contacted_at" value="{{ action.contacted_at.date() if action and action.contacted_at else '' }}">
+          </div>
+          <div>
+            <label>Follow Up</label>
+            <input type="date" name="follow_up_at" value="{{ action.follow_up_at if action and action.follow_up_at else '' }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+        {% if saved %}<div style="color:#065f46; font-size:12px; margin-top:.25rem">✓ Saved</div>{% endif %}
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Audit Trail</h2>
+      {% if audit_rows %}
+        {% for entry in audit_rows %}
+        <div class="audit-row">
+          <strong>{{ entry.action }}</strong> by {{ entry.actor }}
+          <span style="float:right">{{ entry.created_at.strftime("%d %b %Y %H:%M") }}</span>
+          {% if entry.new_value %}
+            <div style="margin-top:2px">→ {{ entry.new_value }}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="color:#aaa; font-size:12px">No actions recorded yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

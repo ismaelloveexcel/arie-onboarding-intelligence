@@ -1,0 +1,113 @@
+{"asctime": "2026-05-25 21:04:15,783", "name": "asyncio", "levelname": "DEBUG", "message": "Using proactor: IocpProactor"}
+INFO:     Started server process [41988]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+ERROR:    [Errno 10048] error while attempting to bind on address ('127.0.0{"asctime": "2026-05-25 21:05:10,936", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:10,946", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[0:11]"}
+{"asctime": "2026-05-25 21:05:10,946", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[12:17]"}
+{"asctime": "2026-05-25 21:05:10,948", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:10,948", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:10,949", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[18:24]"}
+{"asctime": "2026-05-25 21:05:10,949", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[25:34]"}
+{"asctime": "2026-05-25 21:05:10,949", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:10,949", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:10,951", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[35:40]"}
+{"asctime": "2026-05-25 21:05:10,951", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[41:61]"}
+{"asctime": "2026-05-25 21:05:10,951", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:10,951", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:10,951", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[62:74]"}
+{"asctime": "2026-05-25 21:05:10,953", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:10,953", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:10,953", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[76:88]"}
+{"asctime": "2026-05-25 21:05:10,955", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:10,955", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:05:13,955", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:13,958", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[0:11]"}
+{"asctime": "2026-05-25 21:05:13,959", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[12:17]"}
+{"asctime": "2026-05-25 21:05:13,960", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:13,960", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:13,961", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[18:24]"}
+{"asctime": "2026-05-25 21:05:13,961", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[25:34]"}
+{"asctime": "2026-05-25 21:05:13,962", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:13,963", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:13,963", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[35:40]"}
+{"asctime": "2026-05-25 21:05:13,964", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[41:61]"}
+{"asctime": "2026-05-25 21:05:13,964", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:13,965", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:13,966", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[62:74]"}
+{"asctime": "2026-05-25 21:05:13,966", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:13,967", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:13,967", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[76:88]"}
+{"asctime": "2026-05-25 21:05:13,968", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:13,968", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:05:36,545", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:36,546", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[0:11]"}
+{"asctime": "2026-05-25 21:05:36,547", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[12:17]"}
+{"asctime": "2026-05-25 21:05:36,548", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:36,548", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:36,549", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[18:24]"}
+{"asctime": "2026-05-25 21:05:36,549", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[25:34]"}
+{"asctime": "2026-05-25 21:05:36,550", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:36,550", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:36,550", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[35:40]"}
+{"asctime": "2026-05-25 21:05:36,551", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[41:61]"}
+{"asctime": "2026-05-25 21:05:36,551", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:36,552", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:36,552", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[62:74]"}
+{"asctime": "2026-05-25 21:05:36,553", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:36,553", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:36,554", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[76:88]"}
+{"asctime": "2026-05-25 21:05:36,555", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:36,555", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:05:47,061", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:47,062", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[0:11]"}
+{"asctime": "2026-05-25 21:05:47,063", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[12:17]"}
+{"asctime": "2026-05-25 21:05:47,063", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:47,064", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:47,064", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[18:24]"}
+{"asctime": "2026-05-25 21:05:47,065", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[25:34]"}
+{"asctime": "2026-05-25 21:05:47,065", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:47,066", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:47,066", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[35:40]"}
+{"asctime": "2026-05-25 21:05:47,067", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_data with data[41:61]"}
+{"asctime": "2026-05-25 21:05:47,068", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:47,069", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:47,070", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[62:74]"}
+{"asctime": "2026-05-25 21:05:47,072", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:47,073", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_start with no data"}
+{"asctime": "2026-05-25 21:05:47,074", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_name with data[76:88]"}
+{"asctime": "2026-05-25 21:05:47,074", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_field_end with no data"}
+{"asctime": "2026-05-25 21:05:47,075", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:06:05,861", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_begin with no data"}
+{"asctime": "2026-05-25 21:06:05,862", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[50:69]"}
+{"asctime": "2026-05-25 21:06:05,863", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[71:121]"}
+{"asctime": "2026-05-25 21:06:05,863", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:05,863", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[123:135]"}
+{"asctime": "2026-05-25 21:06:05,864", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[137:161]"}
+{"asctime": "2026-05-25 21:06:05,864", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:05,865", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_headers_finished with no data"}
+{"asctime": "2026-05-25 21:06:05,871", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_data with data[165:332]"}
+{"asctime": "2026-05-25 21:06:05,872", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_end with no data"}
+{"asctime": "2026-05-25 21:06:05,873", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:06:14,728", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_begin with no data"}
+{"asctime": "2026-05-25 21:06:14,729", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[50:69]"}
+{"asctime": "2026-05-25 21:06:14,730", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[71:121]"}
+{"asctime": "2026-05-25 21:06:14,730", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:14,731", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[123:135]"}
+{"asctime": "2026-05-25 21:06:14,732", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[137:161]"}
+{"asctime": "2026-05-25 21:06:14,732", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:14,733", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_headers_finished with no data"}
+{"asctime": "2026-05-25 21:06:14,734", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_data with data[165:332]"}
+{"asctime": "2026-05-25 21:06:14,735", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_end with no data"}
+{"asctime": "2026-05-25 21:06:14,736", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}
+{"asctime": "2026-05-25 21:06:22,748", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_begin with no data"}
+{"asctime": "2026-05-25 21:06:22,750", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[50:69]"}
+{"asctime": "2026-05-25 21:06:22,750", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[71:121]"}
+{"asctime": "2026-05-25 21:06:22,752", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:22,752", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_field with data[123:135]"}
+{"asctime": "2026-05-25 21:06:22,752", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_value with data[137:161]"}
+{"asctime": "2026-05-25 21:06:22,752", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_header_end with no data"}
+{"asctime": "2026-05-25 21:06:22,754", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_headers_finished with no data"}
+{"asctime": "2026-05-25 21:06:22,754", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_data with data[165:332]"}
+{"asctime": "2026-05-25 21:06:22,754", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_part_end with no data"}
+{"asctime": "2026-05-25 21:06:22,754", "name": "python_multipart.multipart", "levelname": "DEBUG", "message": "Calling on_end with no data"}

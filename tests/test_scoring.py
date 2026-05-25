@@ -3,7 +3,6 @@ Fixture tests for the scoring engine.
 Every test uses a fixed, fully-specified input and asserts exact outputs.
 Changing a score intentionally means updating the fixture here.
 """
-import pytest
 from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
 
 

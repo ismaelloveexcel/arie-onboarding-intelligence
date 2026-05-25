@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:\\\\Users\\\\isuda\\\\Arie-Finance\\\\Projects\\\\ARIE-global-incorporations-tracker\\\\ARIE-global-incorporations-tracker\")",
+      "Bash(git init *)",
+      "Bash(git --version)",
+      "mcp__railway__list_projects",
+      "mcp__railway__list_services",
+      "mcp__railway__list_variables",
+      "Bash(python -m alembic revision --autogenerate -m \"initial_schema\")",
+      "Bash(python -m alembic revision -m \"initial_schema\")",
+      "Bash(python -m alembic upgrade head)",
+      "Bash(python -c ' *)",
+      "Bash(Start-Process -NoNewWindow python -ArgumentList \"-m\",\"uvicorn\",\"src.main:app\",\"--port\",\"8000\" -RedirectStandardOutput uvicorn_out.log -RedirectStandardError uvicorn_err.log)",
+      "Bash(Start-Sleep 3)",
+      "Bash(Get-Content uvicorn_err.log)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:8000/health\")",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:8000/health\"; $r.Content)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

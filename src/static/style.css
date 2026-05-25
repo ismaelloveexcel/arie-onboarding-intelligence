@@ -1,0 +1,81 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { font-family: system-ui, sans-serif; font-size: 14px; color: #1a1a1a; background: #f5f5f5; }
+
+a { color: #0057b8; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.nav { background: #0057b8; color: #fff; padding: 0 1.5rem; display: flex; align-items: center; gap: 1.5rem; height: 48px; }
+.nav a { color: #fff; font-weight: 500; }
+.nav .brand { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+.container { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
+
+/* Filters bar */
+.filters { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: .75rem 1rem; display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: 1rem; }
+.filters label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: #555; }
+.filters select, .filters input { border: 1px solid #ccc; border-radius: 4px; padding: 4px 8px; font-size: 13px; background: #fff; }
+.filters button { background: #0057b8; color: #fff; border: none; border-radius: 4px; padding: 5px 14px; cursor: pointer; font-size: 13px; }
+.filters button:hover { background: #004a9e; }
+
+/* Table */
+.table-wrap { background: #fff; border: 1px solid #ddd; border-radius: 6px; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { background: #f0f0f0; text-align: left; padding: .6rem .75rem; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #444; border-bottom: 1px solid #ddd; white-space: nowrap; }
+td { padding: .6rem .75rem; border-bottom: 1px solid #eee; vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: #fafafa; }
+
+/* Tier badges */
+.tier { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+.tier-HIGH { background: #d1fae5; color: #065f46; }
+.tier-MEDIUM { background: #fef3c7; color: #92400e; }
+.tier-LOW { background: #f3f4f6; color: #6b7280; }
+
+/* Status badge */
+.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e0e7ff; color: #3730a3; }
+
+/* Score */
+.score { font-weight: 700; font-size: 15px; }
+
+/* Cards / panels */
+.card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 1.25rem; margin-bottom: 1rem; }
+.card h2 { font-size: 15px; margin-bottom: .75rem; border-bottom: 1px solid #eee; padding-bottom: .5rem; }
+
+/* Form elements */
+label { display: block; font-size: 12px; color: #555; margin-bottom: 3px; }
+input[type=text], input[type=date], textarea, select { width: 100%; border: 1px solid #ccc; border-radius: 4px; padding: 6px 10px; font-size: 13px; font-family: inherit; }
+textarea { resize: vertical; min-height: 80px; }
+.btn { display: inline-block; padding: 6px 16px; border-radius: 4px; border: none; cursor: pointer; font-size: 13px; font-family: inherit; }
+.btn-primary { background: #0057b8; color: #fff; }
+.btn-primary:hover { background: #004a9e; }
+.btn-sm { padding: 3px 10px; font-size: 12px; }
+
+/* Reason codes */
+.codes { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.code { background: #e0e7ff; color: #3730a3; font-size: 11px; padding: 2px 7px; border-radius: 10px; }
+
+/* Audit trail */
+.audit-row { border-bottom: 1px solid #eee; padding: .5rem 0; font-size: 12px; color: #555; }
+.audit-row:last-child { border-bottom: none; }
+
+/* Grid */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+/* Pagination */
+.pagination { display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem; align-items: center; font-size: 13px; }
+.pagination a, .pagination span { padding: 4px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; }
+.pagination .active { background: #0057b8; color: #fff; border-color: #0057b8; }
+
+/* Flash / success */
+.flash { padding: .75rem 1rem; border-radius: 6px; margin-bottom: 1rem; font-size: 13px; }
+.flash-success { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+.flash-error { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+
+/* Upload preview table */
+.preview-error { color: #991b1b; font-size: 12px; }
+
+/* Page heading */
+.page-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+.page-head h1 { font-size: 18px; }
+.page-head small { color: #888; font-size: 12px; }

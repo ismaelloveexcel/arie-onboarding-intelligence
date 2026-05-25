@@ -2,7 +2,7 @@ import json
 import logging
 import re
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 import httpx
 

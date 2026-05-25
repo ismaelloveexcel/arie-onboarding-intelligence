@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Upload Leads — Arie Leads{% endblock %}
+{% block content %}
+<div class="page-head"><h1>Upload Leads</h1></div>
+
+{% if not preview %}
+<div class="card" style="max-width:560px">
+  <h2>Upload CSV</h2>
+  <p style="font-size:12px; color:#666; margin-bottom:1rem">
+    Required columns: <code>company_name</code>, <code>jurisdiction</code><br>
+    Optional: <code>website</code>, <code>notes</code>, <code>entity_type</code><br>
+    Max 10,000 rows · 10 MB
+  </p>
+  <form method="post" enctype="multipart/form-data" style="display:flex; flex-direction:column; gap:.75rem">
+    <div>
+      <label>CSV File</label>
+      <input type="file" name="file" accept=".csv" required style="border:none; padding:0">
+    </div>
+    <button type="submit" class="btn btn-primary">Upload &amp; Preview</button>
+  </form>
+</div>
+
+{% else %}
+<!-- Preview stage -->
+<div class="card">
+  <h2>Preview — {{ preview.row_count }} rows</h2>
+  {% if preview.validation_errors %}
+    <div class="flash flash-error" style="margin-bottom:.75rem">
+      {{ preview.validation_errors | length }} validation error(s) — fix and re-upload.
+    </div>
+    <ul style="font-size:12px; color:#991b1b; margin-bottom:1rem; padding-left:1.25rem">
+      {% for err in preview.validation_errors %}
+        <li>{{ err }}</li>
+      {% endfor %}
+    </ul>
+    <a href="/upload" class="btn btn-primary">Re-upload</a>
+  {% else %}
+    <div class="table-wrap" style="margin-bottom:1rem; max-height:400px; overflow-y:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            {% for col in preview.columns %}<th>{{ col }}</th>{% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in preview.rows[:50] %}
+          <tr>
+            <td style="color:#aaa">{{ loop.index }}</td>
+            {% for col in preview.columns %}<td>{{ row.get(col, "") }}</td>{% endfor %}
+          </tr>
+          {% endfor %}
+          {% if preview.row_count > 50 %}
+          <tr><td colspan="{{ preview.columns|length + 1 }}" style="text-align:center; color:#888; font-size:12px">…and {{ preview.row_count - 50 }} more rows</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="/upload/{{ preview.id }}/confirm" style="display:inline">
+      <button type="submit" class="btn btn-primary">Confirm Import ({{ preview.row_count }} rows)</button>
+    </form>
+    <a href="/upload" style="margin-left:1rem; font-size:13px">Cancel</a>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

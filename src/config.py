@@ -12,3 +12,8 @@ RM_NAMES: list[str] = [
     for name in os.getenv("RM_NAMES", "").split(",")
     if name.strip()
 ]
+ACTOR_NAMES: list[str] = [
+    name.strip()
+    for name in os.getenv("ACTOR_NAMES", "").split(",")
+    if name.strip()
+]
