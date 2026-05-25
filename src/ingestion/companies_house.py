@@ -1,10 +1,10 @@
-import json
 import logging
 import re
 import time
 from datetime import date, datetime, timedelta
 
 import httpx
+from psycopg.types.json import Jsonb
 
 from src.config import COMPANIES_HOUSE_API_KEY
 from src.db import upsert_company
@@ -128,6 +128,6 @@ def _upsert_item(conn, item: dict) -> None:
             "sic_codes": item.get("sic_codes") or [],
             "website": None,
             "verify_url": f"https://find-and-update.company-information.service.gov.uk/company/{company_number}",
-            "raw_data": json.dumps(item),
+            "raw_data": Jsonb(item),
         },
     )

@@ -1,7 +1,8 @@
-import json
 import logging
 import re
 import time
+
+from psycopg.types.json import Jsonb
 
 from src.db import upsert_company
 
@@ -131,6 +132,6 @@ def _upsert_item(conn, item: dict) -> None:
             "sic_codes": [],
             "website": None,
             "verify_url": "https://mns.govmu.org/Pages/Business-Registration-Database.aspx",
-            "raw_data": json.dumps(item),
+            "raw_data": Jsonb(item),
         },
     )
