@@ -28,7 +28,8 @@ def _release_lock(conn) -> None:
 
 
 def _score_new_companies(conn) -> int:
-    """Score all companies that have no current lead_score. Returns count scored."""
+    """Score companies that have no current score or whose current score
+    was produced by a different scoring_version. Returns count scored."""
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -37,9 +38,12 @@ def _score_new_companies(conn) -> int:
             FROM companies c
             WHERE NOT EXISTS (
                 SELECT 1 FROM lead_scores ls
-                WHERE ls.company_id = c.id AND ls.is_current = TRUE
+                WHERE ls.company_id = c.id
+                  AND ls.is_current = TRUE
+                  AND ls.scoring_version = %s
             )
-            """
+            """,
+            (SCORING_VERSION,),
         )
         rows = cur.fetchall()
 
@@ -56,6 +60,11 @@ def _score_new_companies(conn) -> int:
         summary = build_reason_summary(codes)
 
         with conn.cursor() as cur:
+            # Invalidate any existing current score first
+            cur.execute(
+                "UPDATE lead_scores SET is_current = FALSE WHERE company_id = %s AND is_current = TRUE",
+                (company_id,),
+            )
             cur.execute(
                 """
                 INSERT INTO lead_scores (
