@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+alembic
+python-dotenv
+python-json-logger
+jinja2
+httpx
+playwright
+pytest
+ruff
