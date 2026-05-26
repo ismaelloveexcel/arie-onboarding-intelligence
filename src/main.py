@@ -56,6 +56,9 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
 
+from src.introducers import router as introducers_router  # noqa: E402
+app.include_router(introducers_router)
+
 _STATUSES = ["New", "Reviewing", "Qualified", "Not Relevant", "Deferred", "Contacted", "Onboarding", "Not Fit"]
 
 

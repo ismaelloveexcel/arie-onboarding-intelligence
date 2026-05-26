@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Upload Introducers — Arie Leads{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Upload Introducers</h1>
+  <a href="/introducers" style="font-size:13px">← Back to introducers</a>
+</div>
+
+<div class="card">
+  <p style="font-size:13px;color:#555;margin-bottom:1rem">
+    Upload a CSV of introducers (corporate service providers, professional contacts).
+    Required columns: <code>company_name</code>, <code>jurisdiction</code>.
+    Optional: <code>entity_type</code>, <code>incorporation_date</code>, <code>source</code>,
+    <code>company_number</code>, <code>file_no</code>, <code>sic_codes</code>, <code>verify_url</code>,
+    <code>contact_email</code>, <code>phone_number</code>, <code>contact_name</code>,
+    <code>address</code>, <code>notes</code>.
+  </p>
+  <form method="post" action="/introducers/upload" enctype="multipart/form-data"
+        style="display:flex;gap:.75rem;align-items:center">
+    <input type="file" name="file" accept=".csv" required>
+    <button type="submit" class="btn btn-primary">Preview</button>
+  </form>
+</div>
+
+{% if preview %}
+<div class="card" style="margin-top:1rem">
+  <h2>Preview — {{ preview.row_count }} rows</h2>
+  {% if preview.validation_errors %}
+    <div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:.75rem;border-radius:4px;font-size:12px;margin-bottom:.75rem">
+      <strong>Validation errors:</strong>
+      <ul style="margin:.25rem 0 0 1rem">
+        {% for err in preview.validation_errors %}<li>{{ err }}</li>{% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if preview.rows %}
+  <div class="table-wrap" style="max-height:400px;overflow:auto">
+    <table>
+      <thead>
+        <tr>{% for col in preview.columns %}<th>{{ col }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for r in preview.rows[:50] %}
+        <tr>{% for col in preview.columns %}<td>{{ r.get(col, "") }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if preview.row_count > 50 %}
+      <div style="font-size:11px;color:#888;padding:.5rem">…and {{ preview.row_count - 50 }} more rows</div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if not preview.validation_errors and preview.id %}
+    <form method="post" action="/introducers/upload/{{ preview.id }}/confirm" style="margin-top:1rem">
+      <button type="submit" class="btn btn-primary">Confirm & Import {{ preview.row_count }} Introducers</button>
+    </form>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

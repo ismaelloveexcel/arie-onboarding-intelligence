@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}{{ introducer.company_name }} — Introducer{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ introducer.company_name }}</h1>
+  <a href="/introducers" style="font-size:13px">← Back to introducers</a>
+</div>
+
+<div class="grid-2">
+  <div>
+    <div class="card">
+      <h2>Introducer Details</h2>
+      <table style="width:100%;font-size:13px">
+        <tr><td style="color:#888;width:140px">Jurisdiction</td><td>{{ introducer.jurisdiction }}</td></tr>
+        <tr><td style="color:#888">Entity Type</td><td>{{ introducer.entity_type or "—" }}</td></tr>
+        <tr><td style="color:#888">Inc. Date</td><td>{{ introducer.incorporation_date or "—" }}</td></tr>
+        <tr><td style="color:#888">Source</td><td>{{ introducer.source or "—" }}</td></tr>
+        {% if introducer.company_number %}<tr><td style="color:#888">Company No.</td><td>{{ introducer.company_number }}</td></tr>{% endif %}
+        {% if introducer.file_no %}<tr><td style="color:#888">File No.</td><td>{{ introducer.file_no }}</td></tr>{% endif %}
+        {% if introducer.sic_codes %}<tr><td style="color:#888">SIC Codes</td><td>{{ introducer.sic_codes }}</td></tr>{% endif %}
+        {% if introducer.verify_url %}<tr><td style="color:#888">Website</td><td><a href="{{ introducer.verify_url }}" target="_blank">{{ introducer.verify_url }} ↗</a></td></tr>{% endif %}
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Contact</h2>
+      <table style="width:100%;font-size:13px">
+        <tr><td style="color:#888;width:140px">Contact Name</td><td>{{ introducer.contact_name or "—" }}</td></tr>
+        <tr><td style="color:#888">Email</td><td>{% if introducer.contact_email %}<a href="mailto:{{ introducer.contact_email }}">{{ introducer.contact_email }}</a>{% else %}—{% endif %}</td></tr>
+        <tr><td style="color:#888">Phone</td><td>{{ introducer.phone_number or "—" }}</td></tr>
+        <tr><td style="color:#888">Address</td><td>{{ introducer.address or "—" }}</td></tr>
+      </table>
+      {% if introducer.notes %}
+        <div style="margin-top:.75rem;padding:.5rem;background:#f8f9fa;border-radius:4px;font-size:12px;color:#555">
+          <strong>Notes:</strong> {{ introducer.notes }}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div>
+    <div class="card" id="action-panel">
+      <h2>RM Actions</h2>
+      <form hx-post="/introducers/{{ introducer.id }}/action" hx-target="#action-panel" hx-swap="outerHTML"
+            style="display:flex;flex-direction:column;gap:.75rem">
+        <div>
+          <label>Assign To</label>
+          <select name="assigned_to">
+            <option value="">— Unassigned —</option>
+            {% for rm in rm_names %}
+              <option value="{{ rm }}" {% if action and action.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Status</label>
+          <select name="status">
+            {% for s in statuses %}
+              <option value="{{ s }}" {% if action and action.status == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Notes</label>
+          <textarea name="notes">{{ action.notes if action else "" }}</textarea>
+        </div>
+        <div class="grid-2">
+          <div><label>Contacted At</label>
+            <input type="date" name="contacted_at" value="{{ action.contacted_at.date() if action and action.contacted_at else '' }}"></div>
+          <div><label>Follow Up</label>
+            <input type="date" name="follow_up_at" value="{{ action.follow_up_at if action and action.follow_up_at else '' }}"></div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+        {% if saved %}<div style="color:#065f46;font-size:12px;margin-top:.25rem">✓ Saved</div>{% endif %}
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Audit Trail</h2>
+      {% if audit_rows %}
+        {% for entry in audit_rows %}
+        <div class="audit-row">
+          <strong>{{ entry.action }}</strong> by {{ entry.actor }}
+          <span style="float:right">{{ entry.created_at.strftime("%d %b %Y %H:%M") }}</span>
+          {% if entry.new_value and entry.new_value is mapping %}
+            <div style="margin-top:2px;font-size:11px">
+              {% for k, v in entry.new_value.items() %}{% if v %}<span style="color:#9ca3af">{{ k.replace('_',' ') }}:</span> {{ v }}  {% endif %}{% endfor %}
+            </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="color:#aaa;font-size:12px">No actions recorded yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
