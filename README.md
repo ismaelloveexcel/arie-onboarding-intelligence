@@ -117,5 +117,6 @@ tests/             # pytest test suite
 | `APP_ENV` | No | One of `development` or `production`. Set to `production` to disable `/docs`. |
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+| `ALLOWED_DB_HOSTS` | No | Comma-separated host substrings. If set, the host parsed from `DATABASE_URL` must contain one of these substrings or the app refuses to start. Recommended in every deployed environment (prod, CI, local) to prevent accidental cross-environment DB connections. Leave unset to disable the guard. |
 
 CI must use a GitHub Actions secret named exactly `DATABASE_URL_TEST`, and `test.yml` must inject it into `DATABASE_URL`. For local testing, set `DATABASE_URL` directly to a non-production DB. The nightly pipeline workflow (`daily.yml`) is currently the only workflow permitted to use the production `DATABASE_URL` secret.
