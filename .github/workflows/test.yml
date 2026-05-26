@@ -21,11 +21,21 @@ jobs:
       - name: Lint
         run: ruff check src/ tests/
 
+      - name: Verify test DB secret is set
+        env:
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
+        run: |
+          if [ -z "$DATABASE_URL_TEST" ]; then
+            echo "::error::DATABASE_URL_TEST secret is not set. Refusing to run tests against an unknown database."
+            exit 1
+          fi
+
       - name: Run tests
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
           COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
           APP_ENV: development
           LOG_LEVEL: DEBUG
           RM_NAMES: Test
+          ALLOWED_DB_HOSTS: ${{ secrets.ALLOWED_DB_HOSTS_TEST }}
         run: python -m pytest -v
