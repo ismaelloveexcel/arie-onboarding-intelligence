@@ -37,6 +37,28 @@ app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
 
 _STATUSES = ["New", "Reviewing", "Qualified", "Not Relevant", "Deferred", "Contacted", "Onboarding", "Not Fit"]
+
+
+def _format_entity_type(raw: str | None) -> str:
+    if not raw:
+        return "—"
+    mapping = {
+        "ltd": "Private Ltd",
+        "limited": "Private Ltd",
+        "private-limited-company": "Private Ltd",
+        "private limited company": "Private Ltd",
+        "plc": "PLC",
+        "public-limited-company": "PLC",
+        "llp": "LLP",
+        "limited-liability-partnership": "LLP",
+        "private-unlimited-company": "Unlimited",
+        "private-limited-guarant-nsc": "Guarantee Co.",
+        "registered-overseas-entity": "Overseas Entity",
+        "uk-establishment": "UK Establishment",
+    }
+    return mapping.get(raw.lower().strip(), raw.title())
+
+
 _UPLOAD_REQUIRED_COLUMNS = ["company_name", "jurisdiction"]
 _UPLOAD_MAX_ROWS = 10000
 _UPLOAD_MAX_BYTES = 10 * 1024 * 1024
@@ -258,7 +280,7 @@ def queue(request: Request):
             "id": row[0],
             "company_name": row[1],
             "jurisdiction": row[2],
-            "entity_type": row[3],
+            "entity_type": _format_entity_type(row[3]),
             "incorporation_date": row[4],
             "verify_url": row[5],
             "priority_score": row[6],
@@ -279,7 +301,7 @@ def queue(request: Request):
         context={
             "rows": rendered_rows,
             "total": total,
-            "refreshed_at": refreshed_at.isoformat() if refreshed_at else None,
+            "refreshed_at": f"{refreshed_at.day} {refreshed_at.strftime('%b %Y, %H:%M')} UTC" if refreshed_at else None,
             "filters": filters,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,

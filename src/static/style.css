@@ -28,12 +28,20 @@ tr:hover td { background: #fafafa; }
 
 /* Tier badges */
 .tier { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
-.tier-HIGH { background: #d1fae5; color: #065f46; }
-.tier-MEDIUM { background: #fef3c7; color: #92400e; }
-.tier-LOW { background: #f3f4f6; color: #6b7280; }
+.tier-HIGH { background: #065f46; color: #ffffff; }
+.tier-MEDIUM { background: #92400e; color: #ffffff; }
+.tier-LOW { background: #e5e7eb; color: #6b7280; }
 
 /* Status badge */
-.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #e0e7ff; color: #3730a3; }
+.status { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.status-new { background: #f3f4f6; color: #374151; }
+.status-reviewing { background: #dbeafe; color: #1e40af; }
+.status-contacted { background: #fef3c7; color: #92400e; }
+.status-qualified { background: #d1fae5; color: #065f46; }
+.status-onboarding { background: #ccfbf1; color: #0f766e; }
+.status-deferred { background: #fce7f3; color: #9d174d; }
+.status-not-relevant { background: #f3f4f6; color: #6b7280; }
+.status-not-fit { background: #fee2e2; color: #991b1b; }
 
 /* Score */
 .score { font-weight: 700; font-size: 15px; }

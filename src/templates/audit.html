@@ -21,7 +21,17 @@
         <td style="font-size:12px">{{ row.entity_type }}<br><span style="color:#aaa">{{ row.entity_id }}</span></td>
         <td><strong>{{ row.action }}</strong></td>
         <td>{{ row.actor }}</td>
-        <td style="font-size:12px; color:#555; max-width:320px">{{ row.new_value or "—" }}</td>
+        <td style="font-size:12px; color:#555; max-width:320px">
+          {% if row.new_value and row.new_value is mapping %}
+            {% for k, v in row.new_value.items() %}
+              {% if v %}
+                <div><span style="color:#9ca3af">{{ k.replace('_',' ') }}:</span> {{ v }}</div>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            {{ row.new_value or "—" }}
+          {% endif %}
+        </td>
       </tr>
       {% else %}
       <tr><td colspan="5" style="text-align:center; padding:2rem; color:#888">No audit entries yet.</td></tr>

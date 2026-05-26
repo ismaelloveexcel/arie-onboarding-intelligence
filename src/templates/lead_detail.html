@@ -94,7 +94,13 @@
           <strong>{{ entry.action }}</strong> by {{ entry.actor }}
           <span style="float:right">{{ entry.created_at.strftime("%d %b %Y %H:%M") }}</span>
           {% if entry.new_value %}
-            <div style="margin-top:2px">→ {{ entry.new_value }}</div>
+            <div style="margin-top:2px; font-size:11px">
+              {% if entry.new_value and entry.new_value is mapping %}
+                {% for k, v in entry.new_value.items() %}{% if v %}<span style="color:#9ca3af">{{ k.replace('_',' ') }}:</span> {{ v }}  {% endif %}{% endfor %}
+              {% else %}
+                → {{ entry.new_value }}
+              {% endif %}
+            </div>
           {% endif %}
         </div>
         {% endfor %}
