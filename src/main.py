@@ -556,6 +556,8 @@ def upload_confirm(upload_id: UUID):
                 raise HTTPException(status_code=400, detail="Upload has validation errors and cannot be confirmed")
 
             parsed_rows = parsed_rows or []
+            inserted = 0
+            skipped_duplicates = 0
             for index, row in enumerate(parsed_rows, start=1):
                 company_name = (row.get("company_name") or "").strip()
                 jurisdiction = (row.get("jurisdiction") or "").strip()
@@ -563,6 +565,32 @@ def upload_confirm(upload_id: UUID):
                 website = (row.get("website") or "").strip() or None
                 normalised_name = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", company_name.lower())).strip()
                 source_ref = f"upload:{upload_id}:{index}"
+
+                cur.execute(
+                    """
+                    SELECT id, source_system FROM companies
+                    WHERE normalised_name = %s AND jurisdiction = %s
+                    LIMIT 1
+                    """,
+                    (normalised_name, jurisdiction),
+                )
+                existing = cur.fetchone()
+                if existing is not None:
+                    skipped_duplicates += 1
+                    logger.warning(
+                        "upload_dedup_skipped",
+                        extra={
+                            "upload_id": str(upload_id),
+                            "row_index": index,
+                            "company_name": company_name,
+                            "jurisdiction": jurisdiction,
+                            "existing_company_id": str(existing[0]),
+                            "existing_source_system": existing[1],
+                        },
+                    )
+                    continue
+
+                inserted += 1
                 cur.execute(
                     """
                     INSERT INTO companies (
@@ -603,6 +631,15 @@ def upload_confirm(upload_id: UUID):
                     ),
                 )
 
+            logger.info(
+                "upload_confirmed",
+                extra={
+                    "upload_id": str(upload_id),
+                    "rows_total": len(parsed_rows),
+                    "rows_inserted": inserted,
+                    "rows_skipped_duplicate": skipped_duplicates,
+                },
+            )
             conn.commit()
 
     return RedirectResponse(url="/", status_code=303)
