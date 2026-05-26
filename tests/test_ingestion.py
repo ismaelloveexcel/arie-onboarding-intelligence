@@ -6,6 +6,7 @@ Ingestion tests.
 - Verify single source failure does not crash the other
 """
 import json
+import uuid
 from unittest.mock import MagicMock, patch
 
 from src.db import get_conn
@@ -145,7 +146,11 @@ def test_upsert_on_conflict_updates():
     """Upserting the same source_ref twice must not create duplicate rows."""
     from src.db import upsert_company
 
-    ref = f"{_TEST_REF_PREFIX}CONFLICT_TEST"
+    # Use a unique ref outside the _TEST_REF_PREFIX cleanup namespace so that
+    # concurrent runs of the other tests in this file (whose _cleanup() deletes
+    # rows matching source_ref LIKE 'TEST_INGESTION_%') cannot race-delete the
+    # row this test just upserted on the shared CI database.
+    ref = f"TEST_UPSERT_CONFLICT_{uuid.uuid4().hex}"
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM companies WHERE source_ref = %s", (ref,))
