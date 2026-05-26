@@ -2,8 +2,12 @@ name: Nightly Pipeline
 
 on:
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 2 * * *"
   workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
 
 jobs:
   run-pipeline:
@@ -31,3 +35,13 @@ jobs:
           LOG_LEVEL: INFO
           RM_NAMES: ${{ secrets.RM_NAMES }}
         run: python -m src.pipeline
+
+      - name: Open issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "Nightly pipeline failed: run ${{ github.run_id }}" \
+            --body "The nightly pipeline workflow failed. Investigate before the next scheduled run.\n\nRun: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"

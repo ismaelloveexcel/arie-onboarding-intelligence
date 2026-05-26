@@ -76,6 +76,16 @@ def fetch_uk_incorporations(conn, from_date: date | None = None) -> int:
             items = payload.get("items") or []
             total_results = payload.get("total_results", 0)
 
+            if start_index == 0 and total_results > _MAX_RECORDS:
+                logger.warning(
+                    "companies_house_results_truncated",
+                    extra={
+                        "total_results": total_results,
+                        "max_records": _MAX_RECORDS,
+                        "dropped": total_results - _MAX_RECORDS,
+                    },
+                )
+
             if not items:
                 break
 
