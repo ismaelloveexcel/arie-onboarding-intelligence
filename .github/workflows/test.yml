@@ -23,7 +23,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
           APP_ENV: development
           LOG_LEVEL: DEBUG
