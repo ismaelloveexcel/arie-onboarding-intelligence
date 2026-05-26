@@ -62,6 +62,13 @@ def _scrape_mns() -> list[dict]:
     Playwright scraper for Mauritius MNS Business Registration database.
     Returns list of company dicts with keys:
       company_name, entity_type, registration_number, incorporation_date
+
+    NOTE: entity_type cannot currently be determined from the page without
+    interacting with the SharePoint search form. Until that DOM interaction
+    is implemented (separate PR, needs live DOM recon), every row is returned
+    with entity_type=None, which causes fetch_mauritius_incorporations to
+    skip every row via the _ALLOWED_TYPES filter. This is intentional:
+    prefer an honest zero over fabricated entity_type labels.
     """
     from playwright.sync_api import sync_playwright
 
@@ -75,29 +82,39 @@ def _scrape_mns() -> list[dict]:
             page.goto("https://mns.govmu.org/Pages/Business-Registration-Database.aspx")
             page.wait_for_load_state("networkidle")
 
-            # Filter to GBC and Authorised Company types
-            for entity_type_filter in ("Global Business Company", "Authorised Company"):
-                time.sleep(1)
-                try:
-                    rows = _extract_rows(page, entity_type_filter)
-                    results.extend(rows)
-                except Exception as exc:
-                    logger.warning(
-                        "mauritius_filter_error",
-                        extra={"entity_type": entity_type_filter, "error": str(exc)},
-                    )
+            try:
+                results.extend(_extract_rows(page))
+            except Exception as exc:
+                logger.warning("mauritius_extract_error", extra={"error": str(exc)})
+
+            logger.warning(
+                "mauritius_entity_type_unknown",
+                extra={
+                    "rows_extracted": len(results),
+                    "reason": "form interaction not implemented; entity_type left None",
+                },
+            )
         finally:
             browser.close()
 
     return results
 
 
-def _extract_rows(page, entity_type_filter: str) -> list[dict]:
-    """Extract company rows for a given entity type filter from MNS page."""
+def _extract_rows(page) -> list[dict]:
+    """Extract raw company rows from the MNS results table.
+
+    entity_type is intentionally left as None — see _scrape_mns docstring.
+    Callers must filter by entity_type via _ALLOWED_TYPES.
+    """
     rows = []
     try:
         cells = page.query_selector_all("table tr")
-        for row in cells:
+    except Exception as exc:
+        logger.warning("mauritius_query_selector_failed", extra={"error": str(exc)})
+        return rows
+
+    for row in cells:
+        try:
             tds = row.query_selector_all("td")
             if len(tds) < 3:
                 continue
@@ -105,12 +122,13 @@ def _extract_rows(page, entity_type_filter: str) -> list[dict]:
                 {
                     "company_name": tds[0].inner_text().strip(),
                     "registration_number": tds[1].inner_text().strip(),
-                    "entity_type": entity_type_filter,
+                    "entity_type": None,
                     "incorporation_date": None,
                 }
             )
-    except Exception:
-        pass
+        except Exception as exc:
+            logger.warning("mauritius_row_parse_failed", extra={"error": str(exc)})
+            continue
     return rows
 
 
