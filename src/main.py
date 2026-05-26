@@ -28,7 +28,11 @@ root_logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Arie Leads", docs_url=None if APP_ENV == "production" else "/docs")
+app = FastAPI(
+    title="Arie Leads",
+    docs_url=None if APP_ENV == "production" else "/docs",
+    redoc_url=None,
+)
 app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
 
