@@ -59,7 +59,6 @@
         <th>Inc. Date</th>
         <th>Score</th>
         <th>Tier</th>
-        <th>Signals</th>
         <th>Assigned</th>
         <th>Status</th>
         <th></th>
@@ -73,15 +72,43 @@
         <td>{{ row.entity_type or "—" }}</td>
         <td>{{ row.incorporation_date or "—" }}</td>
         <td>
-          <div style="min-width:48px">
-            <div style="background:{% if row.priority_score >= 70 %}#d1fae5{% elif row.priority_score >= 40 %}#fef3c7{% else %}#f3f4f6{% endif %}; width:{{ row.priority_score }}%; min-width:8px; height:4px; border-radius:2px; margin-bottom:3px"></div>
-            <span class="score">{{ row.priority_score }}</span>
+          <div style="min-width:44px">
+            <div style="height:3px; border-radius:2px; margin-bottom:3px; width:{{ row.priority_score }}%; background:{% if row.priority_score >= 70 %}#059669{% elif row.priority_score >= 40 %}#d97706{% else %}#d1d5db{% endif %}"></div>
+            <strong>{{ row.priority_score }}</strong>
           </div>
         </td>
         <td><span class="tier tier-{{ row.tier }}">{{ row.tier }}</span></td>
-        <td style="max-width:220px; font-size:12px; color:#555">{{ row.reason_summary or "—" }}</td>
-        <td>{{ row.assigned_to or "—" }}</td>
-        <td>{% if row.status %}<span class="status status-{{ row.status | lower | replace(' ', '-') }}">{{ row.status }}</span>{% else %}—{% endif %}</td>
+        <td>
+          <form hx-post="/leads/{{ row.id }}/assign"
+                hx-target="closest tr"
+                hx-swap="outerHTML"
+                style="margin:0">
+            <input type="hidden" name="status" value="{{ row.status or 'New' }}">
+            <select name="assigned_to"
+                    onchange="this.form.requestSubmit()"
+                    style="font-size:11px; padding:2px 4px; border:1px solid #ddd; border-radius:4px; max-width:90px">
+              <option value="">—</option>
+              {% for rm in rm_names %}
+                <option value="{{ rm }}" {% if row.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
+        <td>
+          <form hx-post="/leads/{{ row.id }}/assign"
+                hx-target="closest tr"
+                hx-swap="outerHTML"
+                style="margin:0">
+            <input type="hidden" name="assigned_to" value="{{ row.assigned_to or '' }}">
+            <select name="status"
+                    onchange="this.form.requestSubmit()"
+                    style="font-size:11px; padding:2px 4px; border:1px solid #ddd; border-radius:4px; max-width:110px">
+              {% for s in statuses %}
+                <option value="{{ s }}" {% if row.status == s %}selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm" style="border:1px solid #ccc; background:#fff;">↗</a>
@@ -89,7 +116,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="10" style="text-align:center; padding:2rem; color:#888">No leads match the current filters.</td></tr>
+      <tr><td colspan="9" style="text-align:center; padding:2rem; color:#888">No leads match the current filters.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -98,19 +125,19 @@
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
-    <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page - 1 }}">‹ Prev</a>
+    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page-1 }}">‹ Prev</a>
   {% endif %}
   {% for p in range(1, total_pages + 1) %}
     {% if p == page %}
       <span class="active">{{ p }}</span>
     {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
-      <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
+      <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
     {% elif p == 4 or p == total_pages - 3 %}
       <span>…</span>
     {% endif %}
   {% endfor %}
   {% if page < total_pages %}
-    <a href="?{% if query_string %}{{ query_string }}&{% endif %}page={{ page + 1 }}">Next ›</a>
+    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page+1 }}">Next ›</a>
   {% endif %}
 </div>
 {% endif %}

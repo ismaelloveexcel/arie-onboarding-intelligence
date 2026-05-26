@@ -541,6 +541,113 @@ def lead_action(
     return _render_action_panel(lead_id, assigned_to or "", status, notes, None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"), None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"), saved=True)
 
 
+# --- Inline assign/status endpoint for queue HTMX ---
+@app.post("/leads/{lead_id}/assign", response_class=HTMLResponse)
+def lead_assign(
+        request: Request,
+        lead_id: UUID,
+        assigned_to: str = Form(""),
+        status: str = Form("New"),
+):
+        with get_conn() as conn:
+                with conn.cursor() as cur:
+                        cur.execute(
+                                """
+                                INSERT INTO rm_actions (company_id, assigned_to, status)
+                                VALUES (%s, %s, %s)
+                                ON CONFLICT (company_id) DO UPDATE SET
+                                        assigned_to = EXCLUDED.assigned_to,
+                                        status = EXCLUDED.status,
+                                        updated_at = NOW()
+                                """,
+                                (lead_id, assigned_to or None, status),
+                        )
+                        cur.execute(
+                                """
+                                INSERT INTO audit_log
+                                    (entity_type, entity_id, action, actor, new_value)
+                                VALUES ('company', %s, 'quick_assign', %s, %s)
+                                """,
+                                (lead_id, request.cookies.get("actor", "unknown"),
+                                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
+                        )
+                        conn.commit()
+
+                with conn.cursor() as cur:
+                        cur.execute(
+                                """
+                                SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
+                                             c.incorporation_date, c.verify_url,
+                                             qs.priority_score, qs.tier, qs.reason_summary,
+                                             ra.assigned_to, ra.status, qs.refreshed_at
+                                FROM queue_snapshot qs
+                                JOIN companies c ON c.id = qs.canonical_company_id
+                                LEFT JOIN rm_actions ra ON ra.company_id = c.id
+                                WHERE c.id = %s
+                                """,
+                                (lead_id,),
+                        )
+                        row = cur.fetchone()
+
+        if row is None:
+                return HTMLResponse("<tr><td colspan='8'>Not found</td></tr>", status_code=404)
+
+        r = {
+                "id": row[0], "company_name": row[1], "jurisdiction": row[2],
+                "entity_type": _format_entity_type(row[3]),
+                "incorporation_date": row[4], "verify_url": row[5],
+                "priority_score": row[6], "tier": row[7], "reason_summary": row[8],
+                "assigned_to": row[9], "status": row[10],
+        }
+
+        score_pct = r["priority_score"]
+        score_color = "#059669" if score_pct >= 70 else "#d97706" if score_pct >= 40 else "#d1d5db"
+        assigned_opts = "".join(
+                f'<option value="{nm}" {"selected" if nm == (r["assigned_to"] or "") else ""}>{nm}</option>'
+                for nm in RM_NAMES
+        )
+        status_opts = "".join(
+                f'<option value="{s}" {"selected" if s == (r["status"] or "New") else ""}>{s}</option>'
+                for s in _STATUSES
+        )
+        verify = f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>' if r["verify_url"] else ""
+
+        return HTMLResponse(f"""
+        <tr>
+            <td><a href="/leads/{r['id']}">{escape(r['company_name'])}</a></td>
+            <td>{escape(r['jurisdiction'])}</td>
+            <td>{escape(r['entity_type'])}</td>
+            <td>{r['incorporation_date'] or '—'}</td>
+            <td>
+                <div style=\"min-width:44px\">
+                    <div style=\"height:3px;border-radius:2px;margin-bottom:3px;width:{score_pct}%;background:{score_color}\"></div>
+                    <strong>{score_pct}</strong>
+                </div>
+            </td>
+            <td><span class=\"tier tier-{r['tier']}\">{r['tier']}</span></td>
+            <td>
+                <form hx-post=\"/leads/{r['id']}/assign\" hx-target=\"closest tr\" hx-swap=\"outerHTML\" style=\"margin:0\">
+                    <input type=\"hidden\" name=\"status\" value=\"{escape(r['status'] or 'New')}\">
+                    <select name=\"assigned_to\" onchange=\"this.form.requestSubmit()\"
+                        style=\"font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:90px\">
+                        <option value=\"\">—</option>
+                        {assigned_opts}
+                    </select>
+                </form>
+            </td>
+            <td>
+                <form hx-post=\"/leads/{r['id']}/assign\" hx-target=\"closest tr\" hx-swap=\"outerHTML\" style=\"margin:0\">
+                    <input type=\"hidden\" name=\"assigned_to\" value=\"{escape(r['assigned_to'] or '')}\">
+                    <select name=\"status\" onchange=\"this.form.requestSubmit()\"
+                        style=\"font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:110px\">
+                        {status_opts}
+                    </select>
+                </form>
+            </td>
+            <td>{verify}</td>
+        </tr>""")
+
+
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request):
     return templates.TemplateResponse(
