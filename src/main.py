@@ -11,10 +11,11 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, Response, Uploa
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
-from src.config import ACTOR_NAMES, APP_ENV, LOG_LEVEL, RM_NAMES
+from src.config import ACTOR_NAMES, APP_ENV, LOG_LEVEL, RM_NAMES, SECRET_KEY
 from src.db import check_connection, get_conn
 from src.scoring import SCORING_VERSION
 
@@ -27,6 +28,25 @@ root_logger.handlers = [handler]
 root_logger.setLevel(getattr(logging, LOG_LEVEL.upper(), logging.INFO))
 
 logger = logging.getLogger(__name__)
+
+_ACTOR_COOKIE = "actor"
+_ACTOR_MAX_AGE = 30 * 24 * 3600
+_actor_signer = TimestampSigner(SECRET_KEY)
+
+
+def _read_actor(request: Request) -> str:
+    raw = request.cookies.get(_ACTOR_COOKIE)
+    if not raw:
+        return ""
+    try:
+        unsigned = _actor_signer.unsign(raw, max_age=_ACTOR_MAX_AGE)
+    except SignatureExpired:
+        logger.info("actor_cookie_expired")
+        return ""
+    except BadSignature:
+        logger.warning("actor_cookie_bad_signature")
+        return ""
+    return unsigned.decode("utf-8", errors="replace")
 
 app = FastAPI(
     title="Arie Leads",
@@ -206,9 +226,17 @@ def set_actor(request: Request, actor: str = Form("")):
     referer = request.headers.get("referer", "/")
     response = RedirectResponse(url=referer, status_code=303)
     if actor:
-        response.set_cookie("actor", actor, max_age=30 * 24 * 3600, httponly=True, secure=True, samesite="lax")
+        signed = _actor_signer.sign(actor.encode("utf-8")).decode("ascii")
+        response.set_cookie(
+            _ACTOR_COOKIE,
+            signed,
+            max_age=_ACTOR_MAX_AGE,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+        )
     else:
-        response.delete_cookie("actor")
+        response.delete_cookie(_ACTOR_COOKIE)
     return response
 
 
@@ -320,7 +348,7 @@ def queue(request: Request):
             "total_pages": total_pages,
             "query_string": _build_query_string(query_params),
             "actor_names": ACTOR_NAMES,
-            "current_actor": request.cookies.get("actor", ""),
+            "current_actor": (_read_actor(request) or ""),
         },
     )
 
@@ -408,7 +436,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "statuses": _STATUSES,
             "saved": False,
             "actor_names": ACTOR_NAMES,
-            "current_actor": request.cookies.get("actor", ""),
+            "current_actor": (_read_actor(request) or ""),
         },
     )
 
@@ -466,7 +494,7 @@ def lead_action(
                 INSERT INTO audit_log (entity_type, entity_id, action, actor, old_value, new_value, ip_address)
                 VALUES ('company', %s, 'rm_action_updated', %s, %s, %s, NULL)
                 """,
-                (lead_id, request.cookies.get("actor", "unknown"), Jsonb(old_value), Jsonb(new_value)),
+                (lead_id, (_read_actor(request) or "unknown"), Jsonb(old_value), Jsonb(new_value)),
             )
             conn.commit()
 
@@ -478,7 +506,7 @@ def upload_form(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
-        context={"preview": None, "actor_names": ACTOR_NAMES, "current_actor": request.cookies.get("actor", "")},
+        context={"preview": None, "actor_names": ACTOR_NAMES, "current_actor": (_read_actor(request) or "")},
     )
 
 
@@ -505,7 +533,7 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
                 """,
                 (
                     file.filename or "upload.csv",
-                    request.cookies.get("actor", "unknown"),
+                    (_read_actor(request) or "unknown"),
                     len(rows),
                     Jsonb(rows),
                     Jsonb(validation_errors),
@@ -518,7 +546,7 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
-        context={"preview": preview, "actor_names": ACTOR_NAMES, "current_actor": request.cookies.get("actor", "")},
+        context={"preview": preview, "actor_names": ACTOR_NAMES, "current_actor": (_read_actor(request) or "")},
     )
 
 
@@ -691,7 +719,7 @@ def audit_log(request: Request):
             "page": page,
             "total_pages": total_pages,
             "actor_names": ACTOR_NAMES,
-            "current_actor": request.cookies.get("actor", ""),
+            "current_actor": (_read_actor(request) or ""),
         },
     )
 
