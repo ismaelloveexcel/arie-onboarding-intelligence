@@ -3,66 +3,66 @@
 {% block content %}
 <div class="page-head">
   <h1>{{ introducer.company_name }}</h1>
-  <a href="/introducers" style="font-size:13px">← Back to introducers</a>
+  <a href="/introducers" class="back-link">← Back to introducers</a>
 </div>
 
 <div class="grid-2">
   <div>
     <form method="post" action="/introducers/{{ introducer.id }}/edit"
           hx-post="/introducers/{{ introducer.id }}/edit" hx-swap="none"
-          style="display:flex;flex-direction:column;gap:1rem">
+          class="form-stack">
       <div class="card">
         <h2>Introducer Details</h2>
-        {% if details_saved %}<div style="color:#065f46;font-size:12px;margin-bottom:.5rem">✓ Saved</div>{% endif %}
-        <div style="display:grid;grid-template-columns:140px 1fr;gap:.5rem .75rem;font-size:13px;align-items:center">
-          <label style="color:#888">Company Name</label>
+        {% if details_saved %}<div class="saved-flag">✓ Saved</div>{% endif %}
+        <div class="form-grid">
+          <label>Company Name</label>
           <input type="text" name="company_name" value="{{ introducer.company_name or '' }}">
 
-          <label style="color:#888">Jurisdiction</label>
+          <label>Jurisdiction</label>
           <input type="text" name="jurisdiction" value="{{ introducer.jurisdiction or '' }}">
 
-          <label style="color:#888">Entity Type</label>
+          <label>Entity Type</label>
           <input type="text" name="entity_type" value="{{ introducer.entity_type or '' }}">
 
-          <label style="color:#888">Inc. Date</label>
+          <label>Inc. Date</label>
           <input type="date" name="incorporation_date" value="{{ introducer.incorporation_date.isoformat() if introducer.incorporation_date else '' }}">
 
-          <label style="color:#888">Source</label>
+          <label>Source</label>
           <div>{{ introducer.source or "—" }}</div>
 
-          <label style="color:#888">Company No.</label>
+          <label>Company No.</label>
           <input type="text" name="company_number" value="{{ introducer.company_number or '' }}">
 
-          <label style="color:#888">File No.</label>
+          <label>File No.</label>
           <input type="text" name="file_no" value="{{ introducer.file_no or '' }}">
 
-          <label style="color:#888">SIC Codes</label>
+          <label>SIC Codes</label>
           <input type="text" name="sic_codes" value="{{ introducer.sic_codes or '' }}">
 
-          <label style="color:#888">Website</label>
+          <label>Website</label>
           <input type="url" name="verify_url" value="{{ introducer.verify_url or '' }}" placeholder="https://...">
         </div>
       </div>
 
       <div class="card">
         <h2>Contact</h2>
-        <div style="display:grid;grid-template-columns:140px 1fr;gap:.5rem .75rem;font-size:13px;align-items:center">
-          <label style="color:#888">Contact Name</label>
+        <div class="form-grid">
+          <label>Contact Name</label>
           <input type="text" name="contact_name" value="{{ introducer.contact_name or '' }}">
 
-          <label style="color:#888">Email</label>
+          <label>Email</label>
           <input type="email" name="contact_email" value="{{ introducer.contact_email or '' }}">
 
-          <label style="color:#888">Phone</label>
+          <label>Phone</label>
           <input type="text" name="phone_number" value="{{ introducer.phone_number or '' }}">
 
-          <label style="color:#888">Address</label>
+          <label>Address</label>
           <textarea name="address" rows="2">{{ introducer.address or '' }}</textarea>
 
-          <label style="color:#888">Notes</label>
+          <label>Notes</label>
           <textarea name="notes" rows="2">{{ introducer.notes or '' }}</textarea>
         </div>
-        <div style="margin-top:.75rem;text-align:right">
+        <div style="margin-top:var(--s-3);text-align:right">
           <button type="submit" class="btn btn-primary">Save Details</button>
         </div>
       </div>

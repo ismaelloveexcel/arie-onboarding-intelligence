@@ -4,31 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Arie Leads{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
 <body>
   <nav class="nav">
-    <span class="brand">Arie Leads</span>
+    <span class="brand">Arie</span>
     <a href="/">Direct Leads</a>
     <a href="/introducers">Introducers</a>
     <a href="/upload">Upload</a>
     <a href="/audit">Audit Log</a>
-    <a href="/health" style="font-size:12px; opacity:.7">Health</a>
     {% if actor_names %}
-    <form method="post" action="/me" style="display:inline-flex; align-items:center; gap:.5rem; margin-left:auto">
+    <form method="post" action="/me" class="nav-actor">
       {% if current_actor %}
-        <span style="font-size:12px; opacity:.85">{{ current_actor }}</span>
+        <span class="nav-actor-name">{{ current_actor }}</span>
       {% endif %}
-      <select name="actor" onchange="this.form.submit()" class="nav-actor-select">
-        <option value="">Change…</option>
+      <select name="actor" onchange="this.form.submit()" class="nav-actor-select" aria-label="Switch actor">
+        <option value="">Switch…</option>
         {% for name in actor_names %}
           <option value="{{ name }}" {% if current_actor == name %}selected{% endif %}>{{ name }}</option>
         {% endfor %}
       </select>
     </form>
-    {% else %}
-    <span style="margin-left:auto"></span>
     {% endif %}
   </nav>
   <div class="container">
