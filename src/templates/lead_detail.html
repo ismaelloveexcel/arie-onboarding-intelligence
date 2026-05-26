@@ -54,6 +54,9 @@
           <label>Assign To</label>
           <select name="assigned_to">
             <option value="">— Unassigned —</option>
+            {% if action and action.assigned_to and action.assigned_to not in rm_names %}
+              <option value="{{ action.assigned_to }}" selected>{{ action.assigned_to }}</option>
+            {% endif %}
             {% for rm in rm_names %}
               <option value="{{ rm }}" {% if action and action.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
             {% endfor %}
