@@ -238,9 +238,11 @@ def health(response: Response):
 
     if not db_ok:
         response.status_code = 503
+    elif not queue_fresh and queue_rows > 0:
+        response.status_code = 503
 
     return {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if (db_ok and queue_fresh) else "degraded",
         "db": "connected" if db_ok else "unreachable",
         "queue_rows": queue_rows,
         "queue_refreshed_at": queue_refreshed_at.isoformat() if queue_refreshed_at else None,
@@ -253,20 +255,28 @@ def health(response: Response):
 
 @app.post("/me")
 def set_actor(request: Request, actor: str = Form("")):
-    referer = request.headers.get("referer", "/")
-    response = RedirectResponse(url=referer, status_code=303)
-    if actor:
+    raw_referer = request.headers.get("referer", "")
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(raw_referer)
+        same_origin = parsed.scheme in ("http", "https") and parsed.netloc == request.headers.get("host", "")
+        redirect_to = raw_referer if same_origin else "/"
+    except Exception:
+        redirect_to = "/"
+    response = RedirectResponse(url=redirect_to, status_code=303)
+    if actor and actor in ACTOR_NAMES:
         signed = _actor_signer.sign(actor.encode("utf-8")).decode("ascii")
         response.set_cookie(
             _ACTOR_COOKIE,
             signed,
             max_age=_ACTOR_MAX_AGE,
             httponly=True,
-            secure=True,
+            secure=(APP_ENV == "production"),
             samesite="lax",
         )
-    else:
+    elif not actor:
         response.delete_cookie(_ACTOR_COOKIE)
+    # if actor provided but not in ACTOR_NAMES: silently ignore, don't set cookie
     return response
 
 

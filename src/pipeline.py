@@ -55,6 +55,7 @@ def _score_new_companies(conn) -> int:
             "jurisdiction": jurisdiction,
             "entity_type": entity_type,
             "sic_codes": sic_codes or [],
+            "incorporation_date": inc_date,
         }
         score, codes, tier = calculate_score(company)
         summary = build_reason_summary(codes)
@@ -198,6 +199,17 @@ def run() -> None:
 
             uk_count = fetch_uk_incorporations(conn)
             mu_count = fetch_mauritius_incorporations(conn)
+            if uk_count == 0:
+                logger.error(
+                    "pipeline_ingestion_failure",
+                    extra={
+                        "event": "pipeline_ingestion_failure",
+                        "reason": "UK ingestion returned zero records",
+                        "uk_count": uk_count,
+                        "mu_count": mu_count,
+                    },
+                )
+                raise RuntimeError("UK ingestion returned zero records — pipeline marked as failed")
             scores_count = _score_new_companies(conn)
             queue_rows = _refresh_queue(conn)
             zero_streak = _mauritius_zero_streak(conn)

@@ -1,6 +1,6 @@
 import re
 
-SCORING_VERSION = "2025.1.0"
+SCORING_VERSION = "2025.1.1"
 
 _FINANCIAL_KEYWORDS = {"capital", "wealth", "holdings", "fund", "partners", "asset", "invest", "investments"}
 _INTERNATIONAL_KEYWORDS = {"international", "global", "offshore"}
@@ -18,6 +18,7 @@ _REASON_LABELS = {
     "FINTECH_SIC":          "Fintech/payments SIC (620xx)",
     "FINANCIAL_KEYWORD":    "Financial keyword in name",
     "INTERNATIONAL_KEYWORD": "International/global keyword in name",
+    "RECENTLY_INCORPORATED": "Recently incorporated (≤ 90 days)",
 }
 
 
@@ -80,6 +81,19 @@ def calculate_score(company: dict) -> tuple[int, list[str], str]:
     if any(s.startswith("620") for s in sic_strs):
         score += 15
         codes.append("FINTECH_SIC")
+
+
+    # --- Recently incorporated ---
+    from datetime import date as _date
+    inc_date = company.get("incorporation_date")
+    if inc_date is not None:
+        try:
+            age_days = (_date.today() - inc_date).days
+            if age_days <= 90:
+                score += 5
+                codes.append("RECENTLY_INCORPORATED")
+        except Exception:
+            pass
 
     # --- Name keywords ---
     if words & _FINANCIAL_KEYWORDS:
