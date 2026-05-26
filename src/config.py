@@ -9,6 +9,19 @@ DATABASE_URL: str = os.environ["DATABASE_URL"]
 COMPANIES_HOUSE_API_KEY: str = os.environ["COMPANIES_HOUSE_API_KEY"]
 APP_ENV: str = os.getenv("APP_ENV", "production")
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+_secret = os.getenv("SECRET_KEY", "").strip()
+if not _secret:
+    import logging
+    import secrets as _secrets
+    _secret = _secrets.token_urlsafe(48)
+    logging.getLogger(__name__).warning(
+        "secret_key_ephemeral: SECRET_KEY env var is not set; generated an "
+        "ephemeral key for this process. Signed cookies (e.g. the actor cookie) "
+        "will not survive an app restart. For production set SECRET_KEY "
+        "explicitly: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+    )
+SECRET_KEY: str = _secret
 RM_NAMES: list[str] = [
     name.strip()
     for name in os.getenv("RM_NAMES", "").split(",")
