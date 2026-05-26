@@ -11,6 +11,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +34,22 @@ jobs:
             echo "::error::DATABASE_URL_TEST secret is not set. Refusing to run tests against an unknown database."
             exit 1
           fi
+
+      - name: Verify test DB host is allowed for migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+          ALLOWED_DB_HOSTS: ${{ secrets.ALLOWED_DB_HOSTS_TEST }}
+        run: |
+          python - <<'EOF'
+          import os, sys
+          from urllib.parse import urlparse
+          host = urlparse(os.environ["DATABASE_URL"]).hostname or ""
+          allowed = [h.strip() for h in os.environ.get("ALLOWED_DB_HOSTS", "").split(",") if h.strip()]
+          if host not in allowed:
+              print(f"::error::DB host '{host}' is not in ALLOWED_DB_HOSTS_TEST. Refusing to run Alembic.")
+              sys.exit(1)
+          print(f"DB host '{host}' is in ALLOWED_DB_HOSTS_TEST. Proceeding with migrations.")
+          EOF
 
       - name: Apply migrations to test DB
         env:
