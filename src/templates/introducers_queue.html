@@ -16,6 +16,7 @@
   <label>Jurisdiction
     <select name="jurisdiction">
       <option value="">All</option>
+      <option value="ADGM" {% if filters.jurisdiction == "ADGM" %}selected{% endif %}>ADGM</option>
       <option value="Mauritius" {% if filters.jurisdiction == "Mauritius" %}selected{% endif %}>Mauritius</option>
       <option value="UK" {% if filters.jurisdiction == "UK" %}selected{% endif %}>UK</option>
       <option value="Other" {% if filters.jurisdiction == "Other" %}selected{% endif %}>Other</option>
@@ -72,29 +73,8 @@
         <td>{{ row.contact_name or "—" }}</td>
         <td>{% if row.contact_email %}<a href="mailto:{{ row.contact_email }}">{{ row.contact_email }}</a>{% else %}—{% endif %}</td>
         <td>{{ row.phone_number or "—" }}</td>
-        <td>
-          <form hx-post="/introducers/{{ row.id }}/assign" hx-target="closest tr" hx-swap="outerHTML" style="margin:0">
-            <input type="hidden" name="status" value="{{ row.status or 'New' }}">
-            <select name="assigned_to" onchange="this.form.requestSubmit()"
-                    style="font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:90px">
-              <option value="">—</option>
-              {% for rm in rm_names %}
-                <option value="{{ rm }}" {% if row.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
-              {% endfor %}
-            </select>
-          </form>
-        </td>
-        <td>
-          <form hx-post="/introducers/{{ row.id }}/assign" hx-target="closest tr" hx-swap="outerHTML" style="margin:0">
-            <input type="hidden" name="assigned_to" value="{{ row.assigned_to or '' }}">
-            <select name="status" onchange="this.form.requestSubmit()"
-                    style="font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:110px">
-              {% for s in statuses %}
-                <option value="{{ s }}" {% if row.status == s %}selected{% endif %}>{{ s }}</option>
-              {% endfor %}
-            </select>
-          </form>
-        </td>
+        <td style="font-size:12px">{{ row.assigned_to or '—' }}</td>
+        <td style="font-size:12px">{{ row.status or 'New' }}</td>
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm" style="border:1px solid #ccc;background:#fff">↗</a>
