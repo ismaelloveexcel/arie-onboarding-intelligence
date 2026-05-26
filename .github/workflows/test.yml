@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: tests-shared-db
+  cancel-in-progress: false
+
 jobs:
   test:
     runs-on: ubuntu-latest
