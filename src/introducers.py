@@ -176,7 +176,7 @@ def introducers_list(request: Request):
 
 # ---------------------------------------------------------------- DETAIL
 @router.get("/{introducer_id}", response_class=HTMLResponse)
-def introducer_detail(request: Request, introducer_id: UUID):
+def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -237,6 +237,7 @@ def introducer_detail(request: Request, introducer_id: UUID):
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "saved": False,
+            "details_saved": bool(saved),
         },
     )
 
@@ -344,6 +345,109 @@ def introducer_action(
     return _render_introducer_action_panel(
         introducer_id, assigned_to or "", status, notes, contacted_dt, follow_dt, saved=True,
     )
+
+
+# ---------------------------------------------------------------- EDIT DETAILS
+@router.post("/{introducer_id}/edit", response_class=HTMLResponse)
+def introducer_edit(
+    request: Request,
+    introducer_id: UUID,
+    company_name: str = Form(""),
+    jurisdiction: str = Form(""),
+    entity_type: str = Form(""),
+    incorporation_date: str = Form(""),
+    company_number: str = Form(""),
+    file_no: str = Form(""),
+    sic_codes: str = Form(""),
+    verify_url: str = Form(""),
+    contact_name: str = Form(""),
+    contact_email: str = Form(""),
+    phone_number: str = Form(""),
+    address: str = Form(""),
+    notes: str = Form(""),
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT company_name, jurisdiction, entity_type, incorporation_date,
+                       company_number, file_no, sic_codes, verify_url,
+                       contact_name, contact_email, phone_number, address, notes
+                FROM introducers WHERE id = %s
+                """,
+                (introducer_id,),
+            )
+            existing = cur.fetchone()
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Introducer not found")
+
+            new_company = (company_name or "").strip() or existing[0]
+            new_jx = (jurisdiction or "").strip() or existing[1]
+            cur.execute(
+                """
+                UPDATE introducers SET
+                    company_name = %s,
+                    normalised_name = %s,
+                    jurisdiction = %s,
+                    entity_type = NULLIF(%s, ''),
+                    incorporation_date = NULLIF(%s, '')::date,
+                    company_number = NULLIF(%s, ''),
+                    file_no = NULLIF(%s, ''),
+                    sic_codes = NULLIF(%s, ''),
+                    verify_url = NULLIF(%s, ''),
+                    contact_name = NULLIF(%s, ''),
+                    contact_email = NULLIF(%s, ''),
+                    phone_number = NULLIF(%s, ''),
+                    address = NULLIF(%s, ''),
+                    notes = NULLIF(%s, ''),
+                    updated_at = NOW()
+                WHERE id = %s
+                """,
+                (
+                    new_company, _normalise(new_company), new_jx,
+                    entity_type.strip(), incorporation_date.strip(),
+                    company_number.strip(), file_no.strip(), sic_codes.strip(),
+                    verify_url.strip(), contact_name.strip(), contact_email.strip(),
+                    phone_number.strip(), address.strip(), notes.strip(),
+                    introducer_id,
+                ),
+            )
+            old_value = {
+                "company_name": existing[0], "jurisdiction": existing[1],
+                "entity_type": existing[2],
+                "incorporation_date": existing[3].isoformat() if existing[3] else None,
+                "company_number": existing[4], "file_no": existing[5],
+                "sic_codes": existing[6], "verify_url": existing[7],
+                "contact_name": existing[8], "contact_email": existing[9],
+                "phone_number": existing[10], "address": existing[11], "notes": existing[12],
+            }
+            new_value = {
+                "company_name": new_company, "jurisdiction": new_jx,
+                "entity_type": entity_type.strip() or None,
+                "incorporation_date": incorporation_date.strip() or None,
+                "company_number": company_number.strip() or None,
+                "file_no": file_no.strip() or None,
+                "sic_codes": sic_codes.strip() or None,
+                "verify_url": verify_url.strip() or None,
+                "contact_name": contact_name.strip() or None,
+                "contact_email": contact_email.strip() or None,
+                "phone_number": phone_number.strip() or None,
+                "address": address.strip() or None,
+                "notes": notes.strip() or None,
+            }
+            cur.execute(
+                """
+                INSERT INTO audit_log (entity_type, entity_id, action, actor, old_value, new_value)
+                VALUES ('introducer', %s, 'introducer_details_updated', %s, %s, %s)
+                """,
+                (introducer_id, (_read_actor(request) or "unknown"),
+                 Jsonb(old_value), Jsonb(new_value)),
+            )
+            conn.commit()
+
+    response = HTMLResponse("")
+    response.headers["HX-Redirect"] = f"/introducers/{introducer_id}?saved=1"
+    return response
 
 
 # ---------------------------------------------------------------- INLINE ASSIGN

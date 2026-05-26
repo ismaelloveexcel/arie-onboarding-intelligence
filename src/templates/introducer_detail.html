@@ -8,34 +8,65 @@
 
 <div class="grid-2">
   <div>
-    <div class="card">
-      <h2>Introducer Details</h2>
-      <table style="width:100%;font-size:13px">
-        <tr><td style="color:#888;width:140px">Jurisdiction</td><td>{{ introducer.jurisdiction }}</td></tr>
-        <tr><td style="color:#888">Entity Type</td><td>{{ introducer.entity_type or "—" }}</td></tr>
-        <tr><td style="color:#888">Inc. Date</td><td>{{ introducer.incorporation_date or "—" }}</td></tr>
-        <tr><td style="color:#888">Source</td><td>{{ introducer.source or "—" }}</td></tr>
-        {% if introducer.company_number %}<tr><td style="color:#888">Company No.</td><td>{{ introducer.company_number }}</td></tr>{% endif %}
-        {% if introducer.file_no %}<tr><td style="color:#888">File No.</td><td>{{ introducer.file_no }}</td></tr>{% endif %}
-        {% if introducer.sic_codes %}<tr><td style="color:#888">SIC Codes</td><td>{{ introducer.sic_codes }}</td></tr>{% endif %}
-        {% if introducer.verify_url %}<tr><td style="color:#888">Website</td><td><a href="{{ introducer.verify_url }}" target="_blank">{{ introducer.verify_url }} ↗</a></td></tr>{% endif %}
-      </table>
-    </div>
+    <form method="post" action="/introducers/{{ introducer.id }}/edit"
+          hx-post="/introducers/{{ introducer.id }}/edit" hx-swap="none"
+          style="display:flex;flex-direction:column;gap:1rem">
+      <div class="card">
+        <h2>Introducer Details</h2>
+        {% if details_saved %}<div style="color:#065f46;font-size:12px;margin-bottom:.5rem">✓ Saved</div>{% endif %}
+        <div style="display:grid;grid-template-columns:140px 1fr;gap:.5rem .75rem;font-size:13px;align-items:center">
+          <label style="color:#888">Company Name</label>
+          <input type="text" name="company_name" value="{{ introducer.company_name or '' }}">
 
-    <div class="card">
-      <h2>Contact</h2>
-      <table style="width:100%;font-size:13px">
-        <tr><td style="color:#888;width:140px">Contact Name</td><td>{{ introducer.contact_name or "—" }}</td></tr>
-        <tr><td style="color:#888">Email</td><td>{% if introducer.contact_email %}<a href="mailto:{{ introducer.contact_email }}">{{ introducer.contact_email }}</a>{% else %}—{% endif %}</td></tr>
-        <tr><td style="color:#888">Phone</td><td>{{ introducer.phone_number or "—" }}</td></tr>
-        <tr><td style="color:#888">Address</td><td>{{ introducer.address or "—" }}</td></tr>
-      </table>
-      {% if introducer.notes %}
-        <div style="margin-top:.75rem;padding:.5rem;background:#f8f9fa;border-radius:4px;font-size:12px;color:#555">
-          <strong>Notes:</strong> {{ introducer.notes }}
+          <label style="color:#888">Jurisdiction</label>
+          <input type="text" name="jurisdiction" value="{{ introducer.jurisdiction or '' }}">
+
+          <label style="color:#888">Entity Type</label>
+          <input type="text" name="entity_type" value="{{ introducer.entity_type or '' }}">
+
+          <label style="color:#888">Inc. Date</label>
+          <input type="date" name="incorporation_date" value="{{ introducer.incorporation_date.isoformat() if introducer.incorporation_date else '' }}">
+
+          <label style="color:#888">Source</label>
+          <div>{{ introducer.source or "—" }}</div>
+
+          <label style="color:#888">Company No.</label>
+          <input type="text" name="company_number" value="{{ introducer.company_number or '' }}">
+
+          <label style="color:#888">File No.</label>
+          <input type="text" name="file_no" value="{{ introducer.file_no or '' }}">
+
+          <label style="color:#888">SIC Codes</label>
+          <input type="text" name="sic_codes" value="{{ introducer.sic_codes or '' }}">
+
+          <label style="color:#888">Website</label>
+          <input type="url" name="verify_url" value="{{ introducer.verify_url or '' }}" placeholder="https://...">
         </div>
-      {% endif %}
-    </div>
+      </div>
+
+      <div class="card">
+        <h2>Contact</h2>
+        <div style="display:grid;grid-template-columns:140px 1fr;gap:.5rem .75rem;font-size:13px;align-items:center">
+          <label style="color:#888">Contact Name</label>
+          <input type="text" name="contact_name" value="{{ introducer.contact_name or '' }}">
+
+          <label style="color:#888">Email</label>
+          <input type="email" name="contact_email" value="{{ introducer.contact_email or '' }}">
+
+          <label style="color:#888">Phone</label>
+          <input type="text" name="phone_number" value="{{ introducer.phone_number or '' }}">
+
+          <label style="color:#888">Address</label>
+          <textarea name="address" rows="2">{{ introducer.address or '' }}</textarea>
+
+          <label style="color:#888">Notes</label>
+          <textarea name="notes" rows="2">{{ introducer.notes or '' }}</textarea>
+        </div>
+        <div style="margin-top:.75rem;text-align:right">
+          <button type="submit" class="btn btn-primary">Save Details</button>
+        </div>
+      </div>
+    </form>
   </div>
 
   <div>
