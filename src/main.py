@@ -180,6 +180,7 @@ def health(response: Response):
     queue_refreshed_at = None
     queue_fresh = False
     mauritius_last_seen = None
+    last_pipeline_run = None
 
     if db_ok:
         try:
@@ -204,6 +205,34 @@ def health(response: Response):
                         if ts.tzinfo is None:
                             ts = ts.replace(tzinfo=timezone.utc)
                         mauritius_last_seen = ts
+                    cur.execute(
+                        """
+                        SELECT started_at, completed_at, status, uk_count, mu_count,
+                               scores_count, queue_rows, duration_seconds, error
+                        FROM pipeline_runs
+                        ORDER BY started_at DESC
+                        LIMIT 1
+                        """
+                    )
+                    pr_row = cur.fetchone()
+                    if pr_row:
+                        started_at = pr_row[0]
+                        completed_at = pr_row[1]
+                        if started_at and started_at.tzinfo is None:
+                            started_at = started_at.replace(tzinfo=timezone.utc)
+                        if completed_at and completed_at.tzinfo is None:
+                            completed_at = completed_at.replace(tzinfo=timezone.utc)
+                        last_pipeline_run = {
+                            "started_at": started_at.isoformat() if started_at else None,
+                            "completed_at": completed_at.isoformat() if completed_at else None,
+                            "status": pr_row[2],
+                            "uk_count": pr_row[3],
+                            "mu_count": pr_row[4],
+                            "scores_count": pr_row[5],
+                            "queue_rows": pr_row[6],
+                            "duration_seconds": float(pr_row[7]) if pr_row[7] is not None else None,
+                            "error": pr_row[8],
+                        }
         except Exception as exc:
             logger.warning("health_queue_check_failed", extra={"error": str(exc)})
 
@@ -217,6 +246,7 @@ def health(response: Response):
         "queue_refreshed_at": queue_refreshed_at.isoformat() if queue_refreshed_at else None,
         "queue_fresh": queue_fresh,
         "mauritius_last_seen": mauritius_last_seen.isoformat() if mauritius_last_seen else None,
+        "last_pipeline_run": last_pipeline_run,
         "scoring_version": SCORING_VERSION,
     }
 
