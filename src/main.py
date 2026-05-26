@@ -169,7 +169,7 @@ def set_actor(request: Request, actor: str = Form("")):
     referer = request.headers.get("referer", "/")
     response = RedirectResponse(url=referer, status_code=303)
     if actor:
-        response.set_cookie("actor", actor, max_age=30 * 24 * 3600, httponly=False, samesite="lax")
+        response.set_cookie("actor", actor, max_age=30 * 24 * 3600, httponly=True, secure=True, samesite="lax")
     else:
         response.delete_cookie("actor")
     return response
