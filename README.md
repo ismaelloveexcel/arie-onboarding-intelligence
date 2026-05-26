@@ -117,4 +117,4 @@ tests/             # pytest test suite
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
 
-CI must use `DATABASE_URL_TEST`. The only workflow permitted to read `DATABASE_URL` (production) is `.github/workflows/daily.yml` (the nightly pipeline).
+CI must use `DATABASE_URL_TEST`. The GitHub Actions secret name must be exactly `DATABASE_URL_TEST`. The nightly pipeline workflow (`daily.yml`) is currently the only workflow permitted to use the production `DATABASE_URL` secret.
