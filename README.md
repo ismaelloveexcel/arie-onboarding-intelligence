@@ -109,9 +109,13 @@ tests/             # pytest test suite
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string consumed by the app/tests runtime. In CI, `test.yml` injects the `DATABASE_URL_TEST` secret into this variable. For local `pytest`, point this at a non-production DB. |
+| `DATABASE_URL_TEST` | Yes (CI secret) | GitHub Actions secret name for the non-production CI test DB URL. CI maps it to `DATABASE_URL`; runtime code does not read `DATABASE_URL_TEST` directly. |
 | `COMPANIES_HOUSE_API_KEY` | Yes | Companies House API key |
-| `ACTOR_NAMES` | Yes | Comma-separated RM names shown in nav |
-| `APP_ENV` | No | Set to `production` to disable `/docs` |
+| `RM_NAMES` | Yes | Comma-separated RM names for the lead "Assign To" dropdown |
+| `ACTOR_NAMES` | Yes | Comma-separated names for the nav "Acting as" dropdown |
+| `APP_ENV` | No | One of `development` or `production`. Set to `production` to disable `/docs`. |
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+
+CI must use a GitHub Actions secret named exactly `DATABASE_URL_TEST`, and `test.yml` must inject it into `DATABASE_URL`. For local testing, set `DATABASE_URL` directly to a non-production DB. The nightly pipeline workflow (`daily.yml`) is currently the only workflow permitted to use the production `DATABASE_URL` secret.
