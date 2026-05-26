@@ -160,7 +160,7 @@ def test_empty_company_does_not_raise():
 # Fixture 9: SCORING_VERSION is the canonical value
 # ---------------------------------------------------------------------------
 def test_scoring_version():
-    assert SCORING_VERSION == "2025.1.0"
+    assert SCORING_VERSION == "2025.1.1"
 
 
 # ---------------------------------------------------------------------------

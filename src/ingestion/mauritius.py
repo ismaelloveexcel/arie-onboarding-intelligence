@@ -94,11 +94,18 @@ def _column_index_by_header(headers: list[str]) -> dict[str, int]:
 
 
 def _accept_cookies_if_present(page) -> None:
-    for label in ("Accept All", "Accept all", "Accept"):
+    selectors = (
+        "button:has-text('Accept All')",
+        "button:has-text('Accept all')",
+        "button:has-text('Accept')",
+        "#onetrust-accept-btn-handler",
+        ".ot-sdk-container button:has-text('Accept')",
+    )
+    for sel in selectors:
         try:
-            btn = page.get_by_role("button", name=label)
-            if btn.count() and btn.first.is_visible():
-                btn.first.click(timeout=3000)
+            loc = page.locator(sel).first
+            if loc.count() and loc.is_visible():
+                loc.click(timeout=3000)
                 page.wait_for_timeout(500)
                 return
         except Exception:
@@ -126,6 +133,29 @@ def _fill_input(el, iso_date: str) -> str:
 
 
 def _find_date_field(page, kind: str):
+    # Stable selectors first (current CBRD portal markup, as of 2026).
+    stable = {
+        "from": [
+            "#company-partnership-date-from-text-field",
+            "input[formcontrolname='searchCompanyDateFrom']",
+            "input[aria-label='SearchCompanyOrPartnershipDateFrom']",
+        ],
+        "to": [
+            "#company-partnership-date-to-text-field",
+            "input[formcontrolname='searchCompanyDateTo']",
+            "input[aria-label='SearchCompanyOrPartnershipDateTo']",
+        ],
+    }
+    for sel in stable.get(kind, []):
+        try:
+            loc = page.locator(sel).first
+            if loc.count():
+                loc.wait_for(state="visible", timeout=10_000)
+                return loc
+        except Exception:
+            continue
+
+    # Heuristic fallback for portal markup changes.
     inputs = page.locator("input[type='date'], input[type='text']")
     candidates: list[tuple[int, object]] = []
     for i in range(min(inputs.count(), 24)):
@@ -143,9 +173,9 @@ def _find_date_field(page, kind: str):
             if kind == "to" and not is_to:
                 continue
             score = 0
-            if "incorporation" in blob or "registration" in blob:
+            if "incorporation" in blob or "registration" in blob or "company" in blob:
                 score += 10
-            if "partnership" in blob or "company" in blob:
+            if "partnership" in blob:
                 score -= 2
             candidates.append((score, el))
         except Exception:
@@ -254,8 +284,18 @@ def _click_next_page(page) -> None:
 
 def _scrape_date_range(page, date_from: str, date_to: str) -> list[dict]:
     page.goto(_BASE_URL, wait_until="domcontentloaded", timeout=60_000)
-    page.wait_for_timeout(1500)
+    # Wait for the Angular app to render the search form.
+    try:
+        page.wait_for_selector(
+            "#company-partnership-date-from-text-field, "
+            "input[formcontrolname='searchCompanyDateFrom']",
+            state="visible",
+            timeout=30_000,
+        )
+    except Exception:
+        page.wait_for_timeout(3000)
     _accept_cookies_if_present(page)
+    page.wait_for_timeout(500)
     _fill_date_range(page, date_from, date_to)
     _click_search(page)
     page.wait_for_load_state("networkidle", timeout=60_000)
