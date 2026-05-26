@@ -109,9 +109,12 @@ tests/             # pytest test suite
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `DATABASE_URL` | Yes | PostgreSQL connection string for the **production** runtime and the nightly pipeline. Never used by CI. |
+| `DATABASE_URL_TEST` | Yes (CI / local tests) | PostgreSQL connection string for a **non-production** database used by the test workflow and local `pytest`. Must point at an isolated throwaway DB. |
 | `COMPANIES_HOUSE_API_KEY` | Yes | Companies House API key |
 | `ACTOR_NAMES` | Yes | Comma-separated RM names shown in nav |
-| `APP_ENV` | No | Set to `production` to disable `/docs` |
+| `APP_ENV` | No | One of `development` or `production`. Set to `production` to disable `/docs`. |
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
+
+CI must use `DATABASE_URL_TEST`. The only workflow permitted to read `DATABASE_URL` (production) is `.github/workflows/daily.yml` (the nightly pipeline).
