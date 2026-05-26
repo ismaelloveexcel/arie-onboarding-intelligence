@@ -159,6 +159,7 @@ def health(response: Response):
     queue_rows = 0
     queue_refreshed_at = None
     queue_fresh = False
+    mauritius_last_seen = None
 
     if db_ok:
         try:
@@ -174,6 +175,15 @@ def health(response: Response):
                                 queue_refreshed_at = queue_refreshed_at.replace(tzinfo=timezone.utc)
                             age = datetime.now(timezone.utc) - queue_refreshed_at
                             queue_fresh = age.total_seconds() < 25 * 3600
+                    cur.execute(
+                        "SELECT MAX(updated_at) FROM companies WHERE source_system = 'mauritius_mns'"
+                    )
+                    mu_row = cur.fetchone()
+                    if mu_row and mu_row[0] is not None:
+                        ts = mu_row[0]
+                        if ts.tzinfo is None:
+                            ts = ts.replace(tzinfo=timezone.utc)
+                        mauritius_last_seen = ts
         except Exception as exc:
             logger.warning("health_queue_check_failed", extra={"error": str(exc)})
 
@@ -186,6 +196,7 @@ def health(response: Response):
         "queue_rows": queue_rows,
         "queue_refreshed_at": queue_refreshed_at.isoformat() if queue_refreshed_at else None,
         "queue_fresh": queue_fresh,
+        "mauritius_last_seen": mauritius_last_seen.isoformat() if mauritius_last_seen else None,
         "scoring_version": SCORING_VERSION,
     }
 
