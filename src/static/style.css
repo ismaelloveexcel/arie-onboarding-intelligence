@@ -9,6 +9,8 @@ a:hover { text-decoration: underline; }
 .nav { background: #0057b8; color: #fff; padding: 0 1.5rem; display: flex; align-items: center; gap: 1.5rem; height: 48px; }
 .nav a { color: #fff; font-weight: 500; }
 .nav .brand { font-size: 16px; font-weight: 700; letter-spacing: .02em; }
+.nav-actor-select { font-size: 12px; background: #ffffff; color: #1a1a1a; border: 1px solid rgba(255,255,255,.4); border-radius: 4px; padding: 3px 8px; }
+.nav-actor-select option { background: #ffffff; color: #1a1a1a; }
 .container { max-width: 1280px; margin: 0 auto; padding: 1.5rem; }
 
 /* Filters bar */

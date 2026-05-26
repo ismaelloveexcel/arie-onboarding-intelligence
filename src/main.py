@@ -287,6 +287,8 @@ def queue(request: Request):
         "jurisdiction": request.query_params.get("jurisdiction", ""),
         "assigned_to": request.query_params.get("assigned_to", ""),
         "status": request.query_params.get("status", ""),
+        "date_from": request.query_params.get("date_from", ""),
+        "date_to": request.query_params.get("date_to", ""),
         "sort": request.query_params.get("sort", "score"),
     }
     try:
@@ -309,10 +311,17 @@ def queue(request: Request):
     if filters["status"]:
         where_clauses.append("ra.status = %s")
         params.append(filters["status"])
+    if filters["date_from"]:
+        where_clauses.append("c.incorporation_date >= %s")
+        params.append(filters["date_from"])
+    if filters["date_to"]:
+        where_clauses.append("c.incorporation_date <= %s")
+        params.append(filters["date_to"])
 
     sort_sql = {
         "score": "qs.priority_score DESC, c.company_name ASC",
         "date": "c.incorporation_date DESC NULLS LAST, qs.priority_score DESC, c.company_name ASC",
+        "date_asc": "c.incorporation_date ASC NULLS LAST, qs.priority_score DESC, c.company_name ASC",
         "name": "c.company_name ASC",
     }.get(filters["sort"], "qs.priority_score DESC, c.company_name ASC")
 

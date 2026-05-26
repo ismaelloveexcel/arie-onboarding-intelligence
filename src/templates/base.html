@@ -19,7 +19,7 @@
       {% if current_actor %}
         <span style="font-size:12px; opacity:.85">{{ current_actor }}</span>
       {% endif %}
-      <select name="actor" onchange="this.form.submit()" style="font-size:12px; background:rgba(255,255,255,.15); color:#fff; border:1px solid rgba(255,255,255,.3); border-radius:4px; padding:3px 8px">
+      <select name="actor" onchange="this.form.submit()" class="nav-actor-select">
         <option value="">Change…</option>
         {% for name in actor_names %}
           <option value="{{ name }}" {% if current_actor == name %}selected{% endif %}>{{ name }}</option>

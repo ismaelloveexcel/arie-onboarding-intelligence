@@ -38,10 +38,17 @@
       {% endfor %}
     </select>
   </label>
+  <label>Inc. from
+    <input type="date" name="date_from" value="{{ filters.date_from }}">
+  </label>
+  <label>Inc. to
+    <input type="date" name="date_to" value="{{ filters.date_to }}">
+  </label>
   <label>Sort
     <select name="sort">
       <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Score ↓</option>
-      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Inc. Date ↓</option>
+      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Inc. Date ↓ (newest)</option>
+      <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Inc. Date ↑ (oldest)</option>
       <option value="name" {% if filters.sort == "name" %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
