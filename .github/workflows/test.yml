@@ -30,6 +30,11 @@ jobs:
             exit 1
           fi
 
+      - name: Apply migrations to test DB
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
+        run: alembic upgrade head
+
       - name: Run tests
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL_TEST }}
