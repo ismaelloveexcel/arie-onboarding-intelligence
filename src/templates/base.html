@@ -19,6 +19,7 @@
         <span class="brand-product">Leads Intelligence</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
+        <a href="/dashboard" {% if request.url.path == '/dashboard' %}class="is-active"{% endif %}>Dashboard</a>
         <a href="/introducers" {% if request.url.path.startswith('/introducers') %}class="is-active"{% endif %}>Introducers</a>
         <a href="/" {% if request.url.path == '/' %}class="is-active"{% endif %}>Direct Leads</a>
         <a href="/upload" {% if request.url.path == '/upload' %}class="is-active"{% endif %}>Upload</a>
