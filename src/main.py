@@ -16,8 +16,9 @@ from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
-from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, LOG_LEVEL, RM_NAMES, SECRET_KEY
+from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, CH_ENRICHMENT_SAFE_LIMIT, LOG_LEVEL, RM_NAMES, SECRET_KEY
 from src.db import check_connection, get_conn
+from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION
 
@@ -295,6 +296,14 @@ def admin_lei_backfill(request: Request):
     _require_admin_token(request)
     with get_conn() as conn:
         result = backfill_lei_company_links(conn)
+    return result
+
+
+@app.post("/admin/ch-enrichment")
+def admin_ch_enrichment(limit: int = None):
+    actual_limit = limit if limit is not None else CH_ENRICHMENT_SAFE_LIMIT
+    with get_conn() as conn:
+        result = run_ch_enrichment_batch(conn, actual_limit)
     return result
 
 
@@ -659,6 +668,30 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             lei_row = cur.fetchone()
 
+            cur.execute(
+                """
+                SELECT officer_name, role, appointed_on, resigned_on,
+                       nationality, country_of_residence
+                FROM company_officers
+                WHERE company_id = %s
+                ORDER BY appointed_on DESC NULLS LAST, officer_name
+                """,
+                (lead_id,),
+            )
+            officers_rows = cur.fetchall()
+
+            cur.execute(
+                """
+                SELECT name, kind, nationality, country_of_residence,
+                       natures_of_control, notified_on, ceased_on
+                FROM company_pscs
+                WHERE company_id = %s
+                ORDER BY notified_on DESC NULLS LAST, name
+                """,
+                (lead_id,),
+            )
+            pscs_rows = cur.fetchall()
+
     score = {
         "score": row[9] if row[9] is not None else 0,
         "tier": row[10] if row[10] is not None else "LOW",
@@ -705,6 +738,30 @@ def lead_detail(request: Request, lead_id: UUID):
             "last_seen": lei_row[6],
         }
 
+    officers = [
+        {
+            "name": r[0],
+            "role": r[1],
+            "appointed_on": r[2],
+            "resigned_on": r[3],
+            "nationality": r[4],
+            "country_of_residence": r[5],
+        }
+        for r in officers_rows
+    ]
+    pscs = [
+        {
+            "name": r[0],
+            "kind": r[1],
+            "nationality": r[2],
+            "country_of_residence": r[3],
+            "natures_of_control": r[4] or [],
+            "notified_on": r[5],
+            "ceased_on": r[6],
+        }
+        for r in pscs_rows
+    ]
+
     return templates.TemplateResponse(
         request=request,
         name="lead_detail.html",
@@ -724,6 +781,8 @@ def lead_detail(request: Request, lead_id: UUID):
             "action": action,
             "audit_rows": audit_rendered,
             "lei": lei,
+            "officers": officers,
+            "pscs": pscs,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
             "saved": False,

@@ -157,3 +157,365 @@ def _upsert_item(conn, item: dict) -> None:
             "raw_data": Jsonb(item),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# PSC + Officers enrichment
+# ---------------------------------------------------------------------------
+
+_ENRICHMENT_BACKOFF = [2, 4, 8]  # seconds; all ≤ 30s cap per spec
+
+
+def _enrichment_get(client: httpx.Client, url: str) -> tuple[int, dict | None]:
+    """
+    GET `url` with retry logic for 429 and transient network errors.
+
+    Returns:
+        (200, dict)   on success
+        (404, None)   on not-found (no retry)
+        (429, None)   when rate-limit retries are exhausted
+    Raises:
+        httpx.HTTPError / httpx.TimeoutException on non-429, non-404 failure
+        after all retries are spent.
+    """
+    for attempt, delay in enumerate(_ENRICHMENT_BACKOFF + [None], 1):
+        try:
+            resp = client.get(url, timeout=_TIMEOUT)
+            if resp.status_code == 404:
+                return 404, None
+            if resp.status_code == 429:
+                if delay is None:
+                    logger.warning(
+                        "ch_enrichment_429_exhausted",
+                        extra={"url": url},
+                    )
+                    return 429, None
+                sleep_s = min(delay, 30)
+                logger.warning(
+                    "ch_enrichment_rate_limited",
+                    extra={"url": url, "attempt": attempt, "sleep_s": sleep_s},
+                )
+                time.sleep(sleep_s)
+                continue
+            resp.raise_for_status()
+            return resp.status_code, resp.json()
+        except (httpx.HTTPError, httpx.TimeoutException) as exc:
+            if delay is None:
+                raise
+            logger.warning(
+                "ch_enrichment_retry",
+                extra={"url": url, "attempt": attempt, "error": str(exc)},
+            )
+            time.sleep(min(delay, 30))
+    raise RuntimeError("unreachable")
+
+
+def _upsert_officers(conn, company_id: str, items: list[dict]) -> int:
+    """Upsert officer records into company_officers. Returns count upserted."""
+    count = 0
+    with conn.cursor() as cur:
+        for item in items:
+            dob = item.get("date_of_birth") or {}
+            appointed_raw = item.get("appointed_on")
+            resigned_raw = item.get("resigned_on")
+            try:
+                appointed_on = (
+                    datetime.strptime(appointed_raw, "%Y-%m-%d").date()
+                    if appointed_raw else None
+                )
+                resigned_on = (
+                    datetime.strptime(resigned_raw, "%Y-%m-%d").date()
+                    if resigned_raw else None
+                )
+            except ValueError:
+                appointed_on = None
+                resigned_on = None
+            cur.execute(
+                """
+                INSERT INTO company_officers (
+                    company_id, officer_name, role, appointed_on, resigned_on,
+                    nationality, country_of_residence,
+                    date_of_birth_year, date_of_birth_month, raw_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (company_id, officer_name, appointed_on)
+                    DO UPDATE SET
+                        role                 = EXCLUDED.role,
+                        resigned_on          = EXCLUDED.resigned_on,
+                        nationality          = EXCLUDED.nationality,
+                        country_of_residence = EXCLUDED.country_of_residence,
+                        date_of_birth_year   = EXCLUDED.date_of_birth_year,
+                        date_of_birth_month  = EXCLUDED.date_of_birth_month,
+                        raw_json             = EXCLUDED.raw_json,
+                        fetched_at           = NOW()
+                """,
+                (
+                    company_id,
+                    item.get("name") or "",
+                    item.get("officer_role") or "",
+                    appointed_on,
+                    resigned_on,
+                    item.get("nationality"),
+                    item.get("country_of_residence"),
+                    dob.get("year"),
+                    dob.get("month"),
+                    Jsonb(item),
+                ),
+            )
+            count += 1
+    return count
+
+
+def _upsert_pscs(conn, company_id: str, items: list[dict]) -> int:
+    """Upsert PSC records into company_pscs. Returns count upserted."""
+    count = 0
+    with conn.cursor() as cur:
+        for item in items:
+            notified_raw = item.get("notified_on")
+            ceased_raw = item.get("ceased_on")
+            try:
+                notified_on = (
+                    datetime.strptime(notified_raw, "%Y-%m-%d").date()
+                    if notified_raw else None
+                )
+                ceased_on = (
+                    datetime.strptime(ceased_raw, "%Y-%m-%d").date()
+                    if ceased_raw else None
+                )
+            except ValueError:
+                notified_on = None
+                ceased_on = None
+            cur.execute(
+                """
+                INSERT INTO company_pscs (
+                    company_id, name, kind, nationality, country_of_residence,
+                    natures_of_control, notified_on, ceased_on, raw_json
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (company_id, name, notified_on)
+                    DO UPDATE SET
+                        kind                 = EXCLUDED.kind,
+                        nationality          = EXCLUDED.nationality,
+                        country_of_residence = EXCLUDED.country_of_residence,
+                        natures_of_control   = EXCLUDED.natures_of_control,
+                        ceased_on            = EXCLUDED.ceased_on,
+                        raw_json             = EXCLUDED.raw_json,
+                        fetched_at           = NOW()
+                """,
+                (
+                    company_id,
+                    item.get("name") or "",
+                    item.get("kind") or "",
+                    item.get("nationality"),
+                    item.get("country_of_residence"),
+                    item.get("natures_of_control"),
+                    notified_on,
+                    ceased_on,
+                    Jsonb(item),
+                ),
+            )
+            count += 1
+    return count
+
+
+def _set_last_enriched_at(conn, company_id) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE companies SET last_enriched_at = NOW() WHERE id = %s",
+            (str(company_id),),
+        )
+
+
+def fetch_officers(company_number: str) -> list[dict]:
+    """Fetch officer list for *company_number* from Companies House.
+    Returns empty list on 404 or rate-limit exhaustion.
+    """
+    url = f"{_BASE_URL}/company/{company_number}/officers"
+    with httpx.Client(
+        auth=(COMPANIES_HOUSE_API_KEY, ""),
+        headers={"Accept": "application/json"},
+    ) as client:
+        status, data = _enrichment_get(client, url)
+    if data is None:
+        return []
+    return data.get("items") or []
+
+
+def fetch_pscs(company_number: str) -> list[dict]:
+    """Fetch PSC list for *company_number* from Companies House.
+    Returns empty list on 404 or rate-limit exhaustion.
+    """
+    url = f"{_BASE_URL}/company/{company_number}/persons-with-significant-control"
+    with httpx.Client(
+        auth=(COMPANIES_HOUSE_API_KEY, ""),
+        headers={"Accept": "application/json"},
+    ) as client:
+        status, data = _enrichment_get(client, url)
+    if data is None:
+        return []
+    return data.get("items") or []
+
+
+def enrich_company(conn, company_id, company_number: str) -> dict:
+    """Fetch officers + PSCs for one company, upsert to DB, set last_enriched_at.
+
+    Always sets last_enriched_at before returning so the scheduler does not
+    re-queue the same company on the next run.
+
+    Returns:
+        {"officers": int, "pscs": int, "status": "ok"|"not_found"|"failed"}
+    """
+    officers_url = f"{_BASE_URL}/company/{company_number}/officers"
+    pscs_url = (
+        f"{_BASE_URL}/company/{company_number}/persons-with-significant-control"
+    )
+
+    status_o: int | None = None
+    data_o: dict | None = None
+    status_p: int | None = None
+    data_p: dict | None = None
+
+    try:
+        with httpx.Client(
+            auth=(COMPANIES_HOUSE_API_KEY, ""),
+            headers={"Accept": "application/json"},
+        ) as client:
+            status_o, data_o = _enrichment_get(client, officers_url)
+
+            if status_o == 429:
+                logger.warning(
+                    "ch_enrich_rate_limit_exhausted",
+                    extra={"company_number": company_number, "endpoint": "officers"},
+                )
+                _set_last_enriched_at(conn, company_id)
+                conn.commit()
+                return {"officers": 0, "pscs": 0, "status": "failed"}
+
+            if status_o == 404:
+                logger.info(
+                    "ch_enrich_not_found",
+                    extra={"company_number": company_number},
+                )
+                _set_last_enriched_at(conn, company_id)
+                conn.commit()
+                return {"officers": 0, "pscs": 0, "status": "not_found"}
+
+            status_p, data_p = _enrichment_get(client, pscs_url)
+
+            if status_p == 429:
+                logger.warning(
+                    "ch_enrich_rate_limit_exhausted",
+                    extra={"company_number": company_number, "endpoint": "pscs"},
+                )
+                _set_last_enriched_at(conn, company_id)
+                conn.commit()
+                return {"officers": 0, "pscs": 0, "status": "failed"}
+
+            # Validate payload shapes — malformed response is treated as failed
+            if data_o is not None and not isinstance(data_o, dict):
+                raise ValueError(
+                    f"Unexpected officers payload type: {type(data_o).__name__}"
+                )
+            if data_p is not None and not isinstance(data_p, dict):
+                raise ValueError(
+                    f"Unexpected PSC payload type: {type(data_p).__name__}"
+                )
+
+    except Exception as exc:
+        logger.warning(
+            "ch_enrich_failed",
+            extra={"company_number": company_number, "error": str(exc)},
+        )
+        _set_last_enriched_at(conn, company_id)
+        conn.commit()
+        return {"officers": 0, "pscs": 0, "status": "failed"}
+
+    officers_items = (data_o.get("items") or []) if data_o else []
+    # 404 on PSC endpoint means no PSCs registered — treat as empty, not an error
+    pscs_items = (data_p.get("items") or []) if data_p else []
+
+    try:
+        officers_count = _upsert_officers(conn, str(company_id), officers_items)
+        pscs_count = _upsert_pscs(conn, str(company_id), pscs_items)
+        _set_last_enriched_at(conn, company_id)
+        conn.commit()
+    except Exception as exc:
+        logger.warning(
+            "ch_enrich_db_failed",
+            extra={"company_number": company_number, "error": str(exc)},
+        )
+        conn.rollback()
+        try:
+            _set_last_enriched_at(conn, company_id)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        return {"officers": 0, "pscs": 0, "status": "failed"}
+
+    logger.info(
+        "ch_enrich_complete",
+        extra={
+            "company_number": company_number,
+            "officers": officers_count,
+            "pscs": pscs_count,
+        },
+    )
+    return {"officers": officers_count, "pscs": pscs_count, "status": "ok"}
+
+
+def run_ch_enrichment_batch(conn, limit: int) -> dict:
+    """Select up to *limit* un-enriched CH companies and enrich each.
+
+    Selects WHERE source_system = 'companies_house' AND last_enriched_at IS NULL
+    ordered by created_at DESC so newest companies are enriched first.
+
+    Returns:
+        {
+            "enriched": int,            # companies with status ok or not_found
+            "officers": int,            # total officer rows upserted
+            "pscs": int,                # total PSC rows upserted
+            "failed": int,              # companies that returned status=failed
+        }
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT id, source_ref
+            FROM companies
+            WHERE source_system = 'companies_house'
+              AND last_enriched_at IS NULL
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        rows = cur.fetchall()
+
+    enriched = 0
+    officers_total = 0
+    pscs_total = 0
+    failures = 0
+
+    for company_id, company_number in rows:
+        result = enrich_company(conn, company_id, company_number)
+        if result["status"] == "failed":
+            failures += 1
+        else:
+            enriched += 1
+            officers_total += result["officers"]
+            pscs_total += result["pscs"]
+
+    logger.info(
+        "ch_enrichment_batch_complete",
+        extra={
+            "limit": limit,
+            "enriched": enriched,
+            "officers": officers_total,
+            "pscs": pscs_total,
+            "failed": failures,
+        },
+    )
+    return {
+        "enriched": enriched,
+        "officers": officers_total,
+        "pscs": pscs_total,
+        "failed": failures,
+    }
