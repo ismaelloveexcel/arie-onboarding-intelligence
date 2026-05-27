@@ -56,6 +56,12 @@
     {% if lei %}
     <div class="card">
       <h2>Legal Entity Identifier</h2>
+      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0;
+                line-height:1.6; font-style:italic">
+        LEI registration indicates the entity is engaging with regulated
+        financial infrastructure — typically a prerequisite for banking,
+        custody, or institutional counterparty relationships.
+      </p>
       <table style="width:100%; font-size:13px; border-collapse:collapse">
         <tr>
           <td style="color:#888; width:140px; padding:4px 0">LEI</td>
@@ -66,7 +72,7 @@
             {% if lei.fresh %}
               <span class="tier tier-HIGH"
                     style="font-size:10px; margin-left:6px;
-                           vertical-align:middle">FRESH</span>
+                           vertical-align:middle">FRESH · ≤ 90 days</span>
             {% endif %}
           </td>
         </tr>
@@ -120,13 +126,13 @@
     <div class="card"
          style="border:1px dashed #e5e7eb; background:#fafafa">
       <h2 style="color:#9ca3af; font-size:14px">
-        Legal Entity Identifier
+        No LEI Registered
       </h2>
-      <p style="font-size:12px; color:#9ca3af; line-height:1.7;
-                margin:0">
-        No LEI registered for this entity.<br>
-        A new LEI is a strong onboarding-readiness signal —
-        we check GLEIF daily.
+      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0;
+                font-style:italic">
+        Entity has not registered a Legal Entity Identifier. LEI
+        registration typically precedes institutional account opening.
+        We monitor GLEIF daily.
       </p>
     </div>
     {% endif %}
