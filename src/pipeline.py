@@ -3,6 +3,7 @@ Nightly pipeline orchestrator.
 Run directly: python -m src.pipeline
 Or via GitHub Actions cron.
 """
+
 import logging
 import time
 
@@ -74,10 +75,23 @@ def _score_new_companies(conn) -> int:
         lei_data = None
         if lei_row and lei_row[0] is not None:
             from datetime import date as _date
+
             days = (_date.today() - lei_row[0]).days
             lei_data = {"days_since_registration": days}
 
-        score, codes, tier = calculate_score(company, lei=lei_data)
+        with conn.cursor() as psc_cur:
+            psc_cur.execute(
+                "SELECT country_of_residence, ceased_on FROM company_pscs WHERE company_id = %s",
+                (company_id,),
+            )
+            pscs_data = [
+                {"country_of_residence": row[0], "ceased_on": row[1]}
+                for row in psc_cur.fetchall()
+            ]
+
+        score, codes, tier = calculate_score(
+            company, lei=lei_data, pscs=pscs_data or None
+        )
         summary = build_reason_summary(codes)
 
         with conn.cursor() as cur:
@@ -105,8 +119,7 @@ def _refresh_queue(conn) -> int:
     """Atomic queue snapshot refresh. Returns new row count."""
     with conn.cursor() as cur:
         cur.execute("TRUNCATE queue_snapshot")
-        cur.execute(
-            """
+        cur.execute("""
             INSERT INTO queue_snapshot (
                 canonical_company_id, company_name, jurisdiction, entity_type,
                 incorporation_date, verify_url, priority_score, tier,
@@ -129,8 +142,7 @@ def _refresh_queue(conn) -> int:
             JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
             WHERE c.canonical_company_id IS NULL
             ORDER BY ls.score DESC
-            """
-        )
+            """)
         cur.execute("SELECT COUNT(*) FROM queue_snapshot")
         count = cur.fetchone()[0]
     conn.commit()
@@ -141,13 +153,11 @@ def _mauritius_zero_streak(conn) -> int:
     """Count consecutive days with zero Mauritius ingestion (approximation via audit log)."""
     # Simple heuristic: check if any Mauritius companies were updated recently
     with conn.cursor() as cur:
-        cur.execute(
-            """
+        cur.execute("""
             SELECT COUNT(*) FROM companies
             WHERE source_system = 'mauritius_mns'
               AND updated_at >= NOW() - INTERVAL '3 days'
-            """
-        )
+            """)
         recent = cur.fetchone()[0]
     return 0 if recent > 0 else 3
 
@@ -166,6 +176,40 @@ def _start_run(conn) -> str | None:
         logger.warning("pipeline_run_record_start_failed", extra={"error": str(exc)})
         conn.rollback()
         return None
+
+
+def _reap_stuck_runs(conn) -> int:
+    """Mark any pipeline_runs rows stuck in 'running' for >90 minutes as 'aborted'.
+
+    Protects against zombie rows when the pipeline process is killed mid-flight
+    (Railway redeploy, OOM, etc). The advisory lock self-releases on connection
+    close, but the pipeline_runs row update never happens — this catches them.
+    Returns the count of rows reaped.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE pipeline_runs
+                SET status = 'aborted',
+                    error = 'reaped: stuck in running state >90min (likely process killed)',
+                    completed_at = NOW(),
+                    duration_seconds = EXTRACT(EPOCH FROM (NOW() - started_at))
+                WHERE status = 'running'
+                  AND started_at < NOW() - INTERVAL '90 minutes'
+                RETURNING id
+                """)
+            reaped_ids = [str(row[0]) for row in cur.fetchall()]
+        conn.commit()
+        if reaped_ids:
+            logger.info(
+                "pipeline_runs_reaped",
+                extra={"count": len(reaped_ids), "reaped_ids": reaped_ids},
+            )
+        return len(reaped_ids)
+    except Exception as exc:
+        logger.warning("pipeline_reap_failed", extra={"error": str(exc)})
+        conn.rollback()
+        return 0
 
 
 def _finish_run(
@@ -196,8 +240,16 @@ def _finish_run(
                     error = %s
                 WHERE id = %s
                 """,
-                (status, uk_count, mu_count, scores_count, queue_rows,
-                 duration_seconds, error, run_id),
+                (
+                    status,
+                    uk_count,
+                    mu_count,
+                    scores_count,
+                    queue_rows,
+                    duration_seconds,
+                    error,
+                    run_id,
+                ),
             )
         conn.commit()
     except Exception as exc:
@@ -210,6 +262,7 @@ def run() -> None:
     logger.info("pipeline_started")
 
     with get_conn() as conn:
+        _reap_stuck_runs(conn)
         run_id = _start_run(conn)
         try:
             if not _acquire_lock(conn):
@@ -231,7 +284,9 @@ def run() -> None:
                         "mu_count": mu_count,
                     },
                 )
-                raise RuntimeError("UK ingestion returned zero records — pipeline marked as failed")
+                raise RuntimeError(
+                    "UK ingestion returned zero records — pipeline marked as failed"
+                )
             scores_count = _score_new_companies(conn)
             queue_rows = _refresh_queue(conn)
             zero_streak = _mauritius_zero_streak(conn)
@@ -261,9 +316,13 @@ def run() -> None:
                 },
             )
             _finish_run(
-                conn, run_id, status="success",
-                uk_count=uk_count, mu_count=mu_count,
-                scores_count=scores_count, queue_rows=queue_rows,
+                conn,
+                run_id,
+                status="success",
+                uk_count=uk_count,
+                mu_count=mu_count,
+                scores_count=scores_count,
+                queue_rows=queue_rows,
                 duration_seconds=duration,
             )
 
@@ -271,8 +330,11 @@ def run() -> None:
             duration = round(time.time() - start, 1)
             logger.exception("pipeline_failed")
             _finish_run(
-                conn, run_id, status="failed",
-                duration_seconds=duration, error=str(exc)[:2000],
+                conn,
+                run_id,
+                status="failed",
+                duration_seconds=duration,
+                error=str(exc)[:2000],
             )
             raise
         finally:
