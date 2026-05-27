@@ -90,9 +90,9 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
    Top nav
    ========================================================================= */
 .site-header {
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
-  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02), 0 1px 3px rgba(15, 23, 42, 0.04);
+  background: #f8fafc;
+  border-bottom: 1px solid #d1d5db;
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03), 0 2px 6px rgba(15, 23, 42, 0.06);
   position: sticky;
   top: 0;
   z-index: 50;
@@ -104,7 +104,7 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: var(--s-8);
-  height: 68px;
+  height: 80px;
 }
 .brand-lockup {
   display: inline-flex;
@@ -115,7 +115,7 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 }
 .brand-lockup:hover { text-decoration: none; }
 .brand-mark {
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 900;
   letter-spacing: 0.06em;
   color: #1e1b4b;
@@ -123,13 +123,13 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 }
 .brand-divider {
   width: 1px;
-  height: 26px;
+  height: 30px;
   background: #d1d5db;
 }
 .brand-product {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 600;
+  color: #4b5563;
   letter-spacing: 0.01em;
   line-height: 1;
 }
@@ -140,14 +140,14 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
   height: 100%;
 }
 .site-nav a {
-  color: #6b7280;
-  font-weight: 500;
-  font-size: 14px;
-  padding: 0 4px;
+  color: #4b5563;
+  font-weight: 600;
+  font-size: 15px;
+  padding: 0 6px;
   height: 100%;
   display: inline-flex;
   align-items: center;
-  border-bottom: 2px solid transparent;
+  border-bottom: 3px solid transparent;
   text-decoration: none;
   transition: color 120ms ease, border-color 120ms ease;
 }
@@ -158,7 +158,7 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 }
 .site-nav a.is-active {
   color: #1e1b4b;
-  font-weight: 700;
+  font-weight: 800;
   border-bottom-color: #1e1b4b;
 }
 .nav-actor {
