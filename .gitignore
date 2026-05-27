@@ -11,3 +11,6 @@ build/
 venv/
 .venv_old_force/
 *.log
+
+backups/
+_snapshot.py
