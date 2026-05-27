@@ -17,6 +17,7 @@ from pythonjsonlogger import jsonlogger
 
 from src.config import ACTOR_NAMES, APP_ENV, LOG_LEVEL, RM_NAMES, SECRET_KEY
 from src.db import check_connection, get_conn
+from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION
 
 # --- Logging setup ---
@@ -254,6 +255,13 @@ def health(response: Response):
         "last_pipeline_run": last_pipeline_run,
         "scoring_version": SCORING_VERSION,
     }
+
+
+@app.post("/admin/lei-backfill")
+def admin_lei_backfill():
+    with get_conn() as conn:
+        result = backfill_lei_company_links(conn)
+    return result
 
 
 @app.post("/me")

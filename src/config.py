@@ -32,6 +32,7 @@ ACTOR_NAMES: list[str] = [
     for name in os.getenv("ACTOR_NAMES", "").split(",")
     if name.strip()
 ]
+LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 
 
 def _assert_db_host_allowed() -> None:
