@@ -33,6 +33,8 @@ ACTOR_NAMES: list[str] = [
     if name.strip()
 ]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
+CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200"))
+CH_ENRICHMENT_SAFE_LIMIT: int = int(os.getenv("CH_ENRICHMENT_SAFE_LIMIT", "5"))
 
 
 def _assert_db_host_allowed() -> None:

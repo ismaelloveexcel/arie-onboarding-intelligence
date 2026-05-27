@@ -158,6 +158,67 @@
       </p>
     </div>
     {% endif %}
+
+  {% if officers %}
+  <div class="card">
+    <h2>Officers</h2>
+    <table style="width:100%; border-collapse:collapse; font-size:12px">
+      <thead>
+        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+          <th style="padding:4px 8px 4px 0">Name</th>
+          <th style="padding:4px 8px 4px 0">Role</th>
+          <th style="padding:4px 8px 4px 0">Appointed</th>
+          <th style="padding:4px 0">Resigned</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for o in officers %}
+        <tr style="border-bottom:1px solid #f3f4f6">
+          <td style="padding:5px 8px 5px 0; font-weight:500">{{ o.name }}</td>
+          <td style="padding:5px 8px 5px 0; color:#374151">{{ o.role | replace("_", " ") | title }}</td>
+          <td style="padding:5px 8px 5px 0; color:#6b7280">
+            {{ o.appointed_on.strftime("%d %b %Y") if o.appointed_on else "—" }}
+          </td>
+          <td style="padding:5px 0; color:{% if o.resigned_on %}#ef4444{% else %}#22c55e{% endif %}">
+            {% if o.resigned_on %}{{ o.resigned_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if pscs %}
+  <div class="card">
+    <h2>Persons with Significant Control</h2>
+    <table style="width:100%; border-collapse:collapse; font-size:12px">
+      <thead>
+        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+          <th style="padding:4px 8px 4px 0">Name</th>
+          <th style="padding:4px 8px 4px 0">Kind</th>
+          <th style="padding:4px 8px 4px 0">Notified</th>
+          <th style="padding:4px 0">Ceased</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in pscs %}
+        <tr style="border-bottom:1px solid #f3f4f6">
+          <td style="padding:5px 8px 5px 0; font-weight:500">{{ p.name }}</td>
+          <td style="padding:5px 8px 5px 0; color:#374151">{{ p.kind | replace("-", " ") | title }}</td>
+          <td style="padding:5px 8px 5px 0; color:#6b7280">
+            {{ p.notified_on.strftime("%d %b %Y") if p.notified_on else "—" }}
+          </td>
+          <td style="padding:5px 0; color:{% if p.ceased_on %}#ef4444{% else %}#22c55e{% endif %}">
+            {% if p.ceased_on %}{{ p.ceased_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   </div>
 
   <!-- Right: RM action panel -->

@@ -6,8 +6,9 @@ Or via GitHub Actions cron.
 import logging
 import time
 
+from src.config import CH_ENRICHMENT_BATCH_SIZE
 from src.db import get_conn
-from src.ingestion.companies_house import fetch_uk_incorporations
+from src.ingestion.companies_house import fetch_uk_incorporations, run_ch_enrichment_batch
 from src.ingestion.gleif import fetch_gleif_registrations
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.ingestion.mauritius import fetch_mauritius_incorporations
@@ -221,6 +222,7 @@ def run() -> None:
             mu_count = fetch_mauritius_incorporations(conn)
             lei_count = fetch_gleif_registrations(conn)
             backfill_result = backfill_lei_company_links(conn)
+            enrichment_result = run_ch_enrichment_batch(conn, CH_ENRICHMENT_BATCH_SIZE)
             if uk_count == 0:
                 logger.error(
                     "pipeline_ingestion_failure",
@@ -253,6 +255,10 @@ def run() -> None:
                     "lei_backfill_scanned": backfill_result["scanned"],
                     "lei_backfill_matched": backfill_result["matched"],
                     "lei_backfill_unmatched": backfill_result["unmatched"],
+                    "officers_fetched": enrichment_result["officers"],
+                    "pscs_fetched": enrichment_result["pscs"],
+                    "enrichment_failures": enrichment_result["failed"],
+                    "enrichment_skipped_rate_limit": 0,
                     "scores_generated": scores_count,
                     "queue_rows": queue_rows,
                     "duration_seconds": duration,
