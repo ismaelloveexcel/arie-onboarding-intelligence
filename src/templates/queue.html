@@ -1,41 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Direct Leads — Arie Leads{% endblock %}
 {% block content %}
-<div class="kpi-strip">
-  <div class="kpi-tile">
-    <div class="kpi-label">New Yesterday</div>
-    <div class="kpi-value">{{ kpi.new_yesterday }}</div>
-  </div>
-  <div class="kpi-tile">
-    <div class="kpi-label">High Priority</div>
-    <div class="kpi-value kpi-value--high">
-      {{ kpi.high_priority }}
-    </div>
-  </div>
-  <div class="kpi-tile">
-    <div class="kpi-label">Unassigned</div>
-    <div class="kpi-value
-      {% if kpi.unassigned > 0 %}kpi-value--amber{% endif %}">
-      {{ kpi.unassigned }}
-    </div>
-  </div>
-  <div class="kpi-tile
-    {% if kpi.followups_due > 0 %}kpi-tile--alert{% endif %}">
-    <div class="kpi-label">Follow-ups Due</div>
-    <div class="kpi-value
-      {% if kpi.followups_due > 0 %}kpi-value--amber{% endif %}">
-      {{ kpi.followups_due }}
-    </div>
-  </div>
-  <div class="kpi-tile">
-    <div class="kpi-label">New LEIs Today</div>
-    <div class="kpi-value
-      {% if kpi.new_leis > 0 %}kpi-value--high{% endif %}">
-      {{ kpi.new_leis }}
-    </div>
-  </div>
-</div>
-
 <div class="page-head">
   <h1>Direct Leads</h1>
   <small>{{ total }} leads &bull; refreshed {{ refreshed_at or "never" }}</small>

@@ -366,49 +366,6 @@ def queue(request: Request):
             cur.execute("SELECT MAX(refreshed_at) FROM queue_snapshot")
             refreshed_at = cur.fetchone()[0]
 
-            cur.execute(
-                """
-                SELECT
-                  COUNT(*) FILTER (
-                    WHERE c.incorporation_date = CURRENT_DATE - 1
-                  ) AS new_yesterday,
-                  COUNT(*) FILTER (
-                    WHERE ra.company_id IS NULL
-                       OR ra.status = 'New'
-                  ) AS unassigned,
-                  COUNT(*) FILTER (
-                    WHERE qs.priority_score >= 70
-                  ) AS high_priority,
-                  COUNT(*) FILTER (
-                    WHERE ra.follow_up_at <= CURRENT_DATE
-                      AND ra.status NOT IN (
-                        'Not Relevant', 'Not Fit', 'Qualified', 'Onboarding'
-                      )
-                  ) AS followups_due
-                FROM queue_snapshot qs
-                JOIN companies c ON c.id = qs.canonical_company_id
-                LEFT JOIN rm_actions ra ON ra.company_id = c.id
-                """
-            )
-            kpi_row = cur.fetchone()
-
-            cur.execute(
-                """
-                SELECT COUNT(*)
-                FROM lei_records
-                WHERE registered_on = CURRENT_DATE - 1
-                """
-            )
-            new_leis_row = cur.fetchone()
-
-    kpi = {
-        "new_yesterday": kpi_row[0] if kpi_row else 0,
-        "unassigned": kpi_row[1] if kpi_row else 0,
-        "high_priority": kpi_row[2] if kpi_row else 0,
-        "followups_due": kpi_row[3] if kpi_row else 0,
-        "new_leis": new_leis_row[0] if new_leis_row else 0,
-    }
-
     rendered_rows = [
         {
             "id": row[0],
@@ -444,7 +401,6 @@ def queue(request: Request):
             "query_string": _build_query_string(query_params),
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
-            "kpi": kpi,
         },
     )
 
