@@ -5,7 +5,7 @@ Uses unittest.mock (same library as tests/test_ingestion.py) to isolate
 DB interactions. No real DB connections are made.
 """
 import uuid
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from src.ingestion.lei_backfill import backfill_lei_company_links
 
