@@ -3,6 +3,7 @@ Fixture tests for the scoring engine.
 Every test uses a fixed, fully-specified input and asserts exact outputs.
 Changing a score intentionally means updating the fixture here.
 """
+
 from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
 
 
@@ -163,19 +164,21 @@ def test_empty_company_does_not_raise():
 # Fixture 9: SCORING_VERSION is the canonical value
 # ---------------------------------------------------------------------------
 def test_scoring_version():
-    assert SCORING_VERSION == "2025.1.3"
+    assert SCORING_VERSION == "2025.1.4"
 
 
 # ---------------------------------------------------------------------------
 # Fixture 10: reason_summary is non-empty when codes present
 # ---------------------------------------------------------------------------
 def test_reason_summary_populated():
-    _, codes, _ = calculate_score({
-        "company_name": "Meridian Wealth Partners",
-        "jurisdiction": "UK",
-        "entity_type": "holding company",
-        "sic_codes": ["64200"],
-    })
+    _, codes, _ = calculate_score(
+        {
+            "company_name": "Meridian Wealth Partners",
+            "jurisdiction": "UK",
+            "entity_type": "holding company",
+            "sic_codes": ["64200"],
+        }
+    )
     summary = build_reason_summary(codes)
     assert len(summary) > 0
     assert "Holding" in summary
@@ -214,12 +217,14 @@ def test_old_lei_adds_15_points():
 
 
 def test_mauritius_gbc_scores_medium_or_above():
-    score, codes, tier = calculate_score({
-        "company_name": "Aegean Capital Ltd",
-        "jurisdiction": "Mauritius",
-        "entity_type": "Global Business Company",
-        "sic_codes": [],
-    })
+    score, codes, tier = calculate_score(
+        {
+            "company_name": "Aegean Capital Ltd",
+            "jurisdiction": "Mauritius",
+            "entity_type": "Global Business Company",
+            "sic_codes": [],
+        }
+    )
     assert score >= 40
     assert tier in ("MEDIUM", "HIGH")
     assert "MAURITIUS_GBC" in codes
@@ -239,3 +244,103 @@ def test_mauritius_gbc_with_lei_scores_high():
     assert score >= 70
     assert tier == "HIGH"
     assert "FRESH_LEI" in codes
+
+
+# ---------------------------------------------------------------------------
+# PSC signals (added in scoring 2025.1.4)
+# ---------------------------------------------------------------------------
+
+_BASE_UK_LTD = {
+    "company_name": "Meridian Capital Ltd",
+    "jurisdiction": "UK",
+    "entity_type": "private limited company",
+    "sic_codes": [],
+}
+
+
+def test_has_pscs_adds_5_points():
+    score_without, _, _ = calculate_score(_BASE_UK_LTD)
+    score_with, codes, _ = calculate_score(
+        _BASE_UK_LTD,
+        pscs=[{"country_of_residence": "GB", "ceased_on": None}],
+    )
+    assert "HAS_PSCS" in codes
+    assert "INTERNATIONAL_PSC" not in codes
+    assert score_with == score_without + 5
+
+
+def test_international_psc_adds_10_extra():
+    score_without, _, _ = calculate_score(_BASE_UK_LTD)
+    score_with, codes, _ = calculate_score(
+        _BASE_UK_LTD,
+        pscs=[{"country_of_residence": "AE", "ceased_on": None}],
+    )
+    assert "HAS_PSCS" in codes
+    assert "INTERNATIONAL_PSC" in codes
+    assert score_with == score_without + 15
+
+
+def test_ceased_pscs_excluded():
+    from datetime import date
+
+    score_without, _, _ = calculate_score(_BASE_UK_LTD)
+    score_with, codes, _ = calculate_score(
+        _BASE_UK_LTD,
+        pscs=[{"country_of_residence": "AE", "ceased_on": date.today()}],
+    )
+    assert "HAS_PSCS" not in codes
+    assert "INTERNATIONAL_PSC" not in codes
+    assert score_with == score_without
+
+
+def test_null_country_not_international():
+    score_without, _, _ = calculate_score(_BASE_UK_LTD)
+    score_with, codes, _ = calculate_score(
+        _BASE_UK_LTD,
+        pscs=[{"country_of_residence": None, "ceased_on": None}],
+    )
+    assert "HAS_PSCS" in codes
+    assert "INTERNATIONAL_PSC" not in codes
+    assert score_with == score_without + 5
+
+
+def test_calculate_score_backwards_compatible_without_pscs_kwarg():
+    """Calling without pscs= must produce identical output to the pre-2025.1.4 signature."""
+    company = {
+        "company_name": "Trident Asset Management Ltd",
+        "jurisdiction": "UK",
+        "entity_type": "private limited company",
+        "sic_codes": ["66300"],
+    }
+    no_kwarg = calculate_score(company)
+    explicit_none = calculate_score(company, pscs=None)
+    empty_list = calculate_score(company, pscs=[])
+    assert no_kwarg == explicit_none == empty_list
+
+
+def test_uk_holding_with_international_psc_reaches_high_score_bucket():
+    """The whole point of this change: UK holding + int'l PSC should crack 80."""
+    company = {
+        "company_name": "Global Capital Holdings Ltd",
+        "jurisdiction": "UK",
+        "entity_type": "holding company",
+        "sic_codes": ["64200"],
+    }
+    score, codes, tier = calculate_score(
+        company,
+        pscs=[{"country_of_residence": "AE", "ceased_on": None}],
+    )
+    assert score >= 80
+    assert tier == "HIGH"
+    assert "HAS_PSCS" in codes
+    assert "INTERNATIONAL_PSC" in codes
+
+
+def test_reason_summary_includes_psc_labels():
+    _, codes, _ = calculate_score(
+        _BASE_UK_LTD,
+        pscs=[{"country_of_residence": "SG", "ceased_on": None}],
+    )
+    summary = build_reason_summary(codes)
+    assert "Beneficial ownership" in summary
+    assert "International beneficial owner" in summary
