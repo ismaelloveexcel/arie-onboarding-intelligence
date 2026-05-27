@@ -1,6 +1,6 @@
 import re
 
-SCORING_VERSION = "2025.1.2"
+SCORING_VERSION = "2025.1.3"
 
 _FINANCIAL_KEYWORDS = {"capital", "wealth", "holdings", "fund", "partners", "asset", "invest", "investments"}
 _INTERNATIONAL_KEYWORDS = {"international", "global", "offshore"}
@@ -12,6 +12,7 @@ _REASON_LABELS = {
     "STANDARD_ENTITY":      "Standard Ltd/PLC entity",
     "MAURITIUS_GBC":        "Mauritius Global Business Company",
     "MAURITIUS_AC":         "Mauritius Authorised Company",
+    "MAURITIUS_HOLDING_PRESUMED": "Mauritius regulated holding structure (GBC/AC)",
     "UK_ENTITY":            "UK-registered entity",
     "FINANCIAL_SIC":        "Financial holding SIC (642xx)",
     "FUND_MGMT_SIC":        "Fund management SIC (663xx)",
@@ -69,11 +70,15 @@ def calculate_score(
     elif jurisdiction == "Mauritius":
         et = entity_type
         if "gbc" in et or "global business" in et:
-            score += 20
+            score += 30
             codes.append("MAURITIUS_GBC")
+            score += 25
+            codes.append("MAURITIUS_HOLDING_PRESUMED")
         elif "authorised" in et or et == "ac":
-            score += 15
+            score += 20
             codes.append("MAURITIUS_AC")
+            score += 15
+            codes.append("MAURITIUS_HOLDING_PRESUMED")
 
     # --- SIC codes (each family scored independently, once each) ---
     sic_strs = [str(s).strip() for s in sic_codes]

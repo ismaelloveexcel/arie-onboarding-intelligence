@@ -49,9 +49,10 @@ def test_generic_uk_ltd_is_low():
 
 # ---------------------------------------------------------------------------
 # Fixture 3: Mauritius GBC with fund SIC and financial keywords
-# Signals: MAURITIUS_GBC(+20) FUND_MGMT_SIC(+20) FINANCIAL_KEYWORD(+10) = 50
+# Signals: MAURITIUS_GBC(+30) MAURITIUS_HOLDING_PRESUMED(+25)
+#          FUND_MGMT_SIC(+20) FINANCIAL_KEYWORD(+10) = 85
 # ---------------------------------------------------------------------------
-def test_mauritius_gbc_with_fund_sic_is_medium():
+def test_mauritius_gbc_with_fund_sic_is_high():
     company = {
         "company_name": "Sunrise Capital Partners GBC",
         "jurisdiction": "Mauritius",
@@ -59,16 +60,17 @@ def test_mauritius_gbc_with_fund_sic_is_medium():
         "sic_codes": ["66300"],
     }
     score, codes, tier = calculate_score(company)
-    assert score == 50
-    assert tier == "MEDIUM"
+    assert score == 85
+    assert tier == "HIGH"
     assert "MAURITIUS_GBC" in codes
+    assert "MAURITIUS_HOLDING_PRESUMED" in codes
     assert "FUND_MGMT_SIC" in codes
     assert "FINANCIAL_KEYWORD" in codes
 
 
 # ---------------------------------------------------------------------------
 # Fixture 4: Mauritius Authorised Company — no SIC, no keywords
-# Signals: MAURITIUS_AC(+15) = 15
+# Signals: MAURITIUS_AC(+20) MAURITIUS_HOLDING_PRESUMED(+15) = 35
 # ---------------------------------------------------------------------------
 def test_mauritius_ac_no_signals_is_low():
     company = {
@@ -78,9 +80,10 @@ def test_mauritius_ac_no_signals_is_low():
         "sic_codes": [],
     }
     score, codes, tier = calculate_score(company)
-    assert score == 15
+    assert score == 35
     assert tier == "LOW"
     assert "MAURITIUS_AC" in codes
+    assert "MAURITIUS_HOLDING_PRESUMED" in codes
     assert "MAURITIUS_GBC" not in codes
 
 
@@ -160,7 +163,7 @@ def test_empty_company_does_not_raise():
 # Fixture 9: SCORING_VERSION is the canonical value
 # ---------------------------------------------------------------------------
 def test_scoring_version():
-    assert SCORING_VERSION == "2025.1.2"
+    assert SCORING_VERSION == "2025.1.3"
 
 
 # ---------------------------------------------------------------------------
@@ -208,3 +211,31 @@ def test_old_lei_adds_15_points():
     )
     assert "HAS_LEI" in codes
     assert score_with == score_without + 15
+
+
+def test_mauritius_gbc_scores_medium_or_above():
+    score, codes, tier = calculate_score({
+        "company_name": "Aegean Capital Ltd",
+        "jurisdiction": "Mauritius",
+        "entity_type": "Global Business Company",
+        "sic_codes": [],
+    })
+    assert score >= 40
+    assert tier in ("MEDIUM", "HIGH")
+    assert "MAURITIUS_GBC" in codes
+    assert "MAURITIUS_HOLDING_PRESUMED" in codes
+
+
+def test_mauritius_gbc_with_lei_scores_high():
+    score, codes, tier = calculate_score(
+        {
+            "company_name": "Aegean Capital Ltd",
+            "jurisdiction": "Mauritius",
+            "entity_type": "Global Business Company",
+            "sic_codes": [],
+        },
+        lei={"days_since_registration": 30},
+    )
+    assert score >= 70
+    assert tier == "HIGH"
+    assert "FRESH_LEI" in codes
