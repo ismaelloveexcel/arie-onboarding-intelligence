@@ -89,35 +89,76 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 /* =========================================================================
    Top nav
    ========================================================================= */
-.nav {
+.site-header {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  color: var(--ink-1);
-  padding: 0 var(--s-6);
+  box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02), 0 1px 3px rgba(15, 23, 42, 0.04);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.site-header-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 var(--s-8);
   display: flex;
   align-items: center;
-  gap: var(--s-5);
-  height: 52px;
+  gap: var(--s-8);
+  height: 68px;
 }
-.nav a {
-  color: var(--ink-2);
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+  text-decoration: none;
+  color: inherit;
+}
+.brand-lockup:hover { text-decoration: none; }
+.brand-mark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--brand-700);
+  line-height: 1;
+}
+.brand-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line-strong);
+}
+.brand-product {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--ink-3);
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s-6);
+  height: 100%;
+}
+.site-nav a {
+  color: var(--ink-3);
   font-weight: 500;
   font-size: var(--text-base);
-  padding: 4px 0;
-  border-bottom: 2px solid transparent;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  border-bottom: 3px solid transparent;
+  text-decoration: none;
+  transition: color 120ms ease, border-color 120ms ease;
 }
-.nav a:hover {
+.site-nav a:hover {
   color: var(--ink-1);
   text-decoration: none;
   border-bottom-color: var(--line-strong);
 }
-.nav .brand {
-  font-size: var(--text-md);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.site-nav a.is-active {
   color: var(--brand-700);
-  margin-right: var(--s-3);
+  font-weight: 600;
+  border-bottom-color: var(--brand-700);
 }
 .nav-actor {
   margin-left: auto;
@@ -128,6 +169,7 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 .nav-actor-name {
   font-size: var(--text-sm);
   color: var(--ink-2);
+  font-weight: 500;
 }
 .nav-actor-select {
   font-size: var(--text-sm);
@@ -136,7 +178,7 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
   padding: 4px 8px;
-  height: 28px;
+  height: 30px;
 }
 
 .container { max-width: 1440px; margin: 0 auto; padding: var(--s-6) var(--s-8); }
@@ -436,15 +478,23 @@ input:focus, textarea:focus, select:focus {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: var(--s-4);
+  gap: var(--s-4);
+  margin: var(--s-2) 0 var(--s-6);
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line);
 }
 .page-head h1 {
-  font-size: var(--text-xl);
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 700;
   color: var(--ink-1);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
 }
-.page-head small { color: var(--ink-3); font-size: var(--text-sm); }
+.page-head small {
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
 
 /* =========================================================================
    Form layout grid (label | input rows)
@@ -709,3 +759,42 @@ input:focus, textarea:focus, select:focus {
 .audit-row-body .k { color: var(--ink-3); }
 .empty-note { color: var(--ink-3); font-size: var(--text-sm); }
 
+
+.kpi-strip {
+  display: flex;
+  gap: .75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+.kpi-tile {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: .75rem 1.25rem;
+  min-width: 120px;
+  flex: 1;
+}
+.kpi-tile--alert {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+.kpi-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: #6b7280;
+  margin-bottom: .25rem;
+}
+.kpi-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #111827;
+  line-height: 1;
+}
+.kpi-value--high {
+  color: #065f46;
+}
+.kpi-value--amber {
+  color: #92400e;
+}
