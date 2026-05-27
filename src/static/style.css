@@ -115,16 +115,16 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
 }
 .brand-lockup:hover { text-decoration: none; }
 .brand-mark {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  color: var(--brand-700);
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #1e1b4b;
   line-height: 1;
 }
 .brand-divider {
   width: 1px;
-  height: 22px;
-  background: var(--line-strong);
+  height: 26px;
+  background: #d1d5db;
 }
 .brand-product {
   font-size: var(--text-sm);
@@ -140,25 +140,26 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
   height: 100%;
 }
 .site-nav a {
-  color: var(--ink-3);
+  color: #6b7280;
   font-weight: 500;
-  font-size: var(--text-base);
+  font-size: 14px;
+  padding: 0 4px;
   height: 100%;
   display: inline-flex;
   align-items: center;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   text-decoration: none;
   transition: color 120ms ease, border-color 120ms ease;
 }
 .site-nav a:hover {
-  color: var(--ink-1);
+  color: #1e1b4b;
   text-decoration: none;
-  border-bottom-color: var(--line-strong);
+  border-bottom-color: transparent;
 }
 .site-nav a.is-active {
-  color: var(--brand-700);
-  font-weight: 600;
-  border-bottom-color: var(--brand-700);
+  color: #1e1b4b;
+  font-weight: 700;
+  border-bottom-color: #1e1b4b;
 }
 .nav-actor {
   margin-left: auto;
