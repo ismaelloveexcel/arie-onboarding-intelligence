@@ -4,15 +4,16 @@ Tests for src/ingestion/lei_backfill.py.
 Uses unittest.mock (same library as tests/test_ingestion.py) to isolate
 DB interactions. No real DB connections are made.
 """
+
 import uuid
 from unittest.mock import MagicMock, patch
 
 from src.ingestion.lei_backfill import backfill_lei_company_links
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_conn(batches: list[list], matched_company_id: str | None = None):
     """
@@ -35,6 +36,7 @@ def _make_conn(batches: list[list], matched_company_id: str | None = None):
 # Test 1 — exact source_ref (registered_as) match
 # ---------------------------------------------------------------------------
 
+
 def test_exact_source_ref_match():
     lei_id = uuid.uuid4()
     company_id = str(uuid.uuid4())
@@ -52,7 +54,9 @@ def test_exact_source_ref_match():
         [],
     ]
 
-    with patch("src.ingestion.lei_backfill._find_company_id", return_value=company_id) as mock_find:
+    with patch(
+        "src.ingestion.lei_backfill._find_company_id", return_value=company_id
+    ) as mock_find:
         result = backfill_lei_company_links(conn)
 
     assert result == {"scanned": 1, "matched": 1, "unmatched": 0}
@@ -63,6 +67,7 @@ def test_exact_source_ref_match():
 # ---------------------------------------------------------------------------
 # Test 2 — normalised_name fallback match (registered_as is None)
 # ---------------------------------------------------------------------------
+
 
 def test_normalised_name_fallback_match():
     lei_id = uuid.uuid4()
@@ -80,7 +85,9 @@ def test_normalised_name_fallback_match():
         [],
     ]
 
-    with patch("src.ingestion.lei_backfill._find_company_id", return_value=company_id) as mock_find:
+    with patch(
+        "src.ingestion.lei_backfill._find_company_id", return_value=company_id
+    ) as mock_find:
         result = backfill_lei_company_links(conn)
 
     assert result == {"scanned": 1, "matched": 1, "unmatched": 0}
@@ -90,6 +97,7 @@ def test_normalised_name_fallback_match():
 # ---------------------------------------------------------------------------
 # Test 3 — no match, company_id stays NULL
 # ---------------------------------------------------------------------------
+
 
 def test_no_match_stays_null():
     lei_id = uuid.uuid4()
@@ -119,6 +127,7 @@ def test_no_match_stays_null():
 # Test 4 — idempotency: second run sees no NULL rows, reports matched=0
 # ---------------------------------------------------------------------------
 
+
 def test_idempotency_second_run_zero():
     conn = MagicMock()
     cur = MagicMock()
@@ -142,6 +151,7 @@ def test_idempotency_second_run_zero():
 # Test 5 — chunking: more than one batch processes all rows
 # ---------------------------------------------------------------------------
 
+
 def test_chunking_processes_all_rows():
     ids = [uuid.uuid4() for _ in range(3)]
     company_ids = [str(uuid.uuid4()) for _ in range(3)]
@@ -160,7 +170,9 @@ def test_chunking_processes_all_rows():
 
     # All match
     find_side_effects = [company_ids[0], company_ids[1], company_ids[2]]
-    with patch("src.ingestion.lei_backfill._find_company_id", side_effect=find_side_effects):
+    with patch(
+        "src.ingestion.lei_backfill._find_company_id", side_effect=find_side_effects
+    ):
         with patch("src.ingestion.lei_backfill.LEI_BACKFILL_CHUNK_SIZE", 2):
             result = backfill_lei_company_links(conn)
 
