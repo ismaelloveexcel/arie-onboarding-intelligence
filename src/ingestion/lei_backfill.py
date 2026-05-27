@@ -69,12 +69,12 @@ def backfill_lei_company_links(conn) -> dict:
                         (company_id, lei_id),
                     )
                 matched += 1
-                logger.warning(
+                logger.info(
                     "lei_backfill_matched",
                     extra={"lei_id": str(lei_id), "company_id": company_id},
                 )
             else:
-                logger.warning(
+                logger.debug(
                     "lei_backfill_unmatched",
                     extra={"lei_id": str(lei_id), "registered_as": registered_as},
                 )
