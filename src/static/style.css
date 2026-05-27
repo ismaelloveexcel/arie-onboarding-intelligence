@@ -492,3 +492,117 @@ input:focus, textarea:focus, select:focus {
 .audit-changes .k { color: var(--ink-3); }
 .empty-row { text-align: center; padding: var(--s-8); color: var(--ink-3); }
 
+/* =========================================================================
+   Score visualization (queue cell + hero on detail page)
+   ========================================================================= */
+.score-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 56px;
+}
+.score-cell .score {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: var(--text-md);
+  color: var(--ink-1);
+  line-height: 1;
+}
+.score-bar {
+  position: relative;
+  height: 4px;
+  background: var(--surface-2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.score-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+}
+.score-bar-fill--high { background: var(--success); }
+.score-bar-fill--med  { background: #D97706; }
+.score-bar-fill--low  { background: var(--line-strong); }
+
+.score-hero {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  margin-bottom: var(--s-3);
+}
+.score-hero .score-number {
+  font-size: var(--text-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-1);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.score-hero .tier { font-size: var(--text-base); }
+.score-summary { color: var(--ink-2); font-size: var(--text-sm); margin-bottom: var(--s-3); }
+.score-version { color: var(--ink-4); font-size: var(--text-xs); margin-top: var(--s-3); }
+
+/* =========================================================================
+   Numeric / meta columns + cells
+   ========================================================================= */
+.col-num   { text-align: right; font-variant-numeric: tabular-nums; }
+.cell-meta { font-size: var(--text-sm); color: var(--ink-2); }
+.cell-mono { font-family: var(--font-mono); font-size: var(--text-sm); }
+
+/* =========================================================================
+   Definition list (label : value rows on detail pages)
+   ========================================================================= */
+.def-list {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--s-2) var(--s-3);
+  font-size: var(--text-base);
+  align-items: baseline;
+}
+.def-list dt {
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+.def-list dd { color: var(--ink-1); margin: 0; }
+.def-list dd code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: var(--r-sm);
+}
+
+/* =========================================================================
+   Icon-only button (e.g. external link arrow)
+   ========================================================================= */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  line-height: 1;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--ink-1); text-decoration: none; }
+
+/* =========================================================================
+   Audit row (lead detail) — flex header replaces float:right
+   ========================================================================= */
+.audit-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-3);
+}
+.audit-row-time { color: var(--ink-3); font-size: var(--text-xs); white-space: nowrap; }
+.audit-row-body { margin-top: 2px; font-size: var(--text-xs); color: var(--ink-2); }
+.audit-row-body .k { color: var(--ink-3); }
+.empty-note { color: var(--ink-3); font-size: var(--text-sm); }
+
