@@ -492,6 +492,109 @@ input:focus, textarea:focus, select:focus {
 .audit-changes .k { color: var(--ink-3); }
 .empty-row { text-align: center; padding: var(--s-8); color: var(--ink-3); }
 
+/* Audit log — entry list (Stage 3) */
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-4);
+}
+.audit-entry {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--s-3) var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+.audit-entry-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+}
+.audit-action {
+  font-weight: 600;
+  color: var(--ink-1);
+}
+.audit-actor {
+  color: var(--ink-3);
+}
+.audit-actor strong {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.audit-time {
+  margin-left: auto;
+  color: var(--ink-4);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+.audit-entry-target {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-size: var(--text-sm);
+}
+.audit-target-link {
+  color: var(--brand-600);
+  font-weight: 500;
+  text-decoration: none;
+}
+.audit-target-link:hover {
+  text-decoration: underline;
+}
+.audit-target-type {
+  font-size: var(--text-xs);
+  color: var(--ink-4);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.audit-diff {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-sm);
+}
+.audit-diff li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-1);
+  flex-wrap: wrap;
+}
+.audit-diff-label {
+  color: var(--ink-3);
+  font-weight: 500;
+  min-width: 96px;
+}
+.audit-diff-old {
+  color: var(--ink-3);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-4);
+}
+.audit-diff-arrow {
+  color: var(--ink-4);
+  font-size: var(--text-xs);
+}
+.audit-diff-new {
+  color: var(--ink-1);
+  font-weight: 500;
+}
+.empty-state {
+  text-align: center;
+  padding: var(--s-8);
+  color: var(--ink-3);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+}
+
 /* =========================================================================
    Score visualization (queue cell + hero on detail page)
    ========================================================================= */

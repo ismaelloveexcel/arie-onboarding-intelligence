@@ -56,9 +56,12 @@ def fetch_uk_incorporations(conn, from_date: date | None = None) -> int:
     Fetch UK incorporations from Companies House and upsert into companies table.
     Returns count of records processed.
     """
+    # Default: ingest yesterday's complete day. Today is still in progress at
+    # Companies House so partial counts would be misleading; the nightly run
+    # picks up "yesterday" once it's fully closed.
     if from_date is None:
         from_date = date.today() - timedelta(days=1)
-    to_date = date.today()
+    to_date = from_date
 
     start_index = 0
     total_fetched = 0

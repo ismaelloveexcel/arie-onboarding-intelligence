@@ -292,7 +292,7 @@ def queue(request: Request):
         "status": request.query_params.get("status", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
-        "sort": request.query_params.get("sort", "score"),
+        "sort": request.query_params.get("sort", "date"),
     }
     try:
         page = max(int(request.query_params.get("page", 1)), 1)
@@ -323,10 +323,10 @@ def queue(request: Request):
 
     sort_sql = {
         "score": "qs.priority_score DESC, c.company_name ASC",
-        "date": "c.incorporation_date DESC NULLS LAST, qs.priority_score DESC, c.company_name ASC",
-        "date_asc": "c.incorporation_date ASC NULLS LAST, qs.priority_score DESC, c.company_name ASC",
+        "date": "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+        "date_asc": "c.incorporation_date ASC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
         "name": "c.company_name ASC",
-    }.get(filters["sort"], "qs.priority_score DESC, c.company_name ASC")
+    }.get(filters["sort"], "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC")
 
     count_sql = f"""
         SELECT COUNT(*)
@@ -832,42 +832,181 @@ def upload_confirm(upload_id: UUID):
     return RedirectResponse(url="/", status_code=303)
 
 
+_AUDIT_ACTION_LABELS = {
+    "rm_action_updated": "Lead updated",
+    "quick_assign": "Quick assign",
+    "lead_status_changed": "Status changed",
+    "lead_assigned": "Reassigned",
+    "score_recalculated": "Score recalculated",
+    "introducer_updated": "Introducer updated",
+}
+
+_AUDIT_FIELD_LABELS = {
+    "assigned_to": "Assigned to",
+    "status": "Status",
+    "notes": "Notes",
+    "contacted_at": "Contacted",
+    "follow_up_at": "Follow-up",
+    "tier": "Tier",
+    "priority_score": "Score",
+}
+
+
+def _audit_action_label(action: str | None) -> str:
+    if not action:
+        return "—"
+    return _AUDIT_ACTION_LABELS.get(action, action.replace("_", " ").capitalize())
+
+
+def _audit_field_label(field: str) -> str:
+    return _AUDIT_FIELD_LABELS.get(field, field.replace("_", " ").capitalize())
+
+
+def _format_audit_value(value) -> str:
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
+def _audit_changes(old, new) -> list[dict]:
+    """Return list of changed fields {label, old, new}. Falls back to a single
+    raw 'new' row when payloads aren't dict-compatible."""
+    if not isinstance(new, dict):
+        if new is None and old is None:
+            return []
+        return [{"label": "Value", "old": _format_audit_value(old), "new": _format_audit_value(new)}]
+    old_dict = old if isinstance(old, dict) else {}
+    changes = []
+    # union of keys preserves all transitions, including new keys
+    for key in new.keys():
+        old_v = old_dict.get(key)
+        new_v = new.get(key)
+        if old_v == new_v:
+            continue
+        changes.append({
+            "label": _audit_field_label(key),
+            "old": _format_audit_value(old_v),
+            "new": _format_audit_value(new_v),
+        })
+    # if nothing changed but it's still a meaningful event, show a compact summary
+    if not changes:
+        for key, val in new.items():
+            if val in (None, ""):
+                continue
+            changes.append({
+                "label": _audit_field_label(key),
+                "old": None,
+                "new": _format_audit_value(val),
+            })
+    return changes
+
+
+def _humanize_actor(actor: str | None) -> str:
+    if not actor or actor.lower() in ("unknown", ""):
+        return "Unknown"
+    if actor.lower() == "system":
+        return "System"
+    return actor
+
+
+def _relative_time(ts: datetime | None) -> str:
+    if not ts:
+        return ""
+    now = datetime.now(timezone.utc)
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    delta = now - ts
+    secs = int(delta.total_seconds())
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{secs // 60}m ago"
+    if secs < 86400:
+        return f"{secs // 3600}h ago"
+    if secs < 7 * 86400:
+        return f"{secs // 86400}d ago"
+    return ts.strftime("%d %b %Y")
+
+
 @app.get("/audit", response_class=HTMLResponse)
 def audit_log(request: Request):
+    filters = {
+        "actor": request.query_params.get("actor", ""),
+        "action": request.query_params.get("action", ""),
+        "date_from": request.query_params.get("date_from", ""),
+        "date_to": request.query_params.get("date_to", ""),
+    }
     try:
         page = max(int(request.query_params.get("page", 1)), 1)
     except ValueError:
         page = 1
     page_size = 50
 
+    where = ["1=1"]
+    params: list[object] = []
+    if filters["actor"]:
+        where.append("a.actor = %s")
+        params.append(filters["actor"])
+    if filters["action"]:
+        where.append("a.action = %s")
+        params.append(filters["action"])
+    if filters["date_from"]:
+        where.append("a.created_at >= %s")
+        params.append(filters["date_from"])
+    if filters["date_to"]:
+        where.append("a.created_at < (%s::date + INTERVAL '1 day')")
+        params.append(filters["date_to"])
+
+    where_sql = " AND ".join(where)
+
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM audit_log")
+            cur.execute(f"SELECT COUNT(*) FROM audit_log a WHERE {where_sql}", params)
             total = cur.fetchone()[0]
             cur.execute(
-                """
-                SELECT entity_type, entity_id, action, actor, old_value, new_value, created_at
-                FROM audit_log
-                ORDER BY created_at DESC
+                f"""
+                SELECT a.entity_type, a.entity_id, a.action, a.actor,
+                       a.old_value, a.new_value, a.created_at,
+                       c.company_name
+                FROM audit_log a
+                LEFT JOIN companies c
+                  ON a.entity_type = 'company' AND c.id = a.entity_id
+                WHERE {where_sql}
+                ORDER BY a.created_at DESC
                 LIMIT %s OFFSET %s
                 """,
-                (page_size, (page - 1) * page_size),
+                params + [page_size, (page - 1) * page_size],
             )
             rows = cur.fetchall()
 
+            cur.execute("SELECT DISTINCT actor FROM audit_log WHERE actor IS NOT NULL ORDER BY 1")
+            actor_options = [r[0] for r in cur.fetchall()]
+            cur.execute("SELECT DISTINCT action FROM audit_log WHERE action IS NOT NULL ORDER BY 1")
+            action_options = [r[0] for r in cur.fetchall()]
+
     total_pages = max((total + page_size - 1) // page_size, 1)
-    rendered_rows = [
-        {
-            "entity_type": row[0],
-            "entity_id": row[1],
-            "action": row[2],
-            "actor": row[3],
-            "old_value": row[4],
-            "new_value": row[5],
-            "created_at": row[6],
-        }
-        for row in rows
-    ]
+    rendered_rows = []
+    for row in rows:
+        entity_type, entity_id, action, actor, old_v, new_v, created_at, company_name = row
+        rendered_rows.append({
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "entity_url": f"/leads/{entity_id}" if entity_type == "company" else None,
+            "entity_label": company_name or (str(entity_id)[:8] if entity_id else "—"),
+            "action": action,
+            "action_label": _audit_action_label(action),
+            "actor": _humanize_actor(actor),
+            "actor_raw": actor or "",
+            "changes": _audit_changes(old_v, new_v),
+            "created_at": created_at,
+            "created_at_iso": created_at.isoformat() if created_at else "",
+            "created_at_display": created_at.strftime("%d %b %Y %H:%M") if created_at else "",
+            "created_at_relative": _relative_time(created_at),
+        })
+
+    action_choices = [(a, _audit_action_label(a)) for a in action_options]
 
     return templates.TemplateResponse(
         request=request,
@@ -879,6 +1018,9 @@ def audit_log(request: Request):
             "total_pages": total_pages,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
+            "filters": filters,
+            "actor_options": actor_options,
+            "action_choices": action_choices,
         },
     )
 
