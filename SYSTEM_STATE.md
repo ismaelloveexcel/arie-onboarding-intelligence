@@ -66,3 +66,6 @@ _Freeze status: **NOT FROZEN** — 6 gate items outstanding (see below)_
 **Not a valid trigger:** cleanup, refactor, "could be cleaner", "better architecture", "might scale better", industry best practice.
 
 If a proposed change doesn't map to a row in the above table, write it in `BACKLOG.md` and do not implement it.
+
+---
+*See `docs/` for architecture overview, operational runbooks, and architectural decision records.*

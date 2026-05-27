@@ -9,6 +9,7 @@ dist/
 build/
 .venv/
 venv/
+.venv*/
 .venv_old_force/
 *.log
 
