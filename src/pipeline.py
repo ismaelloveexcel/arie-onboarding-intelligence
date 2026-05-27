@@ -8,6 +8,7 @@ import time
 
 from src.db import get_conn
 from src.ingestion.companies_house import fetch_uk_incorporations
+from src.ingestion.gleif import fetch_gleif_registrations
 from src.ingestion.mauritius import fetch_mauritius_incorporations
 from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
 
@@ -199,6 +200,7 @@ def run() -> None:
 
             uk_count = fetch_uk_incorporations(conn)
             mu_count = fetch_mauritius_incorporations(conn)
+            lei_count = fetch_gleif_registrations(conn)
             if uk_count == 0:
                 logger.error(
                     "pipeline_ingestion_failure",
@@ -227,6 +229,7 @@ def run() -> None:
                     "event": "nightly_complete",
                     "companies_fetched_uk": uk_count,
                     "companies_fetched_mu": mu_count,
+                    "lei_matches": lei_count,
                     "scores_generated": scores_count,
                     "queue_rows": queue_rows,
                     "duration_seconds": duration,
