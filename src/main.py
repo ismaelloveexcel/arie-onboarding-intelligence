@@ -2,7 +2,7 @@ import csv
 import io
 import logging
 import re
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from html import escape
 from urllib.parse import urlencode
 from uuid import UUID
@@ -48,6 +48,23 @@ def _read_actor(request: Request) -> str:
         logger.warning("actor_cookie_bad_signature")
         return ""
     return unsigned.decode("utf-8", errors="replace")
+
+
+def _time_ago(dt: datetime | None) -> str:
+    if dt is None:
+        return "Never"
+    now = datetime.now(timezone.utc)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    seconds = int((now - dt).total_seconds())
+    if seconds < 120:
+        return "Just now"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    if seconds < 86400:
+        return f"{seconds // 3600}h ago"
+    return f"{seconds // 86400}d ago"
+
 
 app = FastAPI(
     title="Arie Leads",
@@ -289,6 +306,173 @@ def set_actor(request: Request, actor: str = Form("")):
         response.delete_cookie(_ACTOR_COOKIE)
     # if actor provided but not in ACTOR_NAMES: silently ignore, don't set cookie
     return response
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    actor = _read_actor(request)
+    now = datetime.now(timezone.utc)
+    stale_cutoff = now - timedelta(hours=36)
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            # Panel 1 — pipeline freshness
+            cur.execute("""
+                SELECT started_at, completed_at, status,
+                       uk_count, mu_count, scores_count, queue_rows, duration_seconds
+                FROM pipeline_runs ORDER BY started_at DESC LIMIT 1
+            """)
+            last_run_row = cur.fetchone()
+
+            cur.execute("""
+                SELECT started_at, uk_count, mu_count, scores_count, queue_rows
+                FROM pipeline_runs WHERE status = 'success'
+                ORDER BY started_at DESC LIMIT 1
+            """)
+            last_success_row = cur.fetchone()
+
+            cur.execute(
+                "SELECT MAX(last_enriched_at) FROM companies"
+                " WHERE source_system = 'companies_house'"
+            )
+            last_enriched_at = cur.fetchone()[0]
+
+            cur.execute("SELECT MAX(last_seen) FROM lei_records")
+            last_lei_seen = cur.fetchone()[0]
+
+            # Panel 2 — lead volume + scoring
+            cur.execute("""
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')  AS last_7d,
+                    COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS last_30d
+                FROM companies
+            """)
+            vol_row = cur.fetchone()
+
+            cur.execute("""
+                SELECT
+                    COUNT(*) FILTER (WHERE score BETWEEN 0  AND 39)  AS s0_39,
+                    COUNT(*) FILTER (WHERE score BETWEEN 40 AND 59)  AS s40_59,
+                    COUNT(*) FILTER (WHERE score BETWEEN 60 AND 79)  AS s60_79,
+                    COUNT(*) FILTER (WHERE score BETWEEN 80 AND 100) AS s80_100,
+                    COUNT(*) AS total_scored
+                FROM lead_scores WHERE is_current = TRUE
+            """)
+            score_row = cur.fetchone()
+
+            # Panel 3 — enrichment coverage
+            cur.execute("""
+                SELECT
+                    (SELECT COUNT(*) FROM companies WHERE source_system = 'companies_house')                      AS total_uk,
+                    (SELECT COUNT(*) FROM companies WHERE source_system = 'companies_house'
+                                                    AND last_enriched_at IS NOT NULL)                           AS enriched_uk,
+                    (SELECT COUNT(DISTINCT company_id) FROM company_officers)                                    AS with_officers,
+                    (SELECT COUNT(DISTINCT company_id) FROM company_pscs)                                        AS with_pscs,
+                    (SELECT COUNT(*) FROM lei_records)                                                           AS total_lei,
+                    (SELECT COUNT(*) FROM lei_records WHERE company_id IS NOT NULL)                              AS linked_lei,
+                    (SELECT COUNT(*) FROM companies WHERE source_system = 'mauritius_mns')                       AS total_mu
+            """)
+            cov_row = cur.fetchone()
+
+            # Panel 4 — queue + workflow
+            cur.execute(
+                "SELECT status, COUNT(*) AS cnt FROM rm_actions GROUP BY status ORDER BY cnt DESC"
+            )
+            status_counts = cur.fetchall()
+
+            cur.execute("""
+                SELECT i.company_name, COUNT(ia.id) AS lead_count
+                FROM introducers i
+                JOIN introducer_actions ia ON ia.introducer_id = i.id
+                GROUP BY i.id, i.company_name
+                ORDER BY lead_count DESC LIMIT 5
+            """)
+            top_introducers = cur.fetchall()
+
+    def _ts(ts: datetime | None) -> datetime | None:
+        if ts is None:
+            return None
+        return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+    def _pct(num: int, denom: int) -> float:
+        return round(num * 100 / denom, 1) if denom else 0.0
+
+    last_run_at = _ts(last_run_row[0]) if last_run_row else None
+    last_enriched = _ts(last_enriched_at)
+    last_lei = _ts(last_lei_seen)
+
+    sources = [
+        {
+            "name": "Nightly Pipeline",
+            "detail": "UK · Mauritius · Scoring",
+            "last_run": _time_ago(last_run_at),
+            "last_run_at": last_run_at,
+            "status": last_run_row[2] if last_run_row else "—",
+            "counts": (
+                f"UK {last_success_row[1] or 0} · "
+                f"MU {last_success_row[2] or 0} · "
+                f"Scores {last_success_row[3] or 0}"
+            ) if last_success_row else "—",
+            "stale": last_run_at is None or last_run_at < stale_cutoff,
+        },
+        {
+            "name": "CH Enrichment",
+            "detail": "Officers · PSCs",
+            "last_run": _time_ago(last_enriched),
+            "last_run_at": last_enriched,
+            "status": "enriched" if last_enriched else "—",
+            "counts": "",
+            "stale": last_enriched is None or last_enriched < stale_cutoff,
+        },
+        {
+            "name": "LEI Backfill",
+            "detail": "GLEIF linkage",
+            "last_run": _time_ago(last_lei),
+            "last_run_at": last_lei,
+            "status": "linked" if last_lei else "—",
+            "counts": "",
+            "stale": last_lei is None or last_lei < stale_cutoff,
+        },
+    ]
+
+    total_uk   = cov_row[0] if cov_row else 0
+    enriched_uk = cov_row[1] if cov_row else 0
+    with_officers = cov_row[2] if cov_row else 0
+    with_pscs  = cov_row[3] if cov_row else 0
+    total_lei  = cov_row[4] if cov_row else 0
+    linked_lei = cov_row[5] if cov_row else 0
+    total_mu   = cov_row[6] if cov_row else 0
+
+    return templates.TemplateResponse(
+        request,
+        "dashboard.html",
+        {
+            "actor": actor,
+            # Panel 1
+            "sources": sources,
+            # Panel 2
+            "total_leads":   vol_row[0] if vol_row else 0,
+            "leads_7d":      vol_row[1] if vol_row else 0,
+            "leads_30d":     vol_row[2] if vol_row else 0,
+            "s0_39":         score_row[0] if score_row else 0,
+            "s40_59":        score_row[1] if score_row else 0,
+            "s60_79":        score_row[2] if score_row else 0,
+            "s80_100":       score_row[3] if score_row else 0,
+            "total_scored":  score_row[4] if score_row else 0,
+            # Panel 3
+            "total_uk":       total_uk,
+            "pct_enriched_uk": _pct(enriched_uk, total_uk),
+            "with_officers":  with_officers,
+            "with_pscs":      with_pscs,
+            "total_lei":      total_lei,
+            "pct_lei_linked": _pct(linked_lei, total_lei),
+            "total_mu":       total_mu,
+            # Panel 4
+            "status_counts":   status_counts,
+            "top_introducers": top_introducers,
+        }
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
