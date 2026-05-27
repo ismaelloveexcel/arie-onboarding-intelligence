@@ -2,7 +2,7 @@ import csv
 import io
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from html import escape
 from urllib.parse import urlencode
 from uuid import UUID
@@ -439,6 +439,17 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             audit_rows = cur.fetchall()
 
+            cur.execute(
+                """
+                SELECT lei_code, entity_status, registration_status,
+                       registered_on, managing_lou, gleif_url, last_seen
+                FROM lei_records
+                WHERE company_id = %s
+                """,
+                (lead_id,),
+            )
+            lei_row = cur.fetchone()
+
     score = {
         "score": row[9] if row[9] is not None else 0,
         "tier": row[10] if row[10] is not None else "LOW",
@@ -466,6 +477,25 @@ def lead_detail(request: Request, lead_id: UUID):
         for item in audit_rows
     ]
 
+    lei = None
+    if lei_row:
+        registered_on = lei_row[3]
+        days_ago = (
+            (date.today() - registered_on).days
+            if registered_on else None
+        )
+        lei = {
+            "lei_code": lei_row[0],
+            "entity_status": lei_row[1],
+            "registration_status": lei_row[2],
+            "registered_on": registered_on,
+            "days_ago": days_ago,
+            "fresh": days_ago is not None and days_ago <= 90,
+            "lou_code": lei_row[4],
+            "gleif_url": lei_row[5],
+            "last_seen": lei_row[6],
+        }
+
     return templates.TemplateResponse(
         request=request,
         name="lead_detail.html",
@@ -484,6 +514,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "score": score,
             "action": action,
             "audit_rows": audit_rendered,
+            "lei": lei,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
             "saved": False,

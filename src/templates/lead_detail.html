@@ -52,6 +52,84 @@
       </div>
       <div class="score-version">Scoring version {{ score.scoring_version }}</div>
     </div>
+
+    {% if lei %}
+    <div class="card">
+      <h2>Legal Entity Identifier</h2>
+      <table style="width:100%; font-size:13px; border-collapse:collapse">
+        <tr>
+          <td style="color:#888; width:140px; padding:4px 0">LEI</td>
+          <td style="padding:4px 0">
+            <code style="font-size:11px; background:#f3f4f6;
+                         padding:2px 6px; border-radius:3px;
+                         word-break:break-all">{{ lei.lei_code }}</code>
+            {% if lei.fresh %}
+              <span class="tier tier-HIGH"
+                    style="font-size:10px; margin-left:6px;
+                           vertical-align:middle">FRESH</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#888; padding:4px 0">Status</td>
+          <td style="padding:4px 0">
+            {{ lei.registration_status or lei.entity_status or "—" }}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#888; padding:4px 0">Registered</td>
+          <td style="padding:4px 0">
+            {% if lei.registered_on %}
+              {{ lei.registered_on.strftime("%d %b %Y") }}
+              {% if lei.days_ago is not none %}
+                <span style="color:#9ca3af; font-size:11px">
+                  ({{ lei.days_ago }} day{{ "s" if lei.days_ago != 1 else "" }} ago)
+                </span>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% if lei.lou_code %}
+        <tr>
+          <td style="color:#888; padding:4px 0">Managing LOU</td>
+          <td style="padding:4px 0; font-size:11px; color:#6b7280">
+            {{ lei.lou_code }}
+          </td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td style="color:#888; padding:4px 0">Source</td>
+          <td style="padding:4px 0; font-size:11px; color:#9ca3af">
+            GLEIF
+            {% if lei.last_seen %}
+              · checked {{ lei.last_seen.strftime("%d %b %Y") }}
+            {% endif %}
+          </td>
+        </tr>
+      </table>
+      {% if lei.gleif_url %}
+      <div style="margin-top:.75rem">
+        <a href="{{ lei.gleif_url }}" target="_blank"
+           style="font-size:12px; color:#0057b8">
+          View on GLEIF ↗
+        </a>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card"
+         style="border:1px dashed #e5e7eb; background:#fafafa">
+      <h2 style="color:#9ca3af; font-size:14px">
+        Legal Entity Identifier
+      </h2>
+      <p style="font-size:12px; color:#9ca3af; line-height:1.7;
+                margin:0">
+        No LEI registered for this entity.<br>
+        A new LEI is a strong onboarding-readiness signal —
+        we check GLEIF daily.
+      </p>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Right: RM action panel -->
