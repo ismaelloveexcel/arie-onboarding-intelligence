@@ -1,6 +1,6 @@
 import re
 
-SCORING_VERSION = "2025.1.1"
+SCORING_VERSION = "2025.1.2"
 
 _FINANCIAL_KEYWORDS = {"capital", "wealth", "holdings", "fund", "partners", "asset", "invest", "investments"}
 _INTERNATIONAL_KEYWORDS = {"international", "global", "offshore"}
@@ -19,6 +19,8 @@ _REASON_LABELS = {
     "FINANCIAL_KEYWORD":    "Financial keyword in name",
     "INTERNATIONAL_KEYWORD": "International/global keyword in name",
     "RECENTLY_INCORPORATED": "Recently incorporated (≤ 90 days)",
+    "FRESH_LEI":            "Fresh LEI registered (≤ 90 days)",
+    "HAS_LEI":              "Legal Entity Identifier registered",
 }
 
 
@@ -26,7 +28,10 @@ def _name_words(name: str) -> set[str]:
     return set(re.findall(r"[a-z]+", name.lower()))
 
 
-def calculate_score(company: dict) -> tuple[int, list[str], str]:
+def calculate_score(
+    company: dict,
+    lei: dict | None = None,
+) -> tuple[int, list[str], str]:
     """
     Pure function. No DB access. No API calls.
     Returns (score 0-100, reason_codes, tier).
@@ -95,6 +100,16 @@ def calculate_score(company: dict) -> tuple[int, list[str], str]:
         except Exception:
             pass
 
+    # --- LEI ---
+    if lei is not None:
+        days = lei.get("days_since_registration")
+        if days is not None and days <= 90:
+            score += 30
+            codes.append("FRESH_LEI")
+        else:
+            score += 15
+            codes.append("HAS_LEI")
+
     # --- Name keywords ---
     if words & _FINANCIAL_KEYWORDS:
         score += 10
@@ -116,8 +131,29 @@ def calculate_score(company: dict) -> tuple[int, list[str], str]:
 
 
 def build_reason_summary(codes: list[str]) -> str:
-    """Human-readable one-liner from matched reason codes."""
     if not codes:
         return "No priority signals matched."
-    labels = [_REASON_LABELS.get(c, c) for c in codes]
-    return "; ".join(labels) + "."
+
+    parts = []
+    lei_phrase = None
+
+    for code in codes:
+        if code == "FRESH_LEI":
+            lei_phrase = (
+                "with a fresh LEI registered — strong "
+                "onboarding-readiness signal"
+            )
+        elif code == "HAS_LEI":
+            lei_phrase = "with an active Legal Entity Identifier"
+        else:
+            label = _REASON_LABELS.get(code)
+            if label:
+                parts.append(label)
+
+    if not parts and not lei_phrase:
+        return "No priority signals matched."
+
+    base = "; ".join(parts) if parts else "Entity identified"
+    if lei_phrase:
+        return f"{base}, {lei_phrase}."
+    return f"{base}."

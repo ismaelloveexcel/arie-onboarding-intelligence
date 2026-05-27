@@ -160,7 +160,7 @@ def test_empty_company_does_not_raise():
 # Fixture 9: SCORING_VERSION is the canonical value
 # ---------------------------------------------------------------------------
 def test_scoring_version():
-    assert SCORING_VERSION == "2025.1.1"
+    assert SCORING_VERSION == "2025.1.2"
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +176,35 @@ def test_reason_summary_populated():
     summary = build_reason_summary(codes)
     assert len(summary) > 0
     assert "Holding" in summary
+
+
+def test_fresh_lei_adds_30_points():
+    base_company = {
+        "company_name": "Meridian Capital Ltd",
+        "jurisdiction": "UK",
+        "entity_type": "private limited company",
+        "sic_codes": [],
+    }
+    score_without, _, _ = calculate_score(base_company)
+    score_with, codes, _ = calculate_score(
+        base_company,
+        lei={"days_since_registration": 30},
+    )
+    assert "FRESH_LEI" in codes
+    assert score_with == score_without + 30
+
+
+def test_old_lei_adds_15_points():
+    base_company = {
+        "company_name": "Meridian Capital Ltd",
+        "jurisdiction": "UK",
+        "entity_type": "private limited company",
+        "sic_codes": [],
+    }
+    score_without, _, _ = calculate_score(base_company)
+    score_with, codes, _ = calculate_score(
+        base_company,
+        lei={"days_since_registration": 200},
+    )
+    assert "HAS_LEI" in codes
+    assert score_with == score_without + 15

@@ -58,7 +58,25 @@ def _score_new_companies(conn) -> int:
             "sic_codes": sic_codes or [],
             "incorporation_date": inc_date,
         }
-        score, codes, tier = calculate_score(company)
+
+        with conn.cursor() as lei_cur:
+            lei_cur.execute(
+                """
+                SELECT registered_on
+                FROM lei_records
+                WHERE company_id = %s
+                """,
+                (company_id,),
+            )
+            lei_row = lei_cur.fetchone()
+
+        lei_data = None
+        if lei_row and lei_row[0] is not None:
+            from datetime import date as _date
+            days = (_date.today() - lei_row[0]).days
+            lei_data = {"days_since_registration": days}
+
+        score, codes, tier = calculate_score(company, lei=lei_data)
         summary = build_reason_summary(codes)
 
         with conn.cursor() as cur:
