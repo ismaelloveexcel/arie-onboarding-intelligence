@@ -460,7 +460,7 @@ def lead_detail(request: Request, lead_id: UUID):
     action = {
         "assigned_to": row[14],
         "status": row[15] or "New",
-        "notes": row[16],
+        "notes": row[16] or "",
         "contacted_at": row[17],
         "follow_up_at": row[18],
     }
@@ -504,7 +504,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 "id": row[0],
                 "company_name": row[1],
                 "jurisdiction": row[2],
-                "entity_type": row[3],
+                "entity_type": _format_entity_type(row[3]),
                 "incorporation_date": row[4],
                 "registered_address": row[5],
                 "source_system": row[6],

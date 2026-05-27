@@ -261,7 +261,10 @@ td {
   color: var(--ink-1);
 }
 tr:last-child td { border-bottom: none; }
-tr:hover td { background: var(--surface-2); }
+tr:hover td {
+  background: #f8faff;
+  transition: background .1s ease;
+}
 
 /* =========================================================================
    Badges — tier
@@ -327,19 +330,21 @@ tr:hover td { background: var(--surface-2); }
    Cards
    ========================================================================= */
 .card {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: var(--s-5);
-  margin-bottom: var(--s-4);
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1rem;
+  margin-bottom: .75rem;
 }
 .card h2 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  color: var(--ink-1);
-  margin-bottom: var(--s-3);
-  padding-bottom: var(--s-2);
-  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: #6b7280;
+  margin-bottom: .65rem;
+  border-bottom: 1px solid #f3f4f6;
+  padding-bottom: .4rem;
 }
 
 /* =========================================================================
@@ -395,6 +400,13 @@ input:focus, textarea:focus, select:focus {
 }
 .btn-secondary:hover { background: var(--surface-2); text-decoration: none; }
 .btn-sm { height: 26px; padding: 0 10px; font-size: var(--text-sm); }
+.btn-verify {
+  opacity: .4;
+  transition: opacity .15s ease;
+  border: 1px solid #ddd;
+  background: #fff;
+}
+tr:hover .btn-verify { opacity: 1; }
 
 /* =========================================================================
    Reason codes

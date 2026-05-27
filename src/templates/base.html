@@ -11,28 +11,50 @@
   <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
 </head>
 <body>
-  <nav class="nav">
-    <span class="brand">Arie</span>
-    <a href="/">Direct Leads</a>
-    <a href="/introducers">Introducers</a>
-    <a href="/upload">Upload</a>
-    <a href="/audit">Audit Log</a>
-    {% if actor_names %}
-    <form method="post" action="/me" class="nav-actor">
-      {% if current_actor %}
-        <span class="nav-actor-name">{{ current_actor }}</span>
-      {% endif %}
-      <select name="actor" onchange="this.form.submit()" class="nav-actor-select" aria-label="Switch actor">
-        <option value="">Switch…</option>
-        {% for name in actor_names %}
-          <option value="{{ name }}" {% if current_actor == name %}selected{% endif %}>{{ name }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    {% endif %}
-  </nav>
+  <header class="site-header">
+    <div class="site-header-inner">
+      <a href="/" class="brand-lockup" aria-label="Arie — Onboarding Intelligence">
+        <span class="brand-mark">ARIE</span>
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span class="brand-product">Onboarding Intelligence</span>
+      </a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="/" {% if request.url.path == '/' %}class="is-active"{% endif %}>Direct Leads</a>
+        <a href="/introducers" {% if request.url.path.startswith('/introducers') %}class="is-active"{% endif %}>Introducers</a>
+        <a href="/upload" {% if request.url.path == '/upload' %}class="is-active"{% endif %}>Upload</a>
+        <a href="/audit" {% if request.url.path == '/audit' %}class="is-active"{% endif %}>Audit Log</a>
+      </nav>
+    </div>
+  </header>
   <div class="container">
     {% block content %}{% endblock %}
   </div>
+
+  <div id="toast" style="
+    position:fixed; bottom:1.5rem; right:1.5rem;
+    background:#111827; color:#fff;
+    padding:.6rem 1.1rem; border-radius:6px;
+    font-size:13px; font-weight:500;
+    box-shadow:0 4px 12px rgba(0,0,0,.15);
+    opacity:0; transition:opacity .2s ease;
+    pointer-events:none; z-index:9999;
+  " aria-live="polite"></div>
+
+  <script>
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.style.opacity = '1';
+      clearTimeout(t._timer);
+      t._timer = setTimeout(() => { t.style.opacity = '0'; }, 3000);
+    }
+    document.body.addEventListener('htmx:afterRequest', function(e) {
+      const method = (e.detail.requestConfig?.verb || '').toUpperCase();
+      const ok = e.detail.successful;
+      if (method === 'POST' && ok) {
+        showToast('Saved');
+      }
+    });
+  </script>
 </body>
 </html>

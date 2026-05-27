@@ -16,7 +16,12 @@
         <dt>Entity Type</dt><dd>{{ lead.entity_type or "—" }}</dd>
         <dt>Inc. Date</dt><dd>{{ lead.incorporation_date or "—" }}</dd>
         <dt>Address</dt><dd>{{ lead.registered_address or "—" }}</dd>
-        <dt>Source</dt><dd>{{ lead.source_system }}</dd>
+        <dt>Source</dt><dd>{{
+          {"companies_house": "Companies House",
+           "manual_upload": "Manual Upload",
+           "mauritius_mns": "Mauritius MNS"
+          }.get(lead.source_system, lead.source_system)
+        }}</dd>
         <dt>Ref</dt><dd><code>{{ lead.source_ref }}</code></dd>
         {% if lead.verify_url %}
         <dt>Registry</dt>
@@ -45,9 +50,26 @@
         <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
       </div>
       <div class="score-summary">{{ score.reason_summary or "No signals matched." }}</div>
+      {% set label_map = {
+        "HOLDING_STRUCTURE": "Holding Structure",
+        "INVESTMENT_VEHICLE": "Investment Vehicle",
+        "FUND_STRUCTURE": "Fund Entity",
+        "STANDARD_ENTITY": "Standard Ltd / PLC",
+        "MAURITIUS_GBC": "Mauritius GBC",
+        "MAURITIUS_AC": "Mauritius AC",
+        "UK_ENTITY": "UK Entity",
+        "FINANCIAL_SIC": "Financial Holding SIC",
+        "FUND_MGMT_SIC": "Fund Management SIC",
+        "FINTECH_SIC": "Fintech / Payments SIC",
+        "FINANCIAL_KEYWORD": "Financial Keyword",
+        "INTERNATIONAL_KEYWORD": "International Keyword",
+        "RECENTLY_INCORPORATED": "Recently Incorporated",
+        "FRESH_LEI": "Fresh LEI",
+        "HAS_LEI": "Active LEI",
+      } %}
       <div class="codes">
         {% for code in score.reason_codes %}
-          <span class="code">{{ code }}</span>
+          <span class="code">{{ label_map.get(code, code) }}</span>
         {% endfor %}
       </div>
       <div class="score-version">Scoring version {{ score.scoring_version }}</div>
@@ -208,7 +230,10 @@
         </div>
         {% endfor %}
       {% else %}
-        <div class="empty-note">No actions recorded yet.</div>
+        <div style="color:#9ca3af; font-size:12px; font-style:italic; padding:.5rem 0">
+          No actions recorded yet. Assign this lead or update its
+          status to begin the audit trail.
+        </div>
       {% endif %}
     </div>
   </div>

@@ -2,8 +2,16 @@
 {% block title %}Direct Leads — Arie Leads{% endblock %}
 {% block content %}
 <div class="page-head">
-  <h1>Direct Leads</h1>
-  <small>{{ total }} leads &bull; refreshed {{ refreshed_at or "never" }}</small>
+  <div>
+    <h1>Direct Leads</h1>
+    <div style="font-size:13px; color:#6b7280; margin-top:3px">
+      {{ total }} leads in queue
+      &nbsp;·&nbsp;
+      <span style="color:{% if refreshed_at %}#059669{% else %}#dc2626{% endif %}">
+        ● refreshed {{ refreshed_at or "never" }}
+      </span>
+    </div>
+  </div>
 </div>
 
 <form class="filters" method="get" action="/">
@@ -91,12 +99,22 @@
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
         <td>
           {% if row.verify_url %}
-            <a href="{{ row.verify_url }}" target="_blank" class="icon-btn" title="Open registry">↗</a>
+            <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm btn-verify" title="Open registry">↗</a>
           {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="empty-row">No leads match the current filters.</td></tr>
+      <tr>
+        <td colspan="9" style="text-align:center; padding:3rem 2rem">
+          <div style="color:#9ca3af; font-size:13px; line-height:1.8">
+            <div style="font-size:24px; margin-bottom:.5rem">—</div>
+            No leads match the current filters.<br>
+            <a href="/" style="font-size:12px; color:#6b7280">
+              Clear filters
+            </a>
+          </div>
+        </td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>
