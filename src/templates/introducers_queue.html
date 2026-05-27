@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Introducers — Arie Leads{% endblock %}
 {% block content %}
-<div class="page-head" style="display:flex;justify-content:space-between;align-items:center">
+<div class="page-head">
   <div>
     <h1>Introducers</h1>
     <small>{{ total }} contacts &bull; corporate service providers & introducers</small>
@@ -46,7 +46,7 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  <a href="/introducers" class="btn" style="padding:5px 12px;border:1px solid #ccc;background:#fff;border-radius:4px">Reset</a>
+  <a href="/introducers" class="btn btn-secondary">Reset</a>
 </form>
 
 <div class="table-wrap">
@@ -69,20 +69,20 @@
       <tr>
         <td><a href="/introducers/{{ row.id }}">{{ row.company_name }}</a></td>
         <td>{{ row.jurisdiction }}</td>
-        <td>{{ row.entity_type }}</td>
+        <td class="cell-meta">{{ row.entity_type }}</td>
         <td>{{ row.contact_name or "—" }}</td>
         <td>{% if row.contact_email %}<a href="mailto:{{ row.contact_email }}">{{ row.contact_email }}</a>{% else %}—{% endif %}</td>
-        <td>{{ row.phone_number or "—" }}</td>
-        <td style="font-size:12px">{{ row.assigned_to or '—' }}</td>
-        <td style="font-size:12px">{{ row.status or 'New' }}</td>
+        <td class="cell-meta nowrap">{{ row.phone_number or "—" }}</td>
+        <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
+        <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
         <td>
           {% if row.verify_url %}
-            <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm" style="border:1px solid #ccc;background:#fff">↗</a>
+            <a href="{{ row.verify_url }}" target="_blank" class="icon-btn" title="Open website">↗</a>
           {% endif %}
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" style="text-align:center;padding:2rem;color:#888">
+      <tr><td colspan="9" class="empty-row">
         No introducers yet. <a href="/introducers/upload/new">Upload a CSV</a> to get started.
       </td></tr>
       {% endfor %}

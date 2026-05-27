@@ -1,43 +1,74 @@
 {% extends "base.html" %}
 {% block title %}Audit Log — Arie Leads{% endblock %}
 {% block content %}
-<div class="page-head"><h1>Audit Log</h1><small>{{ total }} entries</small></div>
+<div class="page-head">
+  <h1>Audit Log</h1>
+  <small>{{ total }} entries</small>
+</div>
 
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>When</th>
-        <th>Entity</th>
-        <th>Action</th>
-        <th>Actor</th>
-        <th>Detail</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-      <tr>
-        <td style="white-space:nowrap; color:#888">{{ row.created_at.strftime("%d %b %Y %H:%M") }}</td>
-        <td style="font-size:12px">{{ row.entity_type }}<br><span style="color:#aaa">{{ row.entity_id }}</span></td>
-        <td><strong>{{ row.action }}</strong></td>
-        <td>{{ row.actor }}</td>
-        <td style="font-size:12px; color:#555; max-width:320px">
-          {% if row.new_value and row.new_value is mapping %}
-            {% for k, v in row.new_value.items() %}
-              {% if v %}
-                <div><span style="color:#9ca3af">{{ k.replace('_',' ') }}:</span> {{ v }}</div>
-              {% endif %}
-            {% endfor %}
-          {% else %}
-            {{ row.new_value or "—" }}
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" style="text-align:center; padding:2rem; color:#888">No audit entries yet.</td></tr>
+<form class="filters" method="get" action="/audit">
+  <label>Actor
+    <select name="actor">
+      <option value="">All</option>
+      {% for a in actor_options %}
+        <option value="{{ a }}" {% if filters.actor == a %}selected{% endif %}>{{ a }}</option>
       {% endfor %}
-    </tbody>
-  </table>
+    </select>
+  </label>
+  <label>Action
+    <select name="action">
+      <option value="">All</option>
+      {% for value, label in action_choices %}
+        <option value="{{ value }}" {% if filters.action == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>From
+    <input type="date" name="date_from" value="{{ filters.date_from }}">
+  </label>
+  <label>To
+    <input type="date" name="date_to" value="{{ filters.date_to }}">
+  </label>
+  <button type="submit">Filter</button>
+  <a href="/audit" class="btn btn-secondary">Reset</a>
+</form>
+
+<div class="audit-list">
+  {% for row in rows %}
+  <article class="audit-entry">
+    <header class="audit-entry-head">
+      <span class="audit-action">{{ row.action_label }}</span>
+      <span class="audit-actor">by <strong>{{ row.actor }}</strong></span>
+      <time class="audit-time" datetime="{{ row.created_at_iso }}" title="{{ row.created_at_display }} UTC">
+        {{ row.created_at_relative }}
+      </time>
+    </header>
+    <div class="audit-entry-target">
+      {% if row.entity_url %}
+        <a href="{{ row.entity_url }}" class="audit-target-link">{{ row.entity_label }}</a>
+      {% else %}
+        <span>{{ row.entity_label }}</span>
+      {% endif %}
+      <span class="audit-target-type">{{ row.entity_type }}</span>
+    </div>
+    {% if row.changes %}
+    <ul class="audit-diff">
+      {% for ch in row.changes %}
+      <li>
+        <span class="audit-diff-label">{{ ch.label }}:</span>
+        {% if ch.old is not none %}
+          <span class="audit-diff-old">{{ ch.old }}</span>
+          <span class="audit-diff-arrow">→</span>
+        {% endif %}
+        <span class="audit-diff-new">{{ ch.new }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </article>
+  {% else %}
+  <div class="empty-state">No audit entries match these filters.</div>
+  {% endfor %}
 </div>
 
 {% if total_pages > 1 %}
