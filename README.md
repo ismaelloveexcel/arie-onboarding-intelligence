@@ -1,4 +1,4 @@
-# Arie Onboarding Intelligence Platform
+# Arie Leads Intelligence Platform
 
 Internal lead management tool for Arie Finance. Ingests company data from Companies House (UK) and the Mauritius Business Registry, scores and tiers leads, and provides an RM workflow for status tracking and audit logging.
 
