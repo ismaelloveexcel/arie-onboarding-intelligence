@@ -128,22 +128,12 @@
       <h2 style="color:#9ca3af; font-size:14px">
         No LEI Registered
       </h2>
-      {% if lead.jurisdiction == "UK" %}
       <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0;
                 font-style:italic">
-        No Legal Entity Identifier on file. Entity has not registered
-        with GLEIF. LEI registration typically precedes institutional
-        account opening. We monitor GLEIF daily.
+        No Legal Entity Identifier on file with GLEIF. LEI registration
+        typically precedes institutional account opening. We monitor
+        GLEIF daily.
       </p>
-      {% else %}
-      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0;
-                font-style:italic">
-        No LEI matched for this entity in GLEIF. UK entities are matched
-        by Companies House number; other jurisdictions use normalised
-        name matching, which may not resolve all records. A valid LEI
-        may exist that was not linked. We monitor GLEIF daily.
-      </p>
-      {% endif %}
     </div>
     {% endif %}
   </div>
