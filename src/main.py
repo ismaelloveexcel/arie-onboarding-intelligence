@@ -275,7 +275,12 @@ def health(response: Response):
 
 
 @app.post("/admin/lei-backfill")
-def admin_lei_backfill():
+
+@app.post("/admin/lei-backfill")
+def admin_lei_backfill(request: Request):
+    actor = _read_actor(request)
+    if not actor:
+        raise HTTPException(status_code=401, detail="Authentication required")
     with get_conn() as conn:
         result = backfill_lei_company_links(conn)
     return result
@@ -803,7 +808,7 @@ def lead_assign(
                                     (entity_type, entity_id, action, actor, new_value)
                                 VALUES ('company', %s, 'quick_assign', %s, %s)
                                 """,
-                                (lead_id, request.cookies.get("actor", "unknown"),
+                                (lead_id, (_read_actor(request) or "unknown"),
                                  Jsonb({"assigned_to": assigned_to or None, "status": status})),
                         )
                         conn.commit()
