@@ -33,6 +33,7 @@ ACTOR_NAMES: list[str] = [
     if name.strip()
 ]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
+ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
 
 
 def _assert_db_host_allowed() -> None:

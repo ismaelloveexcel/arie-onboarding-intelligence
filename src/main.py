@@ -1,4 +1,5 @@
 import csv
+import hmac
 import io
 import logging
 import re
@@ -15,7 +16,7 @@ from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
-from src.config import ACTOR_NAMES, APP_ENV, LOG_LEVEL, RM_NAMES, SECRET_KEY
+from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, LOG_LEVEL, RM_NAMES, SECRET_KEY
 from src.db import check_connection, get_conn
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION
@@ -48,6 +49,21 @@ def _read_actor(request: Request) -> str:
         logger.warning("actor_cookie_bad_signature")
         return ""
     return unsigned.decode("utf-8", errors="replace")
+
+
+def _require_admin_token(request: Request) -> None:
+    """Enforce bearer-token auth on admin routes. Constant-time compare;
+    never logs the token value."""
+    if not ADMIN_TOKEN:
+        logger.error("admin_token_not_configured")
+        raise HTTPException(status_code=503, detail="Admin not configured")
+    header = request.headers.get("authorization", "")
+    scheme, _, presented = header.partition(" ")
+    if scheme.lower() != "bearer" or not presented:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if not hmac.compare_digest(presented, ADMIN_TOKEN):
+        logger.warning("admin_token_mismatch")
+        raise HTTPException(status_code=401, detail="Authentication required")
 
 
 def _time_ago(dt: datetime | None) -> str:
@@ -275,12 +291,8 @@ def health(response: Response):
 
 
 @app.post("/admin/lei-backfill")
-
-@app.post("/admin/lei-backfill")
 def admin_lei_backfill(request: Request):
-    actor = _read_actor(request)
-    if not actor:
-        raise HTTPException(status_code=401, detail="Authentication required")
+    _require_admin_token(request)
     with get_conn() as conn:
         result = backfill_lei_company_links(conn)
     return result
