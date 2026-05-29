@@ -11,29 +11,40 @@ APP_ENV: str = os.getenv("APP_ENV", "production")
 LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
 
 _secret = os.getenv("SECRET_KEY", "").strip()
+_SECRET_KEY_SOURCE = "env" if _secret else "ephemeral"
 if not _secret:
     import logging
     import secrets as _secrets
+
     _secret = _secrets.token_urlsafe(48)
     logging.getLogger(__name__).warning(
         "secret_key_ephemeral: SECRET_KEY env var is not set; generated an "
         "ephemeral key for this process. Signed cookies (e.g. the actor cookie) "
         "will not survive an app restart. For production set SECRET_KEY "
-        "explicitly: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        'explicitly: python -c "import secrets; print(secrets.token_urlsafe(48))"'
     )
 SECRET_KEY: str = _secret
 RM_NAMES: list[str] = [
-    name.strip()
-    for name in os.getenv("RM_NAMES", "").split(",")
-    if name.strip()
+    name.strip() for name in os.getenv("RM_NAMES", "").split(",") if name.strip()
 ]
 ACTOR_NAMES: list[str] = [
-    name.strip()
-    for name in os.getenv("ACTOR_NAMES", "").split(",")
-    if name.strip()
+    name.strip() for name in os.getenv("ACTOR_NAMES", "").split(",") if name.strip()
 ]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
+
+# B1: one-shot structured startup diagnostic. Booleans only; never the values.
+# Remove this block together with B (SECRET_KEY strict-mode in production).
+import logging as _diag_logging
+
+_diag_logging.getLogger(__name__).info(
+    "config_startup_diagnostic",
+    extra={
+        "secret_key_source": _SECRET_KEY_SOURCE,
+        "admin_token_configured": bool(ADMIN_TOKEN),
+        "app_env": APP_ENV,
+    },
+)
 
 
 def _assert_db_host_allowed() -> None:
