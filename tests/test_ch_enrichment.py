@@ -5,7 +5,7 @@ Follows the MagicMock pattern from test_lei_backfill.py — no real DB or
 HTTP calls are made; all interactions are mocked at the boundary.
 """
 import uuid
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 from src.ingestion.companies_house import enrich_company
 
