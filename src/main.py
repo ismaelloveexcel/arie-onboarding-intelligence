@@ -300,7 +300,8 @@ def admin_lei_backfill(request: Request):
 
 
 @app.post("/admin/ch-enrichment")
-def admin_ch_enrichment(limit: int = None):
+def admin_ch_enrichment(request: Request, limit: int = None):
+    _require_admin_token(request)
     actual_limit = limit if limit is not None else CH_ENRICHMENT_SAFE_LIMIT
     with get_conn() as conn:
         result = run_ch_enrichment_batch(conn, actual_limit)

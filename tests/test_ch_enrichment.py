@@ -262,3 +262,26 @@ def test_gating_already_enriched_not_refetched():
     assert result["officers"] == 0
     assert result["pscs"] == 0
     assert result["failed"] == 0
+
+# ---------------------------------------------------------------------------
+# Admin endpoint auth — locks in /admin/ch-enrichment behind ADMIN_TOKEN
+# ---------------------------------------------------------------------------
+def test_admin_ch_enrichment_rejects_anonymous(monkeypatch):
+    from fastapi.testclient import TestClient
+    from src import config, main
+    monkeypatch.setattr(config, "ADMIN_TOKEN", "test-token")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "test-token")
+    resp = TestClient(main.app).post("/admin/ch-enrichment")
+    assert resp.status_code == 401
+
+
+def test_admin_ch_enrichment_rejects_wrong_bearer(monkeypatch):
+    from fastapi.testclient import TestClient
+    from src import config, main
+    monkeypatch.setattr(config, "ADMIN_TOKEN", "test-token")
+    monkeypatch.setattr(main, "ADMIN_TOKEN", "test-token")
+    resp = TestClient(main.app).post(
+        "/admin/ch-enrichment",
+        headers={"Authorization": "Bearer wrong"},
+    )
+    assert resp.status_code == 401
