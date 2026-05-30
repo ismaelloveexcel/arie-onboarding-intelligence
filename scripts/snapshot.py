@@ -1,4 +1,7 @@
-import os, csv, datetime, pathlib
+import datetime
+import os
+import pathlib
+
 import psycopg
 
 ts = datetime.datetime.utcnow().strftime("%Y%m%d-%H%M%S")
