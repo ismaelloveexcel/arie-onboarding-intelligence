@@ -153,9 +153,9 @@
     </div>
     {% endif %}
 
-  {% if officers %}
   <div class="card">
-    <h2>Officers</h2>
+    <h2>Directors</h2>
+    {% if officers %}
     <table style="width:100%; border-collapse:collapse; font-size:12px">
       <thead>
         <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
@@ -180,12 +180,21 @@
         {% endfor %}
       </tbody>
     </table>
+    {% elif lead.source_system == 'companies_house' %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      Not yet fetched from Companies House — will appear after the next nightly run.
+    </p>
+    {% else %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      Director details are not publicly available from this registry.
+      Verify directly with the company or your compliance team.
+    </p>
+    {% endif %}
   </div>
-  {% endif %}
 
-  {% if pscs %}
   <div class="card">
-    <h2>Persons with Significant Control</h2>
+    <h2>Owners / UBOs</h2>
+    {% if pscs %}
     <table style="width:100%; border-collapse:collapse; font-size:12px">
       <thead>
         <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
@@ -210,8 +219,17 @@
         {% endfor %}
       </tbody>
     </table>
+    {% elif lead.source_system == 'companies_house' %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      Not yet fetched from Companies House — will appear after the next nightly run.
+    </p>
+    {% else %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      Ownership details are not publicly available from this registry.
+      Verify directly with the company or your compliance team.
+    </p>
+    {% endif %}
   </div>
-  {% endif %}
 
   </div>
 
