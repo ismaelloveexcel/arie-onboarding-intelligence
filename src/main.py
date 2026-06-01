@@ -702,6 +702,17 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             pscs_rows = cur.fetchall()
 
+            cur.execute(
+                """
+                SELECT id, name, role, email, phone, linkedin_url, source, notes, created_at
+                FROM lead_contacts
+                WHERE company_id = %s
+                ORDER BY created_at ASC
+                """,
+                (lead_id,),
+            )
+            contacts_rows = cur.fetchall()
+
     score = {
         "score": row[9] if row[9] is not None else 0,
         "tier": row[10] if row[10] is not None else "LOW",
@@ -772,6 +783,20 @@ def lead_detail(request: Request, lead_id: UUID):
         }
         for r in pscs_rows
     ]
+    contacts = [
+        {
+            "id": r[0],
+            "name": r[1],
+            "role": r[2] or "",
+            "email": r[3] or "",
+            "phone": r[4] or "",
+            "linkedin_url": r[5] or "",
+            "source": r[6] or "",
+            "notes": r[7] or "",
+            "created_at": r[8],
+        }
+        for r in contacts_rows
+    ]
 
     return templates.TemplateResponse(
         request=request,
@@ -795,6 +820,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "lei": lei,
             "officers": officers,
             "pscs": pscs,
+            "contacts": contacts,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
             "saved": False,
@@ -863,6 +889,47 @@ def lead_action(
             conn.commit()
 
     return _render_action_panel(lead_id, assigned_to or "", status, notes, None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"), None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"), saved=True)
+
+
+@app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
+def add_lead_contact(
+    request: Request,
+    lead_id: UUID,
+    name: str = Form(...),
+    role: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    linkedin_url: str = Form(""),
+    source: str = Form("manual"),
+    notes: str = Form(""),
+):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO lead_contacts
+                    (company_id, name, role, email, phone, linkedin_url, source, notes)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (str(lead_id), name.strip(), role.strip(), email.strip(),
+                 phone.strip(), linkedin_url.strip(), source, notes.strip()),
+            )
+        conn.commit()
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+
+
+@app.post("/leads/{lead_id}/contacts/{contact_id}/delete", response_class=HTMLResponse)
+def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM lead_contacts WHERE id = %s AND company_id = %s",
+                (str(contact_id), str(lead_id)),
+            )
+        conn.commit()
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 # --- Inline assign/status endpoint for queue HTMX ---

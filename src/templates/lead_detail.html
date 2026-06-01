@@ -184,6 +184,118 @@
     {% endif %}
 
   <div class="card">
+    <h2>Contacts</h2>
+    {% if contacts %}
+    <table style="width:100%; border-collapse:collapse; font-size:12px">
+      <thead>
+        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+          <th style="padding:4px 8px 4px 0">Name</th>
+          <th style="padding:4px 8px 4px 0">Role</th>
+          <th style="padding:4px 8px 4px 0">Email</th>
+          <th style="padding:4px 8px 4px 0">Phone</th>
+          <th style="padding:4px 8px 4px 0">LinkedIn</th>
+          <th style="padding:4px 8px 4px 0">Source</th>
+          <th style="padding:4px 8px 4px 0">Notes</th>
+          <th style="padding:4px 0">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in contacts %}
+        <tr style="border-bottom:1px solid #f3f4f6; vertical-align:top">
+          <td style="padding:5px 8px 5px 0; font-weight:500; color:#111827">{{ c.name }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.role or "—" }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.email or "—" }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.phone or "—" }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">
+            {% if c.linkedin_url %}
+            <a href="{{ c.linkedin_url }}" target="_blank">Profile ↗</a>
+            {% else %}—{% endif %}
+          </td>
+          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.source or "—" }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.notes or "—" }}</td>
+          <td style="padding:5px 0; color:#111827">
+            <form method="post" action="/leads/{{ lead.id }}/contacts/{{ c.id }}/delete" style="display:inline">
+              <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:4px; padding:2px 8px; cursor:pointer;">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      No contacts added yet.
+    </p>
+    {% endif %}
+
+    <details style="margin-top:.75rem">
+      <summary style="font-size:12px; color:#111827; cursor:pointer">Add a contact</summary>
+      <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
+        <input type="hidden" name="source" value="manual">
+        <div>
+          <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Name</label>
+          <input name="name" required style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+        </div>
+        <div class="grid-2">
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Role</label>
+            <input name="role" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Email</label>
+            <input name="email" type="email" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+          </div>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Phone</label>
+            <input name="phone" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">LinkedIn URL</label>
+            <input name="linkedin_url" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+          </div>
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Notes</label>
+          <textarea name="notes" style="width:100%; min-height:70px; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px"></textarea>
+        </div>
+        <div>
+          <button type="submit" style="font-size:12px; border:none; background:#0057b8; color:#fff; border-radius:4px; padding:6px 10px; cursor:pointer;">Add contact</button>
+        </div>
+      </form>
+    </details>
+
+    {% if officers %}
+    <div style="margin-top:.9rem; border-top:1px solid #f3f4f6; padding-top:.75rem">
+      <div style="font-size:12px; color:#6b7280; margin-bottom:.4rem">Import from registry</div>
+      <div style="display:flex; flex-wrap:wrap; gap:.4rem">
+        {% for o in officers %}
+          {% set existing = namespace(found=false) %}
+          {% for c in contacts %}
+            {% if c.name|lower == o.name|lower %}
+              {% set existing.found = true %}
+            {% endif %}
+          {% endfor %}
+          {% if not existing.found %}
+          <form method="post" action="/leads/{{ lead.id }}/contacts" style="display:inline">
+            <input type="hidden" name="name" value="{{ o.name }}">
+            <input type="hidden" name="role" value="{{ o.role | replace("_", " ") | title }}">
+            <input type="hidden" name="email" value="">
+            <input type="hidden" name="phone" value="">
+            <input type="hidden" name="linkedin_url" value="">
+            <input type="hidden" name="source" value="companies_house">
+            <input type="hidden" name="notes" value="Imported from registry">
+            <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:999px; padding:3px 10px; cursor:pointer;">{{ o.name }}</button>
+          </form>
+          {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card">
     <h2>Directors</h2>
     {% if officers %}
     <table style="width:100%; border-collapse:collapse; font-size:12px">
