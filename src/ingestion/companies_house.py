@@ -108,6 +108,8 @@ def fetch_uk_incorporations(conn, from_date: date | None = None) -> int:
             for item in items:
                 if total_fetched >= _MAX_RECORDS:
                     break
+                if (item.get("company_status") or "").lower() != "active":
+                    continue
                 _upsert_item(conn, item)
                 total_fetched += 1
 

@@ -49,30 +49,39 @@
         <span class="score-number">{{ score.score }}</span>
         <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
       </div>
-      <div class="score-summary">{{ score.reason_summary or "No signals matched." }}</div>
-      {% set label_map = {
-        "HOLDING_STRUCTURE": "Holding Structure",
-        "INVESTMENT_VEHICLE": "Investment Vehicle",
-        "FUND_STRUCTURE": "Fund Entity",
-        "STANDARD_ENTITY": "Standard Ltd / PLC",
-        "MAURITIUS_GBC": "Mauritius GBC",
-        "MAURITIUS_AC": "Mauritius AC",
-        "UK_ENTITY": "UK Entity",
-        "FINANCIAL_SIC": "Financial Holding SIC",
-        "FUND_MGMT_SIC": "Fund Management SIC",
-        "FINTECH_SIC": "Fintech / Payments SIC",
-        "FINANCIAL_KEYWORD": "Financial Keyword",
-        "INTERNATIONAL_KEYWORD": "International Keyword",
-        "RECENTLY_INCORPORATED": "Recently Incorporated",
-        "FRESH_LEI": "Fresh LEI",
-        "HAS_LEI": "Active LEI",
-      } %}
-      <div class="codes">
-        {% for code in score.reason_codes %}
-          <span class="code">{{ label_map.get(code, code) }}</span>
-        {% endfor %}
-      </div>
-      <div class="score-version" style="font-size:11px; color:#9ca3af;">Scoring version {{ score.scoring_version }}</div>
+      {% if score.reason_codes %}
+      <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:.75rem">
+        <thead>
+          <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+            <th style="padding:4px 0 6px 0; font-weight:500; width:36%">Signal</th>
+            <th style="padding:4px 10px 6px 10px; font-weight:500; text-align:right; white-space:nowrap">Pts</th>
+            <th style="padding:4px 0 6px 10px; font-weight:500">Why it matters</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for code in score.reason_codes %}
+          {% set d = signal_details.get(code, {}) %}
+          <tr style="border-bottom:1px solid #f9fafb; vertical-align:top">
+            <td style="padding:5px 0; font-weight:500; color:#111827">{{ d.get('label', code) }}</td>
+            <td style="padding:5px 10px; text-align:right; color:#16a34a; font-weight:600; white-space:nowrap">
+              {% if d.get('points') is not none %}+{{ d.get('points') }}{% else %}—{% endif %}
+            </td>
+            <td style="padding:5px 0 5px 10px; color:#6b7280; line-height:1.5">{{ d.get('why', '') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid #e5e7eb">
+            <td style="padding:7px 0 4px 0; font-weight:600; color:#374151">Score</td>
+            <td style="padding:7px 10px 4px 10px; text-align:right; font-weight:700; color:#0057b8">{{ score.score }}</td>
+            <td style="padding:7px 0 4px 10px; color:#9ca3af; font-size:11px">out of 100 (max)</td>
+          </tr>
+        </tfoot>
+      </table>
+      {% else %}
+      <p style="color:#9ca3af; font-size:12px; font-style:italic; margin:.5rem 0 0 0">No priority signals matched.</p>
+      {% endif %}
+      <div class="score-version" style="font-size:11px; color:#9ca3af; margin-top:.75rem">Scoring version {{ score.scoring_version }}</div>
     </div>
 
     {% if lei %}

@@ -90,8 +90,18 @@ def _score_new_companies(conn) -> int:
                 for row in psc_cur.fetchall()
             ]
 
+        with conn.cursor() as off_cur:
+            off_cur.execute(
+                "SELECT nationality, resigned_on FROM company_officers WHERE company_id = %s",
+                (company_id,),
+            )
+            officers_data = [
+                {"nationality": row[0], "resigned_on": row[1]}
+                for row in off_cur.fetchall()
+            ]
+
         score, codes, tier = calculate_score(
-            company, lei=lei_data, pscs=pscs_data or None
+            company, lei=lei_data, pscs=pscs_data or None, officers=officers_data or None
         )
         summary = build_reason_summary(codes)
 

@@ -20,7 +20,7 @@ from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, CH_ENRICHMENT_SAFE_LIM
 from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
-from src.scoring import SCORING_VERSION
+from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
 
 # --- Logging setup ---
 handler = logging.StreamHandler()
@@ -789,6 +789,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "saved": False,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
+            "signal_details": SIGNAL_DETAILS,
         },
     )
 
