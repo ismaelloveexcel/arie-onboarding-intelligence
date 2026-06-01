@@ -4,15 +4,16 @@ Tests for Companies House PSC + Officers enrichment.
 Follows the MagicMock pattern from test_lei_backfill.py — no real DB or
 HTTP calls are made; all interactions are mocked at the boundary.
 """
+
 import uuid
 from unittest.mock import MagicMock, patch
 
 from src.ingestion.companies_house import enrich_company
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_conn():
     """Return a mock psycopg3 connection with a working cursor context manager."""
@@ -60,6 +61,7 @@ def _http_client_mock(responses):
 # Test 1 — happy path: officers + PSCs populated, status=ok, DB rows inserted
 # ---------------------------------------------------------------------------
 
+
 def test_happy_path_officers_and_pscs():
     company_id = uuid.uuid4()
     company_number = "12345678"
@@ -86,10 +88,12 @@ def test_happy_path_officers_and_pscs():
         ]
     }
 
-    client_cm, client_instance = _http_client_mock([
-        (200, officers_payload),
-        (200, pscs_payload),
-    ])
+    client_cm, client_instance = _http_client_mock(
+        [
+            (200, officers_payload),
+            (200, pscs_payload),
+        ]
+    )
     conn, cur = _make_conn()
 
     with patch("src.ingestion.companies_house.httpx.Client", return_value=client_cm):
@@ -107,6 +111,7 @@ def test_happy_path_officers_and_pscs():
 # Test 2 — 404 → status=not_found, last_enriched_at set
 # ---------------------------------------------------------------------------
 
+
 def test_404_not_found():
     company_id = uuid.uuid4()
     company_number = "99999999"
@@ -122,8 +127,7 @@ def test_404_not_found():
     assert result["pscs"] == 0
     # last_enriched_at must be set
     last_enriched_calls = [
-        c for c in cur.execute.call_args_list
-        if "last_enriched_at" in str(c)
+        c for c in cur.execute.call_args_list if "last_enriched_at" in str(c)
     ]
     assert len(last_enriched_calls) >= 1
     conn.commit.assert_called()
@@ -132,6 +136,7 @@ def test_404_not_found():
 # ---------------------------------------------------------------------------
 # Test 3 — 429 → retry → eventual success (200)
 # ---------------------------------------------------------------------------
+
 
 def test_429_retry_eventual_success():
     """One rate-limit response followed by a successful 200."""
@@ -165,8 +170,11 @@ def test_429_retry_eventual_success():
 
     conn, cur = _make_conn()
 
-    with patch("src.ingestion.companies_house.httpx.Client", return_value=client_cm), \
-         patch("src.ingestion.companies_house.time.sleep"):  # skip actual sleep
+    with patch(
+        "src.ingestion.companies_house.httpx.Client", return_value=client_cm
+    ), patch(
+        "src.ingestion.companies_house.time.sleep"
+    ):  # skip actual sleep
         result = enrich_company(conn, company_id, company_number)
 
     assert result["status"] == "ok"
@@ -176,6 +184,7 @@ def test_429_retry_eventual_success():
 # ---------------------------------------------------------------------------
 # Test 4 — 429 × (3 retries + 1 final) → status=failed, last_enriched_at set
 # ---------------------------------------------------------------------------
+
 
 def test_429_exhausted_fails():
     """Four 429 responses exhaust retries — enrich_company returns status=failed."""
@@ -196,16 +205,16 @@ def test_429_exhausted_fails():
 
     conn, cur = _make_conn()
 
-    with patch("src.ingestion.companies_house.httpx.Client", return_value=client_cm), \
-         patch("src.ingestion.companies_house.time.sleep"):
+    with patch(
+        "src.ingestion.companies_house.httpx.Client", return_value=client_cm
+    ), patch("src.ingestion.companies_house.time.sleep"):
         result = enrich_company(conn, company_id, company_number)
 
     assert result["status"] == "failed"
     assert result["officers"] == 0
     assert result["pscs"] == 0
     last_enriched_calls = [
-        c for c in cur.execute.call_args_list
-        if "last_enriched_at" in str(c)
+        c for c in cur.execute.call_args_list if "last_enriched_at" in str(c)
     ]
     assert len(last_enriched_calls) >= 1
     conn.commit.assert_called()
@@ -214,6 +223,7 @@ def test_429_exhausted_fails():
 # ---------------------------------------------------------------------------
 # Test 5 — malformed payload → status=failed
 # ---------------------------------------------------------------------------
+
 
 def test_malformed_payload_fails():
     """Officers endpoint returns 200 but payload is not a dict — graceful failure."""
@@ -245,6 +255,7 @@ def test_malformed_payload_fails():
 # Test 6 — gating: already-enriched companies not re-fetched
 # ---------------------------------------------------------------------------
 
+
 def test_gating_already_enriched_not_refetched():
     """run_ch_enrichment_batch skips companies with last_enriched_at already set."""
     from src.ingestion.companies_house import run_ch_enrichment_batch
@@ -263,12 +274,14 @@ def test_gating_already_enriched_not_refetched():
     assert result["pscs"] == 0
     assert result["failed"] == 0
 
+
 # ---------------------------------------------------------------------------
 # Admin endpoint auth — locks in /admin/ch-enrichment behind ADMIN_TOKEN
 # ---------------------------------------------------------------------------
 def test_admin_ch_enrichment_rejects_anonymous(monkeypatch):
     from fastapi.testclient import TestClient
     from src import config, main
+
     monkeypatch.setattr(config, "ADMIN_TOKEN", "test-token")
     monkeypatch.setattr(main, "ADMIN_TOKEN", "test-token")
     resp = TestClient(main.app).post("/admin/ch-enrichment")
@@ -278,6 +291,7 @@ def test_admin_ch_enrichment_rejects_anonymous(monkeypatch):
 def test_admin_ch_enrichment_rejects_wrong_bearer(monkeypatch):
     from fastapi.testclient import TestClient
     from src import config, main
+
     monkeypatch.setattr(config, "ADMIN_TOKEN", "test-token")
     monkeypatch.setattr(main, "ADMIN_TOKEN", "test-token")
     resp = TestClient(main.app).post(
