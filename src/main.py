@@ -94,7 +94,16 @@ templates = Jinja2Templates(directory="src/templates")
 from src.introducers import router as introducers_router  # noqa: E402
 app.include_router(introducers_router)
 
-_STATUSES = ["New", "Reviewing", "Qualified", "Not Relevant", "Deferred", "Contacted", "Onboarding", "Not Fit"]
+_STATUSES = [
+    "New",
+    "Researching",
+    "Qualified",
+    "Outreach Ready",
+    "Contacted",
+    "Opportunity",
+    "Client",
+    "Closed — Not Fit",
+]
 
 
 def _format_entity_type(raw: str | None) -> str:
@@ -719,6 +728,7 @@ def lead_detail(request: Request, lead_id: UUID):
         }
         for item in audit_rows
     ]
+    last_activity = audit_rendered[0]["created_at"] if audit_rendered else None
 
     lei = None
     if lei_row:
@@ -781,6 +791,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "score": score,
             "action": action,
             "audit_rows": audit_rendered,
+            "last_activity": last_activity,
             "lei": lei,
             "officers": officers,
             "pscs": pscs,

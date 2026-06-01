@@ -6,6 +6,36 @@
   <a href="/" class="back-link">← Back to queue</a>
 </div>
 
+<div style="border-bottom: 1px solid #e5e7eb; padding: .75rem 0 1rem 0; display: flex; gap: 2rem; flex-wrap: wrap;">
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Score</div>
+    <div style="font-size:13px; color:#111827; display:flex; align-items:center; gap:.5rem;">
+      <span>{{ score.score }}</span>
+      <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
+    </div>
+  </div>
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Status</div>
+    <div style="font-size:13px; color:#111827;">{{ action.status or "New" }}</div>
+  </div>
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Owner</div>
+    <div style="font-size:13px; color:#111827;">{{ action.assigned_to or "Unassigned" }}</div>
+  </div>
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Follow-up</div>
+    <div style="font-size:13px; color:#111827;">{{ action.follow_up_at.strftime("%d %b %Y") if action.follow_up_at else "—" }}</div>
+  </div>
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Last activity</div>
+    <div style="font-size:13px; color:#111827;">{{ last_activity.strftime("%d %b %Y %H:%M") if last_activity else "—" }}</div>
+  </div>
+  <div>
+    <div style="font-size:12px; color:#6b7280;">Scoring version</div>
+    <div style="font-size:13px; color:#111827;">{{ score.scoring_version }}</div>
+  </div>
+</div>
+
 <div class="grid-2">
   <!-- Left: Company info + score breakdown -->
   <div>
