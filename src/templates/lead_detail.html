@@ -61,6 +61,7 @@
         <tbody>
           {% for code in score.reason_codes %}
           {% set d = signal_details.get(code, {}) %}
+          {% if not d.get('hidden') %}
           <tr style="border-bottom:1px solid #f9fafb; vertical-align:top">
             <td style="padding:5px 0; font-weight:500; color:#111827">{{ d.get('label', code) }}</td>
             <td style="padding:5px 10px; text-align:right; color:#16a34a; font-weight:600; white-space:nowrap">
@@ -68,6 +69,7 @@
             </td>
             <td style="padding:5px 0 5px 10px; color:#6b7280; line-height:1.5">{{ d.get('why', '') }}</td>
           </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
         <tfoot>

@@ -38,99 +38,100 @@ _REASON_LABELS = {
 
 SIGNAL_DETAILS: dict[str, dict] = {
     "HOLDING_STRUCTURE": {
-        "label": "Holding Company Structure",
+        "label": "Holding Company",
         "points": 25,
-        "why": "Entity type indicates a holding structure — strong match for multi-entity treasury management mandates.",
+        "why": "Set up to hold assets or subsidiaries — typically needs cross-border banking and treasury.",
     },
     "INVESTMENT_VEHICLE": {
         "label": "Investment Vehicle",
         "points": 25,
-        "why": "Structured as an investment vehicle — typical in wealth management and fund administration.",
+        "why": "Structured to manage investments — likely needs institutional banking and custody.",
     },
     "FUND_STRUCTURE": {
         "label": "Fund Entity",
         "points": 20,
-        "why": "Fund entity type — high likelihood of institutional banking and custody requirements.",
+        "why": "Fund structure — likely needs banking, custody and compliance infrastructure.",
     },
     "STANDARD_ENTITY": {
-        "label": "Standard Ltd / PLC",
+        "label": "UK Limited Company",
         "points": 10,
-        "why": "Standard UK limited company — baseline ICP qualification.",
+        "why": "Standard UK company — meets the baseline profile.",
     },
     "UK_ENTITY": {
-        "label": "UK-Registered Entity",
+        "label": "UK Registered",
         "points": 10,
-        "why": "UK jurisdiction — primary market, subject to UK regulatory and banking infrastructure.",
+        "why": "Registered in the UK — our primary market.",
     },
     "MAURITIUS_GBC": {
-        "label": "Mauritius Global Business Company",
+        "label": "Mauritius Holding Company (GBC)",
         "points": 30,
-        "why": "GBC structure indicates cross-border investment activity — strong Arie ICP.",
+        "why": "Mauritius holding structure designed for cross-border investment — one of our strongest prospect types.",
     },
     "MAURITIUS_AC": {
-        "label": "Mauritius Authorised Company",
+        "label": "Mauritius Authorised Company (AC)",
         "points": 20,
-        "why": "Authorised Company — cross-border holding with a lighter regulatory footprint.",
+        "why": "Cross-border Mauritius entity with a lighter regulatory footprint.",
     },
     "MAURITIUS_HOLDING_PRESUMED": {
-        "label": "Mauritius Regulated Holding Bonus",
+        "label": "",
         "points": None,
-        "why": "Bonus applied to confirmed Mauritius regulated holding structures (GBC/AC). Included in the entity type points above.",
+        "why": "",
+        "hidden": True,
     },
     "FINANCIAL_SIC": {
-        "label": "Financial Holding SIC (642xx)",
+        "label": "Financial Holding (Industry Code)",
         "points": 20,
-        "why": "SIC 642xx — Activities of holding companies. Directly aligned with the Arie target segment.",
+        "why": "Industry code shows holding company activities — directly in our target segment.",
     },
     "FUND_MGMT_SIC": {
-        "label": "Fund Management SIC (663xx)",
+        "label": "Fund Management (Industry Code)",
         "points": 20,
-        "why": "SIC 663xx — Fund management activities. Institutional treasury and custody prospect.",
+        "why": "Industry code shows fund management activity — institutional banking prospect.",
     },
     "FINTECH_SIC": {
-        "label": "Fintech / Payments SIC (620xx)",
+        "label": "Fintech / Payments (Industry Code)",
         "points": 15,
-        "why": "SIC 620xx — IT/software sector, commonly fintech or payments.",
+        "why": "Industry code indicates fintech or payments activity.",
     },
     "FINANCIAL_KEYWORD": {
-        "label": "Financial Keyword in Name",
+        "label": "Financial Name",
         "points": 10,
-        "why": "Name contains a financial sector keyword (capital, wealth, fund, asset, etc.).",
+        "why": "Company name includes a financial or investment word (capital, fund, wealth, asset, etc.).",
     },
     "INTERNATIONAL_KEYWORD": {
-        "label": "International Keyword in Name",
+        "label": "International Name",
         "points": 5,
-        "why": "Name contains 'international' or 'global' — suggests cross-border operations.",
+        "why": "Company name includes 'international' or 'global' — suggests cross-border operations.",
     },
     "RECENTLY_INCORPORATED": {
-        "label": "Recently Incorporated (≤ 90 days)",
+        "label": "Newly Formed (< 90 days)",
         "points": 5,
-        "why": "Incorporated within 90 days — early-mover opportunity before banking relationships are locked in.",
+        "why": "Just incorporated — likely still choosing their bank. Good time to make contact.",
     },
     "FRESH_LEI": {
-        "label": "Fresh LEI (≤ 90 days)",
+        "label": "Just Registered an LEI",
         "points": 30,
-        "why": "LEI registered within 90 days — entity is actively setting up regulated financial infrastructure right now.",
+        "why": "Registered a Legal Entity Identifier in the last 90 days — actively opening regulated accounts right now.",
     },
     "HAS_LEI": {
-        "label": "Active LEI on File",
+        "label": "Has an LEI",
         "points": 15,
-        "why": "Legal Entity Identifier registered — entity is engaged with regulated financial counterparties.",
+        "why": "Has a Legal Entity Identifier — already working with regulated financial counterparties.",
     },
     "HAS_PSCS": {
-        "label": "Beneficial Ownership Disclosed",
+        "label": "Owners on Record",
         "points": 5,
-        "why": "Active PSC on record — transparent ownership simplifies onboarding due diligence.",
+        "why": "Beneficial owners are registered — transparent ownership makes onboarding easier.",
     },
     "INTERNATIONAL_PSC": {
-        "label": "International Beneficial Owner",
+        "label": "International Owner",
         "points": 10,
-        "why": "PSC with non-UK country of residence — cross-border ownership confirms international ICP.",
+        "why": "Beneficial owner is based outside the UK — confirms cross-border structure.",
     },
     "INTERNATIONAL_OFFICER": {
-        "label": "Non-UK Officer / Director",
+        "label": "International Director",
         "points": 10,
-        "why": "Active director with non-British nationality — strong signal for cross-border operational needs.",
+        "why": "Active director based outside the UK — signals cross-border operational needs.",
     },
 }
 
@@ -277,8 +278,7 @@ def calculate_score(
     if officers:
         active_officers = [o for o in officers if o.get("resigned_on") is None]
         if any(
-            (o.get("nationality") or "").strip().upper()
-            not in _UK_NATIONALITIES
+            (o.get("nationality") or "").strip().upper() not in _UK_NATIONALITIES
             for o in active_officers
             if (o.get("nationality") or "").strip()
         ):
