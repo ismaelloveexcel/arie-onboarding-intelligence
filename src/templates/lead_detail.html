@@ -88,16 +88,16 @@
 
     {% if lei %}
     <div class="card">
-      <h2>Legal Entity Identifier</h2>
+      <h2>Legal ID (LEI)</h2>
       <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0;
-                line-height:1.6; font-style:italic">
-        LEI registration indicates the entity is engaging with regulated
-        financial infrastructure — typically a prerequisite for banking,
-        custody, or institutional counterparty relationships.
+                line-height:1.6">
+        This company has registered a Legal Entity Identifier — a unique ID
+        required to trade or bank with regulated institutions. Having one means
+        they are already set up (or setting up) for institutional activity.
       </p>
       <table style="width:100%; font-size:13px; border-collapse:collapse">
         <tr>
-          <td style="color:#888; width:140px; padding:4px 0">LEI</td>
+          <td style="color:#888; width:140px; padding:4px 0">LEI Number</td>
           <td style="padding:4px 0">
             <code style="font-size:11px; background:#f3f4f6;
                          padding:2px 6px; border-radius:3px;
@@ -105,7 +105,7 @@
             {% if lei.fresh %}
               <span class="tier tier-HIGH"
                     style="font-size:10px; margin-left:6px;
-                           vertical-align:middle">FRESH · ≤ 90 days</span>
+                           vertical-align:middle">NEW · &lt; 90 days</span>
             {% endif %}
           </td>
         </tr>
@@ -128,29 +128,12 @@
             {% else %}—{% endif %}
           </td>
         </tr>
-        {% if lei.lou_code %}
-        <tr>
-          <td style="color:#888; padding:4px 0">Managing LOU</td>
-          <td style="padding:4px 0; font-size:11px; color:#6b7280">
-            {{ lei.lou_code }}
-          </td>
-        </tr>
-        {% endif %}
-        <tr>
-          <td style="color:#888; padding:4px 0">Source</td>
-          <td style="padding:4px 0; font-size:11px; color:#9ca3af">
-            GLEIF
-            {% if lei.last_seen %}
-              · checked {{ lei.last_seen.strftime("%d %b %Y") }}
-            {% endif %}
-          </td>
-        </tr>
       </table>
       {% if lei.gleif_url %}
       <div style="margin-top:.75rem">
         <a href="{{ lei.gleif_url }}" target="_blank"
            style="font-size:12px; color:#0057b8">
-          View on GLEIF ↗
+          View full record ↗
         </a>
       </div>
       {% endif %}
@@ -159,13 +142,13 @@
     <div class="card"
          style="border:1px dashed #e5e7eb; background:#fafafa">
       <h2 style="color:#9ca3af; font-size:14px">
-        No LEI Registered
+        No Legal ID Yet
       </h2>
-      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0;
-                font-style:italic">
-        No Legal Entity Identifier on file with GLEIF. LEI registration
-        typically precedes institutional account opening. We monitor
-        GLEIF daily.
+      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0">
+        This company hasn’t registered a Legal Entity Identifier yet.
+        Companies often do this just before opening institutional accounts —
+        so if they register one, it’s a strong sign they’re actively banking.
+        We check daily.
       </p>
     </div>
     {% endif %}
