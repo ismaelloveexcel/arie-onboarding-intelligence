@@ -1,7 +1,7 @@
 # System State — Arie Leads
 
-_Last verified: 2026-05-25_
-_Freeze status: **NOT FROZEN** — 6 gate items outstanding (see below)_
+_Last verified: 2026-06-01_
+_Freeze status: **FROZEN** — all gates passed 2026-06-01_
 
 ---
 
@@ -9,32 +9,33 @@ _Freeze status: **NOT FROZEN** — 6 gate items outstanding (see below)_
 
 | Flow | Status | Evidence |
 |---|---|---|
-| GET `/` | ✅ 200 | Queue renders, 100 rows |
+| GET `/` | ✅ 200 | Queue renders, 837 rows |
 | GET `/leads/{id}` | ✅ 200 | Score breakdown + action panel rendered |
 | GET `/upload` | ✅ 200 | Upload form renders |
 | GET `/audit` | ✅ 200 | Audit log renders |
-| GET `/health` | ✅ 200 | `db:connected`, `queue_fresh:true`, `queue_rows:100` |
+| GET `/health` | ✅ 200 | `db:connected`, `queue_fresh:true`, `queue_rows:837` |
 | POST `/leads/{id}/action` | ✅ 200 + ✓ Saved | Writes `rm_actions`, writes `audit_log` |
 | POST `/upload` (CSV) | ✅ 200 + preview | Creates `pending_uploads` row with UUID |
 | POST `/upload/{id}/confirm` | ✅ 303 | Inserts rows into `companies` |
 | GET `/leads/{nonexistent}` | ✅ 404 | Error handling correct |
-| `ruff check src/ tests/` | ✅ 0 errors | — |
+| POST `/admin/ch-enrichment` | ✅ 401 unauth / 200 with token | CH enrichment endpoint secured |
+| POST `/admin/lei-backfill` | ✅ 401 unauth / 200 with token | LEI backfill endpoint secured |
+| Nightly pipeline (GitHub Actions) | ✅ Running | Ran 2026-06-01 03:21–03:30 UTC, 45 UK + 169 MU, 49 scored |
+| `ruff check src/ tests/ scripts/` | ✅ 0 errors | CI scope expanded to scripts/ |
 
 ---
 
-## Known Limitations (real, not speculative — all must be resolved before freeze)
+## Gate Closure Record
 
-1. **Scores never re-calculate after first assignment** — `_score_new_companies` only scores companies with no existing score. A `SCORING_VERSION` bump has no effect. Old leads keep stale scores forever. _(Bug — gate item G1)_
-
-2. **Playwright not in Railway build** — `railway.toml` `startCommand` doesn't install Playwright. Mauritius scraper will crash silently on Railway. _(Deployment blocker — gate item G2)_
-
-3. **No alembic migration on deploy** — Schema changes require a manual `alembic upgrade head` SSH session. _(Deployment blocker — gate item G2, same fix)_
-
-4. **Queue never refreshes in production** — No cron or schedule runs `python -m src.pipeline`. Queue will show stale data forever after first deploy. _(Production usefulness blocker — gate item G3)_
-
-5. **`actor` hardcoded as `"system"`** — Every entry in the audit log shows `system`. Audit log is useless for identifying who did what. _(Functional gap — gate item G4)_
-
-6. **No Railway healthcheck configured** — Railway doesn't detect unhealthy deploys. Zero-downtime restarts can't work. _(Deployment gap — gate item G5)_
+| Gate | Resolved | Evidence |
+|---|---|---|
+| G0 — Baseline | 2026-05-25 | All flows passing end-to-end |
+| G1 — Playwright + auto-migrate on deploy | 2026-05-25 | `nixpacks.toml` build confirmed on Railway |
+| G2 — Nightly pipeline scheduled | 2026-06-01 | `daily.yml` ran at 03:21 UTC, `nightly_complete` logged |
+| G3 — Real actor in audit log | 2026-05-25 | `ACTOR_NAMES` env var + actor cookie live |
+| G4 — Railway healthcheck wired | 2026-05-25 | Railway deploy panel shows Healthy |
+| Security — Admin endpoints locked | 2026-05-30 | Both `/admin/*` return 401 without token |
+| CH enrichment | 2026-05-30 | Officers + PSCs tables live, nightly pipeline calls enrichment batch |
 
 ---
 

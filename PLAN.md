@@ -73,15 +73,15 @@ Required env var: `ACTOR_NAMES` — comma-separated names (e.g. `Isuda,Partner`)
 ## Pre-freeze checklist (run this before declaring the system frozen)
 
 - [x] G1 — nixpacks.toml + Railway build fixed.
-- [ ] G2 — Nightly pipeline confirmed running (one successful cron/webhook trigger).
+- [x] G2 — Nightly pipeline confirmed running (2026-06-01 03:21 UTC, SUCCESS).
 - [x] G3 — Actor dropdown live, audit shows real names.
 - [x] G4 — Railway healthcheck wired.
-- [ ] `ruff check src/ tests/` → 0 errors.
-- [ ] Restart local uvicorn, all 9 flows from `SYSTEM_STATE.md` still pass.
-- [ ] Railway deploy is Healthy.
-- [ ] Manual pipeline trigger on Railway → `queue_fresh: true` in `/health`.
-- [ ] Commit: `"ship: all production gates passed"`.
-- [ ] Update `SYSTEM_STATE.md`: set freeze status to **FROZEN** with date.
+- [x] `ruff check src/ tests/ scripts/` → 0 errors.
+- [x] Restart local uvicorn, all flows from `SYSTEM_STATE.md` still pass.
+- [x] Railway deploy is Healthy.
+- [x] Nightly pipeline ran → `queue_fresh: true` in `/health`.
+- [x] Commit: `"ship: all production gates passed"`.
+- [x] Update `SYSTEM_STATE.md`: freeze status set to **FROZEN** 2026-06-01.
 
 ---
 
