@@ -2,7 +2,7 @@ name: Health Monitor
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -74,7 +74,7 @@ jobs:
             --state open \
             --search "Production health check failed in:title" \
             --json number \
-            --jq 'first(.[] | .number) // ""' 2>/dev/null || echo "")
+            --jq '.[0].number // ""' 2>/dev/null || echo "")
           echo "issue_number=${NUM}" >> "$GITHUB_OUTPUT"
 
       # Only open a new issue if one isn't already open — prevents spam during prolonged outages.
