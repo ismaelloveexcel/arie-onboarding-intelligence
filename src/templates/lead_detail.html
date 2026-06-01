@@ -72,7 +72,7 @@
           <span class="code">{{ label_map.get(code, code) }}</span>
         {% endfor %}
       </div>
-      <div class="score-version">Scoring version {{ score.scoring_version }}</div>
+      <div class="score-version" style="font-size:11px; color:#9ca3af;">Scoring version {{ score.scoring_version }}</div>
     </div>
 
     {% if lei %}
@@ -168,7 +168,7 @@
           <th style="padding:4px 8px 4px 0">Name</th>
           <th style="padding:4px 8px 4px 0">Role</th>
           <th style="padding:4px 8px 4px 0">Appointed</th>
-          <th style="padding:4px 0">Resigned</th>
+          <th style="padding:4px 0">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -198,7 +198,7 @@
           <th style="padding:4px 8px 4px 0">Name</th>
           <th style="padding:4px 8px 4px 0">Kind</th>
           <th style="padding:4px 8px 4px 0">Notified</th>
-          <th style="padding:4px 0">Ceased</th>
+          <th style="padding:4px 0">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -257,11 +257,11 @@
         </div>
         <div class="grid-2">
           <div>
-            <label>Contacted At</label>
+            <label>Contacted date</label>
             <input type="date" name="contacted_at" value="{{ action.contacted_at.date() if action and action.contacted_at else '' }}">
           </div>
           <div>
-            <label>Follow Up</label>
+            <label>Next follow-up date</label>
             <input type="date" name="follow_up_at" value="{{ action.follow_up_at if action and action.follow_up_at else '' }}">
           </div>
         </div>

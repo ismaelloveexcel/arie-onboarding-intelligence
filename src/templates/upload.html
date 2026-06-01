@@ -60,6 +60,9 @@
       <button type="submit" class="btn btn-primary">Confirm Import ({{ preview.row_count }} rows)</button>
     </form>
     <a href="/upload" style="margin-left:1rem; font-size:13px">Cancel</a>
+    <p style="margin-top:.75rem; font-size:12px; color:#9ca3af">
+      Imported leads will appear in the Lead Queue after the next nightly refresh (runs automatically at 02:00 UTC).
+    </p>
   {% endif %}
 </div>
 {% endif %}

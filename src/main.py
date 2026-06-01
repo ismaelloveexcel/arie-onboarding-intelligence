@@ -511,7 +511,7 @@ def queue(request: Request):
         "status": request.query_params.get("status", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
-        "sort": request.query_params.get("sort", "date"),
+        "sort": request.query_params.get("sort", "score"),
     }
     try:
         page = max(int(request.query_params.get("page", 1)), 1)

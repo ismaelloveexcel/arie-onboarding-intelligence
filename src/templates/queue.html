@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Direct Leads — Arie Leads{% endblock %}
+{% block title %}Lead Queue — Arie Leads{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
     <h1 style="font-size:28px; font-weight:800; letter-spacing:-.02em; color:#111827">
-      Direct Leads
+      Lead Queue
     </h1>
     <div style="font-size:16px; color:#374151; margin-top:6px; font-weight:700">
       {{ total }} leads in queue
@@ -56,9 +56,9 @@
   </label>
   <label>Sort
     <select name="sort">
-      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Inc. Date ↓ (newest), then jurisdiction</option>
-      <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Inc. Date ↑ (oldest), then jurisdiction</option>
-      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Score ↓</option>
+      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Incorporated (newest first)</option>
+      <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Incorporated (oldest first)</option>
+      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best leads first</option>
       <option value="name" {% if filters.sort == "name" %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
@@ -73,7 +73,7 @@
         <th>Company</th>
         <th>Jurisdiction</th>
         <th>Type</th>
-        <th>Inc. Date</th>
+        <th>Incorporated</th>
         <th class="col-num">Score</th>
         <th>Tier</th>
         <th>Assigned</th>
