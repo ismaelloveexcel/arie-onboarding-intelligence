@@ -1,0 +1,118 @@
+name: Health Monitor
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check /health endpoint
+        id: health
+        run: |
+          HTTP_CODE=$(curl -s -o /tmp/health.json -w "%{http_code}" \
+            --connect-timeout 10 --max-time 30 \
+            "https://arie-leads-intelligence-production.up.railway.app/health" 2>/dev/null \
+            || echo "000")
+          echo "http_code=${HTTP_CODE}" >> "$GITHUB_OUTPUT"
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "reason=HTTP ${HTTP_CODE} — service unreachable or returned non-200" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          DB=$(jq -r '.db // "unknown"' /tmp/health.json)
+          APP_STATUS=$(jq -r '.status // "unknown"' /tmp/health.json)
+
+          if [ "$APP_STATUS" = "ok" ] && [ "$DB" = "connected" ]; then
+            echo "healthy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "healthy=false" >> "$GITHUB_OUTPUT"
+            echo "reason=app_status=${APP_STATUS} db=${DB}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Tier 2: auto-redeploy when RAILWAY_TOKEN secret is configured.
+      # Uses `railway redeploy` to restart the current deployment image instantly —
+      # appropriate for crash recovery (no code change needed).
+      - name: Attempt auto-redeploy
+        if: steps.health.outputs.healthy == 'false'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "RAILWAY_TOKEN secret not set — skipping auto-redeploy."
+            echo "To enable: add RAILWAY_TOKEN to GitHub repository secrets."
+            exit 0
+          fi
+          echo "Installing Railway CLI..."
+          npm install -g @railway/cli --silent
+          echo "Triggering redeploy..."
+          railway redeploy \
+            --service arie-leads-intelligence \
+            --environment production \
+            --yes \
+            || echo "Redeploy command failed — investigate Railway dashboard manually."
+
+      # Always runs so we can auto-close on recovery too.
+      - name: Find existing open health alert
+        if: always()
+        id: find_issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NUM=$(gh issue list \
+            --repo "${{ github.repository }}" \
+            --state open \
+            --search "Production health check failed in:title" \
+            --json number \
+            --jq 'first(.[] | .number) // ""' 2>/dev/null || echo "")
+          echo "issue_number=${NUM}" >> "$GITHUB_OUTPUT"
+
+      # Only open a new issue if one isn't already open — prevents spam during prolonged outages.
+      - name: Open health alert issue
+        if: steps.health.outputs.healthy == 'false' && steps.find_issue.outputs.issue_number == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BODY=$(cat /tmp/health.json 2>/dev/null || echo '(no response body)')
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "ALERT: Production health check failed — $(date -u '+%Y-%m-%d %H:%M') UTC" \
+            --body "## Production Health Check Failed
+
+**Detected:** $(date -u '+%Y-%m-%d %H:%M:%S') UTC
+**HTTP status:** \`${{ steps.health.outputs.http_code }}\`
+**Reason:** ${{ steps.health.outputs.reason }}
+
+### /health response
+\`\`\`json
+${BODY}
+\`\`\`
+
+### Auto-recovery
+Railway redeploy was triggered automatically (if \`RAILWAY_TOKEN\` secret is configured).
+
+**Railway dashboard:** https://railway.com/project/arie-onboarding-intelligence
+**This workflow run:** https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+---
+_Opened automatically by the health monitor. Closes automatically when the next check passes._"
+
+      # Auto-close when system recovers.
+      - name: Close alert on recovery
+        if: steps.health.outputs.healthy == 'true' && steps.find_issue.outputs.issue_number != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue close "${{ steps.find_issue.outputs.issue_number }}" \
+            --repo "${{ github.repository }}" \
+            --comment "**Recovered.** Health check passed at $(date -u '+%Y-%m-%d %H:%M:%S') UTC."
