@@ -9,7 +9,7 @@ table and patches company_id where a match is now found.
 import logging
 
 from src.config import LEI_BACKFILL_CHUNK_SIZE
-from src.ingestion.gleif import _find_company_id
+from src.ingestion.gleif import _find_company_match, _queue_link_review
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def backfill_lei_company_links(conn) -> dict:
             if last_id is None:
                 cur.execute(
                     """
-                    SELECT id, registered_as, legal_name
+                    SELECT id, lei_code, registered_as, legal_name, jurisdiction
                     FROM lei_records
                     WHERE company_id IS NULL
                     ORDER BY id
@@ -46,7 +46,7 @@ def backfill_lei_company_links(conn) -> dict:
             else:
                 cur.execute(
                     """
-                    SELECT id, registered_as, legal_name
+                    SELECT id, lei_code, registered_as, legal_name, jurisdiction
                     FROM lei_records
                     WHERE company_id IS NULL AND id > %s
                     ORDER BY id
@@ -59,9 +59,14 @@ def backfill_lei_company_links(conn) -> dict:
         if not batch:
             break
 
-        for lei_id, registered_as, legal_name in batch:
+        for lei_id, lei_code, registered_as, legal_name, jurisdiction in batch:
             scanned += 1
-            company_id = _find_company_id(conn, registered_as, legal_name or "")
+            company_id, reason, candidates = _find_company_match(
+                conn,
+                registered_as,
+                legal_name or "",
+                jurisdiction,
+            )
             if company_id:
                 with conn.cursor() as upd:
                     upd.execute(
@@ -74,9 +79,23 @@ def backfill_lei_company_links(conn) -> dict:
                     extra={"lei_id": str(lei_id), "company_id": company_id},
                 )
             else:
+                if reason.startswith("ambiguous_") and lei_code:
+                    _queue_link_review(
+                        conn,
+                        lei_code=lei_code,
+                        registered_as=registered_as,
+                        legal_name=legal_name or "",
+                        jurisdiction=jurisdiction,
+                        match_reason=reason,
+                        candidate_company_ids=candidates,
+                    )
                 logger.debug(
                     "lei_backfill_unmatched",
-                    extra={"lei_id": str(lei_id), "registered_as": registered_as},
+                    extra={
+                        "lei_id": str(lei_id),
+                        "registered_as": registered_as,
+                        "match_reason": reason,
+                    },
                 )
 
         conn.commit()

@@ -116,6 +116,9 @@ tests/             # pytest test suite
 | `ACTOR_NAMES` | Yes | Comma-separated names for the nav "Acting as" dropdown |
 | `APP_ENV` | No | One of `development` or `production`. Set to `production` to disable `/docs`. |
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
+| `ADMIN_TOKEN` | No | Bearer token for `/admin/*` endpoints. |
+| `WRITE_AUTH_TOKEN` | No | Optional bearer token for non-admin write routes during auth rollout. |
+| `WRITE_AUTH_ENFORCE` | No | `false` by default (report-only logs). Set `true` to enforce bearer auth on write routes. |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
 | `ALLOWED_DB_HOSTS` | No | Comma-separated host substrings. If set, the host parsed from `DATABASE_URL` must contain one of these substrings or the app refuses to start. Recommended in every deployed environment (prod, CI, local) to prevent accidental cross-environment DB connections. Leave unset to disable the guard. |
 

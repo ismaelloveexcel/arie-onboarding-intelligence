@@ -38,35 +38,127 @@ def _parse_date(raw: str | None) -> date | None:
         return None
 
 
-def _find_company_id(conn, registered_as: str | None, legal_name: str) -> str | None:
-    """
-    Match a GLEIF record to a company in our DB.
-    Primary: exact match on company_number (registeredAs).
-    Fallback: normalised name match.
-    Returns company UUID string or None.
-    """
+def _find_company_match(
+    conn,
+    registered_as: str | None,
+    legal_name: str,
+    jurisdiction: str | None = None,
+) -> tuple[str | None, str, list[str]]:
+    """Deterministic company matching for LEI linkage."""
     if registered_as:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM companies WHERE source_ref = %s LIMIT 1",
-                (registered_as,),
-            )
-            row = cur.fetchone()
-            if row:
-                return str(row[0])
+            if jurisdiction:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM companies
+                    WHERE source_system = 'companies_house'
+                      AND source_ref = %s
+                      AND jurisdiction = %s
+                    ORDER BY id
+                    """,
+                    (registered_as, jurisdiction),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM companies
+                    WHERE source_system = 'companies_house'
+                      AND source_ref = %s
+                    ORDER BY id
+                    """,
+                    (registered_as,),
+                )
+            rows = [str(row[0]) for row in cur.fetchall()]
+            if len(rows) == 1:
+                return rows[0], "registered_as_unique", rows
+            if len(rows) > 1:
+                return None, "ambiguous_registered_as", rows
 
     normalised = _normalise(legal_name)
     if normalised:
         with conn.cursor() as cur:
-            cur.execute(
-                "SELECT id FROM companies WHERE normalised_name = %s LIMIT 1",
-                (normalised,),
-            )
-            row = cur.fetchone()
-            if row:
-                return str(row[0])
+            if jurisdiction:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM companies
+                    WHERE normalised_name = %s
+                      AND jurisdiction = %s
+                    ORDER BY id
+                    """,
+                    (normalised, jurisdiction),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM companies
+                    WHERE normalised_name = %s
+                    ORDER BY id
+                    """,
+                    (normalised,),
+                )
+            rows = [str(row[0]) for row in cur.fetchall()]
+            if len(rows) == 1:
+                return rows[0], "name_unique", rows
+            if len(rows) > 1:
+                return None, "ambiguous_name", rows
 
-    return None
+    return None, "no_match", []
+
+
+def _find_company_id(
+    conn,
+    registered_as: str | None,
+    legal_name: str,
+    jurisdiction: str | None = None,
+) -> str | None:
+    company_id, _, _ = _find_company_match(conn, registered_as, legal_name, jurisdiction)
+    return company_id
+
+
+def _queue_link_review(
+    conn,
+    *,
+    lei_code: str,
+    registered_as: str | None,
+    legal_name: str,
+    jurisdiction: str | None,
+    match_reason: str,
+    candidate_company_ids: list[str],
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO lei_link_review_queue (
+                lei_code,
+                registered_as,
+                legal_name,
+                jurisdiction,
+                match_reason,
+                candidate_company_ids,
+                status
+            ) VALUES (%s, %s, %s, %s, %s, %s, 'pending')
+            ON CONFLICT (lei_code) DO UPDATE SET
+                registered_as = EXCLUDED.registered_as,
+                legal_name = EXCLUDED.legal_name,
+                jurisdiction = EXCLUDED.jurisdiction,
+                match_reason = EXCLUDED.match_reason,
+                candidate_company_ids = EXCLUDED.candidate_company_ids,
+                status = 'pending',
+                updated_at = NOW()
+            """,
+            (
+                lei_code,
+                registered_as,
+                legal_name,
+                jurisdiction,
+                match_reason,
+                Jsonb(candidate_company_ids),
+            ),
+        )
 
 
 def _fetch_page(client: httpx.Client, country: str,
@@ -130,7 +222,13 @@ def fetch_gleif_registrations(conn, target_date: date | None = None) -> int:
                     legal_name = entity.get("legalName", {}).get("name", "")
                     registered_as = entity.get("registeredAs") or None
 
-                    company_id = _find_company_id(conn, registered_as, legal_name)
+                    jurisdiction = entity.get("jurisdiction")
+                    company_id, match_reason, candidate_company_ids = _find_company_match(
+                        conn,
+                        registered_as,
+                        legal_name,
+                        jurisdiction,
+                    )
 
                     try:
                         with conn.cursor() as cur:
@@ -162,7 +260,7 @@ def fetch_gleif_registrations(conn, target_date: date | None = None) -> int:
                                     company_id,
                                     lei_code,
                                     legal_name,
-                                    entity.get("jurisdiction"),
+                                    jurisdiction,
                                     entity.get("status"),
                                     reg.get("status"),
                                     _parse_date(
@@ -174,6 +272,24 @@ def fetch_gleif_registrations(conn, target_date: date | None = None) -> int:
                                     f"https://search.gleif.org/#/record/{lei_code}",
                                     Jsonb(attrs),
                                 ),
+                            )
+                        if match_reason.startswith("ambiguous_"):
+                            _queue_link_review(
+                                conn,
+                                lei_code=lei_code,
+                                registered_as=registered_as,
+                                legal_name=legal_name,
+                                jurisdiction=jurisdiction,
+                                match_reason=match_reason,
+                                candidate_company_ids=candidate_company_ids,
+                            )
+                            logger.warning(
+                                "gleif_ambiguous_match_queued",
+                                extra={
+                                    "lei_code": lei_code,
+                                    "match_reason": match_reason,
+                                    "candidate_count": len(candidate_company_ids),
+                                },
                             )
                         country_count += 1
                     except Exception as exc:

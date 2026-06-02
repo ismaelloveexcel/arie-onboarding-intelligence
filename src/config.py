@@ -35,6 +35,13 @@ ACTOR_NAMES: list[str] = [
 ]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
+WRITE_AUTH_TOKEN: str = os.getenv("WRITE_AUTH_TOKEN", "").strip()
+WRITE_AUTH_ENFORCE: bool = os.getenv("WRITE_AUTH_ENFORCE", "false").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200"))
 CH_ENRICHMENT_SAFE_LIMIT: int = int(os.getenv("CH_ENRICHMENT_SAFE_LIMIT", "5"))
 
