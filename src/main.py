@@ -5,7 +5,7 @@ import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from html import escape
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from uuid import UUID
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
@@ -21,6 +21,8 @@ from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
+from src.statuses import CANONICAL_STATUSES, normalize_status
+from src.write_auth import check_write_access
 
 # --- Logging setup ---
 handler = logging.StreamHandler()
@@ -94,16 +96,7 @@ templates = Jinja2Templates(directory="src/templates")
 from src.introducers import router as introducers_router  # noqa: E402
 app.include_router(introducers_router)
 
-_STATUSES = [
-    "New",
-    "Researching",
-    "Qualified",
-    "Outreach Ready",
-    "Contacted",
-    "Opportunity",
-    "Client",
-    "Closed — Not Fit",
-]
+_STATUSES = list(CANONICAL_STATUSES)
 
 
 def _format_entity_type(raw: str | None) -> str:
@@ -134,6 +127,42 @@ _UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 def _build_query_string(params: dict) -> str:
     cleaned = {key: value for key, value in params.items() if value not in (None, "")}
     return urlencode(cleaned)
+
+
+def _safe_external_url(raw: str | None) -> str | None:
+    value = (raw or "").strip()
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    return value
+
+
+def _canonical_status_or_422(raw_status: str, route: str) -> str:
+    normalized = normalize_status(raw_status)
+    if normalized not in CANONICAL_STATUSES:
+        logger.warning(
+            "status_unmapped",
+            extra={
+                "event": "status_unmapped",
+                "route": route,
+                "raw_status": raw_status,
+                "normalized_status": normalized,
+            },
+        )
+        raise HTTPException(status_code=422, detail=f"Invalid status: {raw_status!r}")
+    return normalized
+
+
+def _normalized_known_status(raw_status: str | None) -> str:
+    normalized = normalize_status(raw_status)
+    return normalized if normalized in CANONICAL_STATUSES else "New"
+
+
+def _check_write_auth(request: Request) -> None:
+    actor = _read_actor(request)
+    check_write_access(request, actor=actor, actor_valid=bool(actor))
 
 
 def _render_action_panel(lead_id: UUID, assigned_to: str, status: str, notes: str, contacted_at, follow_up_at, saved: bool = False) -> HTMLResponse:
@@ -513,11 +542,12 @@ def dashboard(request: Request):
 
 @app.get("/", response_class=HTMLResponse)
 def queue(request: Request):
+    raw_status_filter = request.query_params.get("status", "")
     filters = {
         "tier": request.query_params.get("tier", ""),
         "jurisdiction": request.query_params.get("jurisdiction", ""),
         "assigned_to": request.query_params.get("assigned_to", ""),
-        "status": request.query_params.get("status", ""),
+        "status": normalize_status(raw_status_filter) if raw_status_filter else "",
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
         "sort": request.query_params.get("sort", "score"),
@@ -722,7 +752,7 @@ def lead_detail(request: Request, lead_id: UUID):
     }
     action = {
         "assigned_to": row[14],
-        "status": row[15] or "New",
+        "status": _normalized_known_status(row[15]),
         "notes": row[16] or "",
         "contacted_at": row[17],
         "follow_up_at": row[18],
@@ -841,6 +871,8 @@ def lead_action(
     contacted_at: str = Form(""),
     follow_up_at: str = Form(""),
 ):
+    _check_write_auth(request)
+    status_canonical = _canonical_status_or_422(status, "/leads/{lead_id}/action")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -868,12 +900,19 @@ def lead_action(
                     follow_up_at = EXCLUDED.follow_up_at,
                     updated_at = NOW()
                 """,
-                (lead_id, assigned_to or None, status, notes or None, contacted_at, follow_up_at),
+                (
+                    lead_id,
+                    assigned_to or None,
+                    status_canonical,
+                    notes or None,
+                    contacted_at,
+                    follow_up_at,
+                ),
             )
 
             new_value = {
                 "assigned_to": assigned_to or None,
-                "status": status,
+                "status": status_canonical,
                 "notes": notes or None,
                 "contacted_at": contacted_at or None,
                 "follow_up_at": follow_up_at or None,
@@ -888,7 +927,15 @@ def lead_action(
             )
             conn.commit()
 
-    return _render_action_panel(lead_id, assigned_to or "", status, notes, None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"), None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"), saved=True)
+    return _render_action_panel(
+        lead_id,
+        assigned_to or "",
+        status_canonical,
+        notes,
+        None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"),
+        None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"),
+        saved=True,
+    )
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -903,6 +950,7 @@ def add_lead_contact(
     source: str = Form("manual"),
     notes: str = Form(""),
 ):
+    _check_write_auth(request)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -921,6 +969,7 @@ def add_lead_contact(
 
 @app.post("/leads/{lead_id}/contacts/{contact_id}/delete", response_class=HTMLResponse)
 def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
+    _check_write_auth(request)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -940,6 +989,8 @@ def lead_assign(
         assigned_to: str = Form(""),
         status: str = Form("New"),
 ):
+        _check_write_auth(request)
+        status_canonical = _canonical_status_or_422(status, "/leads/{lead_id}/assign")
         with get_conn() as conn:
                 with conn.cursor() as cur:
                         cur.execute(
@@ -951,7 +1002,7 @@ def lead_assign(
                                         status = EXCLUDED.status,
                                         updated_at = NOW()
                                 """,
-                                (lead_id, assigned_to or None, status),
+                                (lead_id, assigned_to or None, status_canonical),
                         )
                         cur.execute(
                                 """
@@ -959,8 +1010,11 @@ def lead_assign(
                                     (entity_type, entity_id, action, actor, new_value)
                                 VALUES ('company', %s, 'quick_assign', %s, %s)
                                 """,
-                                (lead_id, (_read_actor(request) or "unknown"),
-                                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
+                                (
+                                    lead_id,
+                                    (_read_actor(request) or "unknown"),
+                                    Jsonb({"assigned_to": assigned_to or None, "status": status_canonical}),
+                                ),
                         )
                         conn.commit()
 
@@ -1001,7 +1055,12 @@ def lead_assign(
                 f'<option value="{s}" {"selected" if s == (r["status"] or "New") else ""}>{s}</option>'
                 for s in _STATUSES
         )
-        verify = f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>' if r["verify_url"] else ""
+        safe_verify_url = _safe_external_url(r["verify_url"])
+        verify = (
+                f'<a href="{escape(safe_verify_url, quote=True)}" target="_blank" rel="noopener noreferrer" style="font-size:11px">↗</a>'
+                if safe_verify_url
+                else ""
+        )
 
         return HTMLResponse(f"""
         <tr>
@@ -1050,6 +1109,7 @@ def upload_form(request: Request):
 
 @app.post("/upload", response_class=HTMLResponse)
 def upload_preview(request: Request, file: UploadFile = File(...)):
+    _check_write_auth(request)
     file_bytes = file.file.read()
     columns, rows, validation_errors = _parse_upload_csv(file_bytes)
 
@@ -1089,7 +1149,8 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
 
 
 @app.post("/upload/{upload_id}/confirm")
-def upload_confirm(upload_id: UUID):
+def upload_confirm(request: Request, upload_id: UUID):
+    _check_write_auth(request)
     with get_conn() as conn:
         with conn.cursor() as cur:
             # Atomically claim the upload: only succeeds if status is currently 'pending'.

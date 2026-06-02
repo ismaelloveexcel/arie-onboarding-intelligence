@@ -21,6 +21,8 @@ from psycopg.types.json import Jsonb
 
 from src.config import ACTOR_NAMES, RM_NAMES
 from src.db import get_conn
+from src.statuses import CANONICAL_STATUSES, normalize_status
+from src.write_auth import check_write_access
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,39 @@ def _read_actor(request: Request) -> str:
 
 def _build_qs(params: dict) -> str:
     return urlencode({k: v for k, v in params.items() if v not in (None, "")})
+
+
+def _safe_external_url(raw: str | None) -> str | None:
+    from urllib.parse import urlparse
+
+    value = (raw or "").strip()
+    if not value:
+        return None
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    return value
+
+
+def _canonical_status_or_422(raw_status: str, route: str) -> str:
+    normalized = normalize_status(raw_status)
+    if normalized not in CANONICAL_STATUSES:
+        logger.warning(
+            "status_unmapped",
+            extra={
+                "event": "status_unmapped",
+                "route": route,
+                "raw_status": raw_status,
+                "normalized_status": normalized,
+            },
+        )
+        raise HTTPException(status_code=422, detail=f"Invalid status: {raw_status!r}")
+    return normalized
+
+
+def _check_write_auth(request: Request) -> None:
+    actor = _read_actor(request)
+    check_write_access(request, actor=actor, actor_valid=bool(actor))
 
 
 def _normalise(name: str) -> str:
@@ -298,6 +333,8 @@ def introducer_action(
     contacted_at: str = Form(""),
     follow_up_at: str = Form(""),
 ):
+    _check_write_auth(request)
+    status_canonical = _canonical_status_or_422(status, "/introducers/{introducer_id}/action")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -322,10 +359,17 @@ def introducer_action(
                     follow_up_at = EXCLUDED.follow_up_at,
                     updated_at = NOW()
                 """,
-                (introducer_id, assigned_to or None, status, notes or None, contacted_at, follow_up_at),
+                (
+                    introducer_id,
+                    assigned_to or None,
+                    status_canonical,
+                    notes or None,
+                    contacted_at,
+                    follow_up_at,
+                ),
             )
             new_value = {
-                "assigned_to": assigned_to or None, "status": status,
+                "assigned_to": assigned_to or None, "status": status_canonical,
                 "notes": notes or None,
                 "contacted_at": contacted_at or None,
                 "follow_up_at": follow_up_at or None,
@@ -343,7 +387,7 @@ def introducer_action(
     contacted_dt = datetime.strptime(contacted_at, "%Y-%m-%d") if contacted_at else None
     follow_dt = datetime.strptime(follow_up_at, "%Y-%m-%d").date() if follow_up_at else None
     return _render_introducer_action_panel(
-        introducer_id, assigned_to or "", status, notes, contacted_dt, follow_dt, saved=True,
+        introducer_id, assigned_to or "", status_canonical, notes, contacted_dt, follow_dt, saved=True,
     )
 
 
@@ -366,6 +410,7 @@ def introducer_edit(
     address: str = Form(""),
     notes: str = Form(""),
 ):
+    _check_write_auth(request)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -458,6 +503,8 @@ def introducer_assign(
     assigned_to: str = Form(""),
     status: str = Form("New"),
 ):
+    _check_write_auth(request)
+    status_canonical = _canonical_status_or_422(status, "/introducers/{introducer_id}/assign")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -469,15 +516,18 @@ def introducer_assign(
                     status = EXCLUDED.status,
                     updated_at = NOW()
                 """,
-                (introducer_id, assigned_to or None, status),
+                (introducer_id, assigned_to or None, status_canonical),
             )
             cur.execute(
                 """
                 INSERT INTO audit_log (entity_type, entity_id, action, actor, new_value)
                 VALUES ('introducer', %s, 'quick_assign', %s, %s)
                 """,
-                (introducer_id, request.cookies.get("actor", "unknown"),
-                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
+                (
+                    introducer_id,
+                    (_read_actor(request) or "unknown"),
+                    Jsonb({"assigned_to": assigned_to or None, "status": status_canonical}),
+                ),
             )
             conn.commit()
 
@@ -505,7 +555,12 @@ def introducer_assign(
         f'<option value="{escape(s)}" {"selected" if s == (row[9] or "New") else ""}>{escape(s)}</option>'
         for s in _STATUSES
     )
-    verify = f'<a href="{row[7]}" target="_blank" style="font-size:11px">↗</a>' if row[7] else ""
+    safe_verify_url = _safe_external_url(row[7])
+    verify = (
+        f'<a href="{escape(safe_verify_url, quote=True)}" target="_blank" rel="noopener noreferrer" style="font-size:11px">↗</a>'
+        if safe_verify_url
+        else ""
+    )
     email_html = f'<a href="mailto:{escape(row[5])}">{escape(row[5])}</a>' if row[5] else "—"
 
     return HTMLResponse(f"""
@@ -554,6 +609,7 @@ def introducer_upload_form(request: Request):
 
 @router.post("/upload", response_class=HTMLResponse)
 def introducer_upload_preview(request: Request, file: UploadFile = File(...)):
+    _check_write_auth(request)
     file_bytes = file.file.read()
     columns, rows, validation_errors = _parse_introducer_csv(file_bytes)
 
@@ -597,7 +653,8 @@ def introducer_upload_preview(request: Request, file: UploadFile = File(...)):
 
 
 @router.post("/upload/{upload_id}/confirm")
-def introducer_upload_confirm(upload_id: UUID):
+def introducer_upload_confirm(request: Request, upload_id: UUID):
+    _check_write_auth(request)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
