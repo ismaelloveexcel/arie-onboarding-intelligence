@@ -26,6 +26,7 @@ Internal lead management tool for Arie Finance. Ingests company data from Compan
 - **Audit Log** — every RM action is logged with actor, old value, new value, and IP
 - **CSV Upload** — upload a spreadsheet of companies for preview and confirmation
 - **Nightly Pipeline** — ingests from Companies House API + Mauritius scraper, scores, and refreshes the queue
+- **Shadow Scoring Foundation (PR1a)** — computes versioned shadow scores and evidence in parallel, without changing queue ordering
 - **Health endpoint** — `GET /health` returns DB connection status and queue freshness
 
 ---
@@ -118,5 +119,23 @@ tests/             # pytest test suite
 | `PIPELINE_SECRET` | No | Shared secret for `POST /internal/run-pipeline` |
 | `LOG_LEVEL` | No | Logging level (default: `INFO`) |
 | `ALLOWED_DB_HOSTS` | No | Comma-separated host substrings. If set, the host parsed from `DATABASE_URL` must contain one of these substrings or the app refuses to start. Recommended in every deployed environment (prod, CI, local) to prevent accidental cross-environment DB connections. Leave unset to disable the guard. |
+| `SCORING_SHADOW_MODE` | No | Enables PR1a shadow scoring compute path (default: `true`). Does not change user-facing ranking. |
+| `SCORING_DISPLAY_ENABLED` | No | Enables user-visible display of shadow scoring artifacts (default: `false`). Keep disabled in PR1a. |
+| `SHADOW_SCORE_ACTIVE_STALE_DAYS` | No | Active lead freshness window for shadow backfill selection (default: `120`). |
+| `SHADOW_BACKFILL_BATCH_SIZE` | No | Maximum leads processed per shadow backfill batch (default: `100`). |
+| `SHADOW_BACKFILL_MAX_BATCHES` | No | Maximum backfill batches per run to cap load (default: `20`). |
+| `SHADOW_BACKFILL_LOCK_TIMEOUT_MS` | No | Per-transaction lock timeout for shadow backfill operations (default: `3000`). |
+| `ACTIVE_TERMINAL_STATUSES` | No | Explicit comma-separated terminal statuses excluded from "active lead" shadow backfill. |
 
 CI must use a GitHub Actions secret named exactly `DATABASE_URL_TEST`, and `test.yml` must inject it into `DATABASE_URL`. For local testing, set `DATABASE_URL` directly to a non-production DB. The nightly pipeline workflow (`daily.yml`) is currently the only workflow permitted to use the production `DATABASE_URL` secret.
+
+## PR1a Operational Notes
+
+- Shadow scoring runs via a single recompute contract (`recompute_lead`) and writes to:
+  - `lead_signal_scores` (versioned component/final scores)
+  - `lead_score_evidence` (evidence payload + why output)
+  - `score_runs` (triggered execution audit)
+- Manual active-lead backfill endpoint:
+  - `POST /admin/shadow-scoring/backfill`
+  - bearer auth via `ADMIN_TOKEN`
+- Rollback: set `SCORING_SHADOW_MODE=false` and redeploy. Existing queue ordering is unaffected because queue snapshot still reads `lead_scores`.

@@ -67,3 +67,38 @@ def test_admin_lei_backfill_503_when_token_unconfigured(monkeypatch):
     )
     assert resp.status_code == 503
 
+
+def test_admin_shadow_backfill_rejects_anonymous(admin_token):
+    resp = client.post("/admin/shadow-scoring/backfill")
+    assert resp.status_code == 401
+
+
+def test_admin_shadow_backfill_accepts_valid_bearer(admin_token, monkeypatch):
+    fake_conn = object()
+    fake_conn_cm = type(
+        "FakeConnCM",
+        (),
+        {
+            "__enter__": lambda self: fake_conn,
+            "__exit__": lambda self, exc_type, exc, tb: False,
+        },
+    )()
+    monkeypatch.setattr(main, "get_conn", lambda: fake_conn_cm)
+    monkeypatch.setattr(
+        main,
+        "backfill_active_shadow_scores",
+        lambda *_args, **_kwargs: {
+            "batches_processed": 1,
+            "scanned": 1,
+            "scored": 1,
+            "failed": 0,
+        },
+    )
+    resp = client.post(
+        "/admin/shadow-scoring/backfill",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["scanned"] == 1
+
