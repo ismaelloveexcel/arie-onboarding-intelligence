@@ -401,7 +401,7 @@
           <label>Status</label>
           <select name="status">
             {% for s in statuses %}
-              <option value="{{ s }}" {% if action and action.status == s %}selected{% endif %}>{{ s }}</option>
+              <option value="{{ s.value }}" {% if action and action.status == s.value %}selected{% endif %}>{{ s.label }}</option>
             {% endfor %}
           </select>
         </div>

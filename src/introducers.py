@@ -21,16 +21,21 @@ from psycopg.types.json import Jsonb
 
 from src.config import ACTOR_NAMES, RM_NAMES
 from src.db import get_conn
+from src.domain.statuses import normalize_status, require_canonical_status, status_label, status_options
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/introducers", tags=["introducers"])
 templates = Jinja2Templates(directory="src/templates")
 
-_STATUSES = [
-    "New", "Reviewing", "Qualified", "Not Relevant",
-    "Deferred", "Contacted", "Onboarding", "Not Fit",
-]
+_STATUS_OPTIONS = status_options()
+
+
+def _canonical_status_or_422(raw_status: str) -> str:
+    try:
+        return require_canonical_status(raw_status)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 _UPLOAD_REQUIRED_COLUMNS = ["company_name", "jurisdiction"]
 _UPLOAD_MAX_ROWS = 20000
@@ -109,8 +114,10 @@ def introducers_list(request: Request):
         where.append("ia.assigned_to = %s")
         params.append(filters["assigned_to"])
     if filters["status"]:
-        where.append("ia.status = %s")
-        params.append(filters["status"])
+        status_filter = normalize_status(filters["status"])
+        if status_filter:
+            where.append("ia.status = %s")
+            params.append(status_filter)
     if filters["q"]:
         where.append("(i.company_name ILIKE %s OR i.contact_name ILIKE %s OR i.contact_email ILIKE %s)")
         like = f"%{filters['q']}%"
@@ -150,7 +157,8 @@ def introducers_list(request: Request):
             "entity_type": r[3] or "—",
             "contact_name": r[4], "contact_email": r[5],
             "phone_number": r[6], "verify_url": r[7],
-            "assigned_to": r[8], "status": r[9],
+            "assigned_to": r[8], "status": normalize_status(r[9]) or "new",
+            "status_label": status_label(r[9]),
         }
         for r in rows
     ]
@@ -164,7 +172,7 @@ def introducers_list(request: Request):
             "total": total,
             "filters": filters,
             "rm_names": RM_NAMES,
-            "statuses": _STATUSES,
+            "statuses": _STATUS_OPTIONS,
             "page": page,
             "total_pages": total_pages,
             "query_string": _build_qs({k: v for k, v in filters.items() if v}),
@@ -220,7 +228,7 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
     }
     action = {
         "assigned_to": row[15],
-        "status": row[16] or "New",
+        "status": normalize_status(row[16]) or "new",
         "notes": row[17],
         "contacted_at": row[18],
         "follow_up_at": row[19],
@@ -233,7 +241,7 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
             "action": action,
             "audit_rows": audit_rows,
             "rm_names": RM_NAMES,
-            "statuses": _STATUSES,
+            "statuses": _STATUS_OPTIONS,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "saved": False,
@@ -250,8 +258,8 @@ def _render_introducer_action_panel(introducer_id: UUID, assigned_to: str, statu
         for rm in RM_NAMES
     )
     status_opts = "".join(
-        f'<option value="{escape(s)}" {"selected" if s == status else ""}>{escape(s)}</option>'
-        for s in _STATUSES
+        f'<option value="{escape(s["value"])}" {"selected" if s["value"] == status else ""}>{escape(s["label"])}</option>'
+        for s in _STATUS_OPTIONS
     )
     contacted_val = contacted_at.date().isoformat() if hasattr(contacted_at, "date") and contacted_at else ""
     follow_val = follow_up_at.isoformat() if hasattr(follow_up_at, "isoformat") and follow_up_at else ""
@@ -293,11 +301,12 @@ def introducer_action(
     request: Request,
     introducer_id: UUID,
     assigned_to: str = Form(""),
-    status: str = Form("New"),
+    status: str = Form("new"),
     notes: str = Form(""),
     contacted_at: str = Form(""),
     follow_up_at: str = Form(""),
 ):
+    status_canonical = _canonical_status_or_422(status)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -322,10 +331,10 @@ def introducer_action(
                     follow_up_at = EXCLUDED.follow_up_at,
                     updated_at = NOW()
                 """,
-                (introducer_id, assigned_to or None, status, notes or None, contacted_at, follow_up_at),
+                (introducer_id, assigned_to or None, status_canonical, notes or None, contacted_at, follow_up_at),
             )
             new_value = {
-                "assigned_to": assigned_to or None, "status": status,
+                "assigned_to": assigned_to or None, "status": status_canonical,
                 "notes": notes or None,
                 "contacted_at": contacted_at or None,
                 "follow_up_at": follow_up_at or None,
@@ -343,7 +352,7 @@ def introducer_action(
     contacted_dt = datetime.strptime(contacted_at, "%Y-%m-%d") if contacted_at else None
     follow_dt = datetime.strptime(follow_up_at, "%Y-%m-%d").date() if follow_up_at else None
     return _render_introducer_action_panel(
-        introducer_id, assigned_to or "", status, notes, contacted_dt, follow_dt, saved=True,
+        introducer_id, assigned_to or "", status_canonical, notes, contacted_dt, follow_dt, saved=True,
     )
 
 
@@ -456,8 +465,9 @@ def introducer_assign(
     request: Request,
     introducer_id: UUID,
     assigned_to: str = Form(""),
-    status: str = Form("New"),
+    status: str = Form("new"),
 ):
+    status_canonical = _canonical_status_or_422(status)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -469,15 +479,18 @@ def introducer_assign(
                     status = EXCLUDED.status,
                     updated_at = NOW()
                 """,
-                (introducer_id, assigned_to or None, status),
+                (introducer_id, assigned_to or None, status_canonical),
             )
             cur.execute(
                 """
                 INSERT INTO audit_log (entity_type, entity_id, action, actor, new_value)
                 VALUES ('introducer', %s, 'quick_assign', %s, %s)
                 """,
-                (introducer_id, request.cookies.get("actor", "unknown"),
-                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
+                (
+                    introducer_id,
+                    (_read_actor(request) or "unknown"),
+                    Jsonb({"assigned_to": assigned_to or None, "status": status_canonical}),
+                ),
             )
             conn.commit()
 
@@ -501,11 +514,12 @@ def introducer_assign(
         f'<option value="{escape(nm)}" {"selected" if nm == (row[8] or "") else ""}>{escape(nm)}</option>'
         for nm in RM_NAMES
     )
+    row_status = normalize_status(row[9]) or "new"
     status_opts = "".join(
-        f'<option value="{escape(s)}" {"selected" if s == (row[9] or "New") else ""}>{escape(s)}</option>'
-        for s in _STATUSES
+        f'<option value="{escape(s["value"])}" {"selected" if s["value"] == row_status else ""}>{escape(s["label"])}</option>'
+        for s in _STATUS_OPTIONS
     )
-    verify = f'<a href="{row[7]}" target="_blank" style="font-size:11px">↗</a>' if row[7] else ""
+    verify = f'<a href="{escape(row[7], quote=True)}" target="_blank" style="font-size:11px">↗</a>' if row[7] else ""
     email_html = f'<a href="mailto:{escape(row[5])}">{escape(row[5])}</a>' if row[5] else "—"
 
     return HTMLResponse(f"""
@@ -518,7 +532,7 @@ def introducer_assign(
       <td>{escape(row[6] or '—')}</td>
       <td>
         <form hx-post="/introducers/{row[0]}/assign" hx-target="closest tr" hx-swap="outerHTML" style="margin:0">
-          <input type="hidden" name="status" value="{escape(row[9] or 'New')}">
+          <input type="hidden" name="status" value="{escape(row_status)}">
           <select name="assigned_to" onchange="this.form.requestSubmit()"
                   style="font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:90px">
             <option value="">—</option>{assigned_opts}
