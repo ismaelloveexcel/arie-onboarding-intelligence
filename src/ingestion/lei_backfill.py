@@ -9,7 +9,11 @@ table and patches company_id where a match is now found.
 import logging
 
 from src.config import LEI_BACKFILL_CHUNK_SIZE
-from src.ingestion.gleif import _find_company_id
+from src.ingestion.gleif import (
+    LEI_MATCH_CONFIDENCE_THRESHOLD,
+    _upsert_lei_review_queue,
+    resolve_company_match,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,10 +28,11 @@ def backfill_lei_company_links(conn) -> dict:
     Safe to re-run: matched rows are excluded by the WHERE company_id IS NULL
     predicate on subsequent runs.
 
-    Returns {"scanned": int, "matched": int, "unmatched": int}.
+    Returns {"scanned": int, "matched": int, "ambiguous": int, "unmatched": int}.
     """
     scanned = 0
     matched = 0
+    ambiguous = 0
     last_id = None
 
     while True:
@@ -35,7 +40,7 @@ def backfill_lei_company_links(conn) -> dict:
             if last_id is None:
                 cur.execute(
                     """
-                    SELECT id, registered_as, legal_name
+                    SELECT id, lei_code, registered_as, legal_name
                     FROM lei_records
                     WHERE company_id IS NULL
                     ORDER BY id
@@ -46,7 +51,7 @@ def backfill_lei_company_links(conn) -> dict:
             else:
                 cur.execute(
                     """
-                    SELECT id, registered_as, legal_name
+                    SELECT id, lei_code, registered_as, legal_name
                     FROM lei_records
                     WHERE company_id IS NULL AND id > %s
                     ORDER BY id
@@ -59,21 +64,105 @@ def backfill_lei_company_links(conn) -> dict:
         if not batch:
             break
 
-        for lei_id, registered_as, legal_name in batch:
+        for lei_id, lei_code, registered_as, legal_name in batch:
             scanned += 1
-            company_id = _find_company_id(conn, registered_as, legal_name or "")
+            match = resolve_company_match(conn, registered_as, legal_name or "")
+            company_id = (
+                match.company_id
+                if (
+                    match.match_state == "VERIFIED"
+                    and match.company_id
+                    and match.confidence_score >= LEI_MATCH_CONFIDENCE_THRESHOLD
+                )
+                else None
+            )
+
             if company_id:
                 with conn.cursor() as upd:
                     upd.execute(
-                        "UPDATE lei_records SET company_id = %s WHERE id = %s",
-                        (company_id, lei_id),
+                        """
+                        UPDATE lei_records
+                        SET company_id = %s,
+                            match_state = %s,
+                            confidence_score = %s,
+                            match_basis = %s,
+                            matching_reason = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            company_id,
+                            match.match_state,
+                            match.confidence_score,
+                            match.match_basis,
+                            match.reason,
+                            lei_id,
+                        ),
                     )
                 matched += 1
                 logger.info(
                     "lei_backfill_matched",
                     extra={"lei_id": str(lei_id), "company_id": company_id},
                 )
+                _upsert_lei_review_queue(
+                    conn,
+                    lei_code=lei_code,
+                    registered_as=registered_as,
+                    legal_name=legal_name or "",
+                    match=match,
+                )
+            elif match.match_state == "AMBIGUOUS":
+                ambiguous += 1
+                with conn.cursor() as upd:
+                    upd.execute(
+                        """
+                        UPDATE lei_records
+                        SET match_state = %s,
+                            confidence_score = %s,
+                            match_basis = %s,
+                            matching_reason = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            match.match_state,
+                            match.confidence_score,
+                            match.match_basis,
+                            match.reason,
+                            lei_id,
+                        ),
+                    )
+                _upsert_lei_review_queue(
+                    conn,
+                    lei_code=lei_code,
+                    registered_as=registered_as,
+                    legal_name=legal_name or "",
+                    match=match,
+                )
+                logger.warning(
+                    "lei_backfill_ambiguous",
+                    extra={
+                        "lei_id": str(lei_id),
+                        "candidate_company_ids": match.candidate_company_ids,
+                    },
+                )
             else:
+                with conn.cursor() as upd:
+                    upd.execute(
+                        """
+                        UPDATE lei_records
+                        SET match_state = %s,
+                            confidence_score = %s,
+                            match_basis = %s,
+                            matching_reason = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            match.match_state,
+                            match.confidence_score,
+                            match.match_basis,
+                            match.reason,
+                            lei_id,
+                        ),
+                    )
                 logger.debug(
                     "lei_backfill_unmatched",
                     extra={"lei_id": str(lei_id), "registered_as": registered_as},
@@ -82,9 +171,19 @@ def backfill_lei_company_links(conn) -> dict:
         conn.commit()
         last_id = batch[-1][0]
 
-    unmatched = scanned - matched
+    unmatched = scanned - matched - ambiguous
     logger.info(
         "lei_backfill_complete",
-        extra={"scanned": scanned, "matched": matched, "unmatched": unmatched},
+        extra={
+            "scanned": scanned,
+            "matched": matched,
+            "ambiguous": ambiguous,
+            "unmatched": unmatched,
+        },
     )
-    return {"scanned": scanned, "matched": matched, "unmatched": unmatched}
+    return {
+        "scanned": scanned,
+        "matched": matched,
+        "ambiguous": ambiguous,
+        "unmatched": unmatched,
+    }
