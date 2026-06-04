@@ -29,9 +29,18 @@ def test_audit_log_write_on_rm_action():
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM audit_log WHERE entity_id IN (SELECT id FROM companies WHERE source_ref = %s)", (company_ref,))
-            cur.execute("DELETE FROM rm_actions WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)", (company_ref,))
-            cur.execute("DELETE FROM lead_scores WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)", (company_ref,))
+            cur.execute(
+                "DELETE FROM audit_log WHERE entity_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
+            cur.execute(
+                "DELETE FROM rm_actions WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
+            cur.execute(
+                "DELETE FROM lead_scores WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
             cur.execute("DELETE FROM companies WHERE source_ref = %s", (company_ref,))
         conn.commit()
 
@@ -62,9 +71,13 @@ def test_audit_log_write_on_rm_action():
 
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT COUNT(*) FROM audit_log WHERE entity_id = %s", (company_id,))
+            cur.execute(
+                "SELECT COUNT(*) FROM audit_log WHERE entity_id = %s", (company_id,)
+            )
             audit_count = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM rm_actions WHERE company_id = %s", (company_id,))
+            cur.execute(
+                "SELECT COUNT(*) FROM rm_actions WHERE company_id = %s", (company_id,)
+            )
             action_count = cur.fetchone()[0]
             cur.execute("DELETE FROM audit_log WHERE entity_id = %s", (company_id,))
             cur.execute("DELETE FROM rm_actions WHERE company_id = %s", (company_id,))
@@ -74,3 +87,59 @@ def test_audit_log_write_on_rm_action():
 
     assert audit_count >= 1
     assert action_count == 1
+
+
+def test_lead_detail_page_renders_for_existing_company():
+    client = TestClient(app)
+    company_ref = "TEST_LEAD_DETAIL_RENDER"
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM audit_log WHERE entity_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
+            cur.execute(
+                "DELETE FROM rm_actions WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
+            cur.execute(
+                "DELETE FROM lead_scores WHERE company_id IN (SELECT id FROM companies WHERE source_ref = %s)",
+                (company_ref,),
+            )
+            cur.execute("DELETE FROM companies WHERE source_ref = %s", (company_ref,))
+        conn.commit()
+
+        company_id = upsert_company(
+            conn,
+            {
+                "source_system": "companies_house",
+                "source_ref": company_ref,
+                "company_name": "Lead Detail Render Test Ltd",
+                "normalised_name": "lead detail render test ltd",
+                "jurisdiction": "UK",
+                "entity_type": "private limited company",
+                "incorporation_date": None,
+                "registered_address": None,
+                "sic_codes": [],
+                "website": None,
+                "verify_url": None,
+                "raw_data": "{}",
+            },
+        )
+        conn.commit()
+
+    response = client.get(f"/leads/{company_id}")
+    assert response.status_code == 200
+    assert "Lead Detail Render Test Ltd" in response.text
+    assert "Directors" in response.text
+    assert "Owners / UBOs" in response.text
+    assert "Contacts" not in response.text
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM audit_log WHERE entity_id = %s", (company_id,))
+            cur.execute("DELETE FROM rm_actions WHERE company_id = %s", (company_id,))
+            cur.execute("DELETE FROM lead_scores WHERE company_id = %s", (company_id,))
+            cur.execute("DELETE FROM companies WHERE id = %s", (company_id,))
+        conn.commit()

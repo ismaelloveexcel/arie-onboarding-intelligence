@@ -16,7 +16,15 @@ from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
-from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, CH_ENRICHMENT_SAFE_LIMIT, LOG_LEVEL, RM_NAMES, SECRET_KEY
+from src.config import (
+    ACTOR_NAMES,
+    ADMIN_TOKEN,
+    APP_ENV,
+    CH_ENRICHMENT_SAFE_LIMIT,
+    LOG_LEVEL,
+    RM_NAMES,
+    SECRET_KEY,
+)
 from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
@@ -92,6 +100,7 @@ app.mount("/static", StaticFiles(directory="src/static"), name="static")
 templates = Jinja2Templates(directory="src/templates")
 
 from src.introducers import router as introducers_router  # noqa: E402
+
 app.include_router(introducers_router)
 
 _STATUSES = [
@@ -136,9 +145,42 @@ def _build_query_string(params: dict) -> str:
     return urlencode(cleaned)
 
 
-def _render_action_panel(lead_id: UUID, assigned_to: str, status: str, notes: str, contacted_at, follow_up_at, saved: bool = False) -> HTMLResponse:
-    return HTMLResponse(
-        f"""
+def _ensure_person_email_columns(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("ALTER TABLE company_officers ADD COLUMN IF NOT EXISTS email TEXT")
+        cur.execute("ALTER TABLE company_pscs ADD COLUMN IF NOT EXISTS email TEXT")
+
+
+def _ensure_priority_columns(conn) -> None:
+    """Runtime safety guard: ensure PR 1 priority-scoring columns exist on
+    lead_scores even if the migration didn't run yet. Idempotent."""
+    with conn.cursor() as cur:
+        cur.execute("""
+            ALTER TABLE lead_scores
+                ADD COLUMN IF NOT EXISTS arie_fit_score        INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS keyword_score         INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS freshness_score       INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS founder_quality_score INTEGER NOT NULL DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS cross_border_score    INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS risk_score            INTEGER NOT NULL DEFAULT 50,
+                ADD COLUMN IF NOT EXISTS priority_score        INTEGER NOT NULL DEFAULT 0,
+                ADD COLUMN IF NOT EXISTS reachability_status   TEXT    NOT NULL DEFAULT 'research_required',
+                ADD COLUMN IF NOT EXISTS lead_readiness        TEXT    NOT NULL DEFAULT 'discovered',
+                ADD COLUMN IF NOT EXISTS enrichment_tier       TEXT    NOT NULL DEFAULT 'C',
+                ADD COLUMN IF NOT EXISTS why_reasons           JSONB   NOT NULL DEFAULT '[]'::jsonb
+        """)
+
+
+def _render_action_panel(
+    lead_id: UUID,
+    assigned_to: str,
+    status: str,
+    notes: str,
+    contacted_at,
+    follow_up_at,
+    saved: bool = False,
+) -> HTMLResponse:
+    return HTMLResponse(f"""
         <div class="card" id="action-panel">
           <h2>RM Actions</h2>
           <form
@@ -178,8 +220,7 @@ def _render_action_panel(lead_id: UUID, assigned_to: str, status: str, notes: st
             {"<div style=\"color:#065f46; font-size:12px; margin-top:.25rem\">✓ Saved</div>" if saved else ""}
           </form>
         </div>
-        """
-    )
+        """)
 
 
 def _parse_upload_csv(file_bytes: bytes) -> tuple[list[dict], list[str], list[str]]:
@@ -233,14 +274,18 @@ def health(response: Response):
         try:
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*), MAX(refreshed_at) FROM queue_snapshot")
+                    cur.execute(
+                        "SELECT COUNT(*), MAX(refreshed_at) FROM queue_snapshot"
+                    )
                     row = cur.fetchone()
                     if row:
                         queue_rows = row[0] or 0
                         queue_refreshed_at = row[1]
                         if queue_refreshed_at:
                             if queue_refreshed_at.tzinfo is None:
-                                queue_refreshed_at = queue_refreshed_at.replace(tzinfo=timezone.utc)
+                                queue_refreshed_at = queue_refreshed_at.replace(
+                                    tzinfo=timezone.utc
+                                )
                             age = datetime.now(timezone.utc) - queue_refreshed_at
                             queue_fresh = age.total_seconds() < 25 * 3600
                     cur.execute(
@@ -252,15 +297,13 @@ def health(response: Response):
                         if ts.tzinfo is None:
                             ts = ts.replace(tzinfo=timezone.utc)
                         mauritius_last_seen = ts
-                    cur.execute(
-                        """
+                    cur.execute("""
                         SELECT started_at, completed_at, status, uk_count, mu_count,
                                scores_count, queue_rows, duration_seconds, error
                         FROM pipeline_runs
                         ORDER BY started_at DESC
                         LIMIT 1
-                        """
-                    )
+                        """)
                     pr_row = cur.fetchone()
                     if pr_row:
                         started_at = pr_row[0]
@@ -270,14 +313,20 @@ def health(response: Response):
                         if completed_at and completed_at.tzinfo is None:
                             completed_at = completed_at.replace(tzinfo=timezone.utc)
                         last_pipeline_run = {
-                            "started_at": started_at.isoformat() if started_at else None,
-                            "completed_at": completed_at.isoformat() if completed_at else None,
+                            "started_at": (
+                                started_at.isoformat() if started_at else None
+                            ),
+                            "completed_at": (
+                                completed_at.isoformat() if completed_at else None
+                            ),
                             "status": pr_row[2],
                             "uk_count": pr_row[3],
                             "mu_count": pr_row[4],
                             "scores_count": pr_row[5],
                             "queue_rows": pr_row[6],
-                            "duration_seconds": float(pr_row[7]) if pr_row[7] is not None else None,
+                            "duration_seconds": (
+                                float(pr_row[7]) if pr_row[7] is not None else None
+                            ),
                             "error": pr_row[8],
                         }
         except Exception as exc:
@@ -292,9 +341,13 @@ def health(response: Response):
         "status": "ok" if (db_ok and queue_fresh) else "degraded",
         "db": "connected" if db_ok else "unreachable",
         "queue_rows": queue_rows,
-        "queue_refreshed_at": queue_refreshed_at.isoformat() if queue_refreshed_at else None,
+        "queue_refreshed_at": (
+            queue_refreshed_at.isoformat() if queue_refreshed_at else None
+        ),
         "queue_fresh": queue_fresh,
-        "mauritius_last_seen": mauritius_last_seen.isoformat() if mauritius_last_seen else None,
+        "mauritius_last_seen": (
+            mauritius_last_seen.isoformat() if mauritius_last_seen else None
+        ),
         "last_pipeline_run": last_pipeline_run,
         "scoring_version": SCORING_VERSION,
     }
@@ -322,8 +375,12 @@ def set_actor(request: Request, actor: str = Form("")):
     raw_referer = request.headers.get("referer", "")
     try:
         from urllib.parse import urlparse
+
         parsed = urlparse(raw_referer)
-        same_origin = parsed.scheme in ("http", "https") and parsed.netloc == request.headers.get("host", "")
+        same_origin = parsed.scheme in (
+            "http",
+            "https",
+        ) and parsed.netloc == request.headers.get("host", "")
         redirect_to = raw_referer if same_origin else "/"
     except Exception:
         redirect_to = "/"
@@ -446,10 +503,14 @@ def dashboard(request: Request):
             "last_run_at": last_run_at,
             "status": last_run_row[2] if last_run_row else "—",
             "counts": (
-                f"UK {last_success_row[1] or 0} · "
-                f"MU {last_success_row[2] or 0} · "
-                f"Scores {last_success_row[3] or 0}"
-            ) if last_success_row else "—",
+                (
+                    f"UK {last_success_row[1] or 0} · "
+                    f"MU {last_success_row[2] or 0} · "
+                    f"Scores {last_success_row[3] or 0}"
+                )
+                if last_success_row
+                else "—"
+            ),
             "stale": last_run_at is None or last_run_at < stale_cutoff,
         },
         {
@@ -472,13 +533,13 @@ def dashboard(request: Request):
         },
     ]
 
-    total_uk   = cov_row[0] if cov_row else 0
+    total_uk = cov_row[0] if cov_row else 0
     enriched_uk = cov_row[1] if cov_row else 0
     with_officers = cov_row[2] if cov_row else 0
-    with_pscs  = cov_row[3] if cov_row else 0
-    total_lei  = cov_row[4] if cov_row else 0
+    with_pscs = cov_row[3] if cov_row else 0
+    total_lei = cov_row[4] if cov_row else 0
     linked_lei = cov_row[5] if cov_row else 0
-    total_mu   = cov_row[6] if cov_row else 0
+    total_mu = cov_row[6] if cov_row else 0
 
     return templates.TemplateResponse(
         request,
@@ -488,26 +549,26 @@ def dashboard(request: Request):
             # Panel 1
             "sources": sources,
             # Panel 2
-            "total_leads":   vol_row[0] if vol_row else 0,
-            "leads_7d":      vol_row[1] if vol_row else 0,
-            "leads_30d":     vol_row[2] if vol_row else 0,
-            "s0_39":         score_row[0] if score_row else 0,
-            "s40_59":        score_row[1] if score_row else 0,
-            "s60_79":        score_row[2] if score_row else 0,
-            "s80_100":       score_row[3] if score_row else 0,
-            "total_scored":  score_row[4] if score_row else 0,
+            "total_leads": vol_row[0] if vol_row else 0,
+            "leads_7d": vol_row[1] if vol_row else 0,
+            "leads_30d": vol_row[2] if vol_row else 0,
+            "s0_39": score_row[0] if score_row else 0,
+            "s40_59": score_row[1] if score_row else 0,
+            "s60_79": score_row[2] if score_row else 0,
+            "s80_100": score_row[3] if score_row else 0,
+            "total_scored": score_row[4] if score_row else 0,
             # Panel 3
-            "total_uk":       total_uk,
+            "total_uk": total_uk,
             "pct_enriched_uk": _pct(enriched_uk, total_uk),
-            "with_officers":  with_officers,
-            "with_pscs":      with_pscs,
-            "total_lei":      total_lei,
+            "with_officers": with_officers,
+            "with_pscs": with_pscs,
+            "total_lei": total_lei,
             "pct_lei_linked": _pct(linked_lei, total_lei),
-            "total_mu":       total_mu,
+            "total_mu": total_mu,
             # Panel 4
-            "status_counts":   status_counts,
+            "status_counts": status_counts,
             "top_introducers": top_introducers,
-        }
+        },
     )
 
 
@@ -554,7 +615,10 @@ def queue(request: Request):
         "date": "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
         "date_asc": "c.incorporation_date ASC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
         "name": "c.company_name ASC",
-    }.get(filters["sort"], "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC")
+    }.get(
+        filters["sort"],
+        "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+    )
 
     count_sql = f"""
         SELECT COUNT(*)
@@ -620,7 +684,11 @@ def queue(request: Request):
         context={
             "rows": rendered_rows,
             "total": total,
-            "refreshed_at": f"{refreshed_at.day} {refreshed_at.strftime('%b %Y, %H:%M')} UTC" if refreshed_at else None,
+            "refreshed_at": (
+                f"{refreshed_at.day} {refreshed_at.strftime('%b %Y, %H:%M')} UTC"
+                if refreshed_at
+                else None
+            ),
             "filters": filters,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
@@ -636,14 +704,19 @@ def queue(request: Request):
 @app.get("/leads/{lead_id}", response_class=HTMLResponse)
 def lead_detail(request: Request, lead_id: UUID):
     with get_conn() as conn:
+        _ensure_person_email_columns(conn)
+        _ensure_priority_columns(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
-                       c.incorporation_date, c.registered_address, c.source_system,
-                       c.source_ref, c.verify_url,
-                       ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
-                       ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at
+                  SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
+                      c.incorporation_date, c.registered_address, c.source_system,
+                      c.source_ref, c.verify_url, c.website,
+                      ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
+                      ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at,
+                      ls.arie_fit_score, ls.priority_score, ls.reachability_status,
+                      ls.lead_readiness, ls.enrichment_tier, ls.why_reasons,
+                      ls.freshness_score, ls.keyword_score
                 FROM companies c
                 LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
                 LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -680,8 +753,27 @@ def lead_detail(request: Request, lead_id: UUID):
 
             cur.execute(
                 """
-                SELECT officer_name, role, appointed_on, resigned_on,
-                       nationality, country_of_residence
+                SELECT lei_code, legal_name, registered_as, entity_status,
+                       registration_status, registered_on, managing_lou,
+                       gleif_url, last_seen
+                FROM lei_records
+                WHERE company_id IS NULL
+                  AND (
+                    registered_as = %s
+                    OR regexp_replace(lower(legal_name), '[^a-z0-9]+', '', 'g')
+                       = regexp_replace(lower(%s), '[^a-z0-9]+', '', 'g')
+                  )
+                ORDER BY last_seen DESC NULLS LAST, registered_on DESC NULLS LAST
+                LIMIT 5
+                """,
+                (row[7], row[1]),
+            )
+            lei_reverse_rows = cur.fetchall()
+
+            cur.execute(
+                """
+                  SELECT id, officer_name, role, appointed_on, resigned_on,
+                      nationality, country_of_residence, email
                 FROM company_officers
                 WHERE company_id = %s
                 ORDER BY appointed_on DESC NULLS LAST, officer_name
@@ -692,8 +784,8 @@ def lead_detail(request: Request, lead_id: UUID):
 
             cur.execute(
                 """
-                SELECT name, kind, nationality, country_of_residence,
-                       natures_of_control, notified_on, ceased_on
+                  SELECT id, name, kind, nationality, country_of_residence,
+                      natures_of_control, notified_on, ceased_on, email
                 FROM company_pscs
                 WHERE company_id = %s
                 ORDER BY notified_on DESC NULLS LAST, name
@@ -702,30 +794,27 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             pscs_rows = cur.fetchall()
 
-            cur.execute(
-                """
-                SELECT id, name, role, email, phone, linkedin_url, source, notes, created_at
-                FROM lead_contacts
-                WHERE company_id = %s
-                ORDER BY created_at ASC
-                """,
-                (lead_id,),
-            )
-            contacts_rows = cur.fetchall()
-
     score = {
-        "score": row[9] if row[9] is not None else 0,
-        "tier": row[10] if row[10] is not None else "LOW",
-        "reason_codes": row[11] if row[11] is not None else [],
-        "reason_summary": row[12] if row[12] is not None else "No signals matched.",
-        "scoring_version": row[13] if row[13] is not None else SCORING_VERSION,
+        "score": row[10] if row[10] is not None else 0,
+        "tier": row[11] if row[11] is not None else "LOW",
+        "reason_codes": row[12] if row[12] is not None else [],
+        "reason_summary": row[13] if row[13] is not None else "No signals matched.",
+        "scoring_version": row[14] if row[14] is not None else SCORING_VERSION,
+        "arie_fit_score": row[20] if row[20] is not None else 0,
+        "priority_score": row[21] if row[21] is not None else 0,
+        "reachability_status": row[22] or "research_required",
+        "lead_readiness": row[23] or "discovered",
+        "enrichment_tier": row[24] or "C",
+        "why_reasons": row[25] if row[25] is not None else [],
+        "freshness_score": row[26] if row[26] is not None else 0,
+        "keyword_score": row[27] if row[27] is not None else 0,
     }
     action = {
-        "assigned_to": row[14],
-        "status": row[15] or "New",
-        "notes": row[16] or "",
-        "contacted_at": row[17],
-        "follow_up_at": row[18],
+        "assigned_to": row[15],
+        "status": row[16] or "New",
+        "notes": row[17] or "",
+        "contacted_at": row[18],
+        "follow_up_at": row[19],
     }
     audit_rendered = [
         {
@@ -744,10 +833,7 @@ def lead_detail(request: Request, lead_id: UUID):
     lei = None
     if lei_row:
         registered_on = lei_row[3]
-        days_ago = (
-            (date.today() - registered_on).days
-            if registered_on else None
-        )
+        days_ago = (date.today() - registered_on).days if registered_on else None
         lei = {
             "lei_code": lei_row[0],
             "entity_status": lei_row[1],
@@ -762,40 +848,44 @@ def lead_detail(request: Request, lead_id: UUID):
 
     officers = [
         {
-            "name": r[0],
-            "role": r[1],
-            "appointed_on": r[2],
-            "resigned_on": r[3],
-            "nationality": r[4],
-            "country_of_residence": r[5],
+            "id": r[0],
+            "name": r[1],
+            "role": r[2],
+            "appointed_on": r[3],
+            "resigned_on": r[4],
+            "nationality": r[5],
+            "country_of_residence": r[6],
+            "email": r[7],
         }
         for r in officers_rows
     ]
     pscs = [
         {
-            "name": r[0],
-            "kind": r[1],
-            "nationality": r[2],
-            "country_of_residence": r[3],
-            "natures_of_control": r[4] or [],
-            "notified_on": r[5],
-            "ceased_on": r[6],
+            "id": r[0],
+            "name": r[1],
+            "kind": r[2],
+            "nationality": r[3],
+            "country_of_residence": r[4],
+            "natures_of_control": r[5] or [],
+            "notified_on": r[6],
+            "ceased_on": r[7],
+            "email": r[8],
         }
         for r in pscs_rows
     ]
-    contacts = [
+    lei_reverse_lookup = [
         {
-            "id": r[0],
-            "name": r[1],
-            "role": r[2] or "",
-            "email": r[3] or "",
-            "phone": r[4] or "",
-            "linkedin_url": r[5] or "",
-            "source": r[6] or "",
-            "notes": r[7] or "",
-            "created_at": r[8],
+            "lei_code": r[0],
+            "legal_name": r[1],
+            "registered_as": r[2],
+            "entity_status": r[3],
+            "registration_status": r[4],
+            "registered_on": r[5],
+            "lou_code": r[6],
+            "gleif_url": r[7],
+            "last_seen": r[8],
         }
-        for r in contacts_rows
+        for r in lei_reverse_rows
     ]
 
     return templates.TemplateResponse(
@@ -812,15 +902,16 @@ def lead_detail(request: Request, lead_id: UUID):
                 "source_system": row[6],
                 "source_ref": row[7],
                 "verify_url": row[8],
+                "website": row[9],
             },
             "score": score,
             "action": action,
             "audit_rows": audit_rendered,
             "last_activity": last_activity,
             "lei": lei,
+            "lei_reverse_lookup": lei_reverse_lookup,
             "officers": officers,
             "pscs": pscs,
-            "contacts": contacts,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
             "saved": False,
@@ -848,13 +939,17 @@ def lead_action(
                 (lead_id,),
             )
             existing = cur.fetchone()
-            old_value = None if existing is None else {
-                "assigned_to": existing[0],
-                "status": existing[1],
-                "notes": existing[2],
-                "contacted_at": existing[3].isoformat() if existing[3] else None,
-                "follow_up_at": existing[4].isoformat() if existing[4] else None,
-            }
+            old_value = (
+                None
+                if existing is None
+                else {
+                    "assigned_to": existing[0],
+                    "status": existing[1],
+                    "notes": existing[2],
+                    "contacted_at": existing[3].isoformat() if existing[3] else None,
+                    "follow_up_at": existing[4].isoformat() if existing[4] else None,
+                }
+            )
 
             cur.execute(
                 """
@@ -868,7 +963,14 @@ def lead_action(
                     follow_up_at = EXCLUDED.follow_up_at,
                     updated_at = NOW()
                 """,
-                (lead_id, assigned_to or None, status, notes or None, contacted_at, follow_up_at),
+                (
+                    lead_id,
+                    assigned_to or None,
+                    status,
+                    notes or None,
+                    contacted_at,
+                    follow_up_at,
+                ),
             )
 
             new_value = {
@@ -884,11 +986,72 @@ def lead_action(
                 INSERT INTO audit_log (entity_type, entity_id, action, actor, old_value, new_value, ip_address)
                 VALUES ('company', %s, 'rm_action_updated', %s, %s, %s, NULL)
                 """,
-                (lead_id, (_read_actor(request) or "unknown"), Jsonb(old_value), Jsonb(new_value)),
+                (
+                    lead_id,
+                    (_read_actor(request) or "unknown"),
+                    Jsonb(old_value),
+                    Jsonb(new_value),
+                ),
             )
             conn.commit()
 
-    return _render_action_panel(lead_id, assigned_to or "", status, notes, None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"), None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"), saved=True)
+    return _render_action_panel(
+        lead_id,
+        assigned_to or "",
+        status,
+        notes,
+        None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"),
+        None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"),
+        saved=True,
+    )
+
+
+@app.post("/leads/{lead_id}/person-email", response_class=HTMLResponse)
+def lead_person_email_update(
+    request: Request,
+    lead_id: UUID,
+    person_kind: str = Form(...),
+    person_id: UUID = Form(...),
+    email: str = Form(""),
+):
+    normalized_email = email.strip() or None
+
+    table_name = None
+    id_column = None
+    if person_kind == "officer":
+        table_name = "company_officers"
+        id_column = "id"
+    elif person_kind == "psc":
+        table_name = "company_pscs"
+        id_column = "id"
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported person kind")
+
+    with get_conn() as conn:
+        _ensure_person_email_columns(conn)
+        with conn.cursor() as cur:
+            cur.execute(
+                f"UPDATE {table_name} SET email = %s WHERE {id_column} = %s AND company_id = %s",
+                (normalized_email, person_id, lead_id),
+            )
+        conn.commit()
+
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+
+
+@app.post("/leads/{lead_id}/website", response_class=HTMLResponse)
+def lead_website_update(request: Request, lead_id: UUID, website: str = Form("")):
+    normalized_website = website.strip() or None
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE companies SET website = %s, updated_at = NOW() WHERE id = %s",
+                (normalized_website, lead_id),
+            )
+        conn.commit()
+
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -911,11 +1074,20 @@ def add_lead_contact(
                     (company_id, name, role, email, phone, linkedin_url, source, notes)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (str(lead_id), name.strip(), role.strip(), email.strip(),
-                 phone.strip(), linkedin_url.strip(), source, notes.strip()),
+                (
+                    str(lead_id),
+                    name.strip(),
+                    role.strip(),
+                    email.strip(),
+                    phone.strip(),
+                    linkedin_url.strip(),
+                    source,
+                    notes.strip(),
+                ),
             )
         conn.commit()
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
@@ -929,21 +1101,22 @@ def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
             )
         conn.commit()
     from fastapi.responses import RedirectResponse
+
     return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 # --- Inline assign/status endpoint for queue HTMX ---
 @app.post("/leads/{lead_id}/assign", response_class=HTMLResponse)
 def lead_assign(
-        request: Request,
-        lead_id: UUID,
-        assigned_to: str = Form(""),
-        status: str = Form("New"),
+    request: Request,
+    lead_id: UUID,
+    assigned_to: str = Form(""),
+    status: str = Form("New"),
 ):
-        with get_conn() as conn:
-                with conn.cursor() as cur:
-                        cur.execute(
-                                """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
                                 INSERT INTO rm_actions (company_id, assigned_to, status)
                                 VALUES (%s, %s, %s)
                                 ON CONFLICT (company_id) DO UPDATE SET
@@ -951,22 +1124,25 @@ def lead_assign(
                                         status = EXCLUDED.status,
                                         updated_at = NOW()
                                 """,
-                                (lead_id, assigned_to or None, status),
-                        )
-                        cur.execute(
-                                """
+                (lead_id, assigned_to or None, status),
+            )
+            cur.execute(
+                """
                                 INSERT INTO audit_log
                                     (entity_type, entity_id, action, actor, new_value)
                                 VALUES ('company', %s, 'quick_assign', %s, %s)
                                 """,
-                                (lead_id, (_read_actor(request) or "unknown"),
-                                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
-                        )
-                        conn.commit()
+                (
+                    lead_id,
+                    (_read_actor(request) or "unknown"),
+                    Jsonb({"assigned_to": assigned_to or None, "status": status}),
+                ),
+            )
+            conn.commit()
 
-                with conn.cursor() as cur:
-                        cur.execute(
-                                """
+        with conn.cursor() as cur:
+            cur.execute(
+                """
                                 SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
                                              c.incorporation_date, c.verify_url,
                                              qs.priority_score, qs.tier, qs.reason_summary,
@@ -976,34 +1152,46 @@ def lead_assign(
                                 LEFT JOIN rm_actions ra ON ra.company_id = c.id
                                 WHERE c.id = %s
                                 """,
-                                (lead_id,),
-                        )
-                        row = cur.fetchone()
+                (lead_id,),
+            )
+            row = cur.fetchone()
 
-        if row is None:
-                return HTMLResponse("<tr><td colspan='8'>Not found</td></tr>", status_code=404)
+    if row is None:
+        return HTMLResponse("<tr><td colspan='8'>Not found</td></tr>", status_code=404)
 
-        r = {
-                "id": row[0], "company_name": row[1], "jurisdiction": row[2],
-                "entity_type": _format_entity_type(row[3]),
-                "incorporation_date": row[4], "verify_url": row[5],
-                "priority_score": row[6], "tier": row[7], "reason_summary": row[8],
-                "assigned_to": row[9], "status": row[10],
-        }
+    r = {
+        "id": row[0],
+        "company_name": row[1],
+        "jurisdiction": row[2],
+        "entity_type": _format_entity_type(row[3]),
+        "incorporation_date": row[4],
+        "verify_url": row[5],
+        "priority_score": row[6],
+        "tier": row[7],
+        "reason_summary": row[8],
+        "assigned_to": row[9],
+        "status": row[10],
+    }
 
-        score_pct = r["priority_score"]
-        score_color = "#059669" if score_pct >= 70 else "#d97706" if score_pct >= 40 else "#d1d5db"
-        assigned_opts = "".join(
-                f'<option value="{nm}" {"selected" if nm == (r["assigned_to"] or "") else ""}>{nm}</option>'
-                for nm in RM_NAMES
-        )
-        status_opts = "".join(
-                f'<option value="{s}" {"selected" if s == (r["status"] or "New") else ""}>{s}</option>'
-                for s in _STATUSES
-        )
-        verify = f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>' if r["verify_url"] else ""
+    score_pct = r["priority_score"]
+    score_color = (
+        "#059669" if score_pct >= 70 else "#d97706" if score_pct >= 40 else "#d1d5db"
+    )
+    assigned_opts = "".join(
+        f'<option value="{nm}" {"selected" if nm == (r["assigned_to"] or "") else ""}>{nm}</option>'
+        for nm in RM_NAMES
+    )
+    status_opts = "".join(
+        f'<option value="{s}" {"selected" if s == (r["status"] or "New") else ""}>{s}</option>'
+        for s in _STATUSES
+    )
+    verify = (
+        f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>'
+        if r["verify_url"]
+        else ""
+    )
 
-        return HTMLResponse(f"""
+    return HTMLResponse(f"""
         <tr>
             <td><a href="/leads/{r['id']}">{escape(r['company_name'])}</a></td>
             <td>{escape(r['jurisdiction'])}</td>
@@ -1044,7 +1232,11 @@ def upload_form(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
-        context={"preview": None, "actor_names": ACTOR_NAMES, "current_actor": (_read_actor(request) or "")},
+        context={
+            "preview": None,
+            "actor_names": ACTOR_NAMES,
+            "current_actor": (_read_actor(request) or ""),
+        },
     )
 
 
@@ -1084,7 +1276,11 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
-        context={"preview": preview, "actor_names": ACTOR_NAMES, "current_actor": (_read_actor(request) or "")},
+        context={
+            "preview": preview,
+            "actor_names": ACTOR_NAMES,
+            "current_actor": (_read_actor(request) or ""),
+        },
     )
 
 
@@ -1113,13 +1309,18 @@ def upload_confirm(upload_id: UUID):
                 exists = cur.fetchone()
                 if exists is None:
                     raise HTTPException(status_code=404, detail="Upload not found")
-                raise HTTPException(status_code=409, detail="Upload already confirmed or rejected")
+                raise HTTPException(
+                    status_code=409, detail="Upload already confirmed or rejected"
+                )
 
             parsed_rows, validation_errors = claimed
             if validation_errors:
                 # Roll back the status change — this upload has errors and cannot be confirmed
                 conn.rollback()
-                raise HTTPException(status_code=400, detail="Upload has validation errors and cannot be confirmed")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Upload has validation errors and cannot be confirmed",
+                )
 
             parsed_rows = parsed_rows or []
             inserted = 0
@@ -1129,7 +1330,9 @@ def upload_confirm(upload_id: UUID):
                 jurisdiction = (row.get("jurisdiction") or "").strip()
                 entity_type = (row.get("entity_type") or "").strip() or None
                 website = (row.get("website") or "").strip() or None
-                normalised_name = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", company_name.lower())).strip()
+                normalised_name = re.sub(
+                    r"\s+", " ", re.sub(r"[^a-z0-9 ]", "", company_name.lower())
+                ).strip()
                 source_ref = f"upload:{upload_id}:{index}"
 
                 cur.execute(
@@ -1255,7 +1458,13 @@ def _audit_changes(old, new) -> list[dict]:
     if not isinstance(new, dict):
         if new is None and old is None:
             return []
-        return [{"label": "Value", "old": _format_audit_value(old), "new": _format_audit_value(new)}]
+        return [
+            {
+                "label": "Value",
+                "old": _format_audit_value(old),
+                "new": _format_audit_value(new),
+            }
+        ]
     old_dict = old if isinstance(old, dict) else {}
     changes = []
     # union of keys preserves all transitions, including new keys
@@ -1264,21 +1473,25 @@ def _audit_changes(old, new) -> list[dict]:
         new_v = new.get(key)
         if old_v == new_v:
             continue
-        changes.append({
-            "label": _audit_field_label(key),
-            "old": _format_audit_value(old_v),
-            "new": _format_audit_value(new_v),
-        })
+        changes.append(
+            {
+                "label": _audit_field_label(key),
+                "old": _format_audit_value(old_v),
+                "new": _format_audit_value(new_v),
+            }
+        )
     # if nothing changed but it's still a meaningful event, show a compact summary
     if not changes:
         for key, val in new.items():
             if val in (None, ""):
                 continue
-            changes.append({
-                "label": _audit_field_label(key),
-                "old": None,
-                "new": _format_audit_value(val),
-            })
+            changes.append(
+                {
+                    "label": _audit_field_label(key),
+                    "old": None,
+                    "new": _format_audit_value(val),
+                }
+            )
     return changes
 
 
@@ -1360,30 +1573,50 @@ def audit_log(request: Request):
             )
             rows = cur.fetchall()
 
-            cur.execute("SELECT DISTINCT actor FROM audit_log WHERE actor IS NOT NULL ORDER BY 1")
+            cur.execute(
+                "SELECT DISTINCT actor FROM audit_log WHERE actor IS NOT NULL ORDER BY 1"
+            )
             actor_options = [r[0] for r in cur.fetchall()]
-            cur.execute("SELECT DISTINCT action FROM audit_log WHERE action IS NOT NULL ORDER BY 1")
+            cur.execute(
+                "SELECT DISTINCT action FROM audit_log WHERE action IS NOT NULL ORDER BY 1"
+            )
             action_options = [r[0] for r in cur.fetchall()]
 
     total_pages = max((total + page_size - 1) // page_size, 1)
     rendered_rows = []
     for row in rows:
-        entity_type, entity_id, action, actor, old_v, new_v, created_at, company_name = row
-        rendered_rows.append({
-            "entity_type": entity_type,
-            "entity_id": entity_id,
-            "entity_url": f"/leads/{entity_id}" if entity_type == "company" else None,
-            "entity_label": company_name or (str(entity_id)[:8] if entity_id else "—"),
-            "action": action,
-            "action_label": _audit_action_label(action),
-            "actor": _humanize_actor(actor),
-            "actor_raw": actor or "",
-            "changes": _audit_changes(old_v, new_v),
-            "created_at": created_at,
-            "created_at_iso": created_at.isoformat() if created_at else "",
-            "created_at_display": created_at.strftime("%d %b %Y %H:%M") if created_at else "",
-            "created_at_relative": _relative_time(created_at),
-        })
+        (
+            entity_type,
+            entity_id,
+            action,
+            actor,
+            old_v,
+            new_v,
+            created_at,
+            company_name,
+        ) = row
+        rendered_rows.append(
+            {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "entity_url": (
+                    f"/leads/{entity_id}" if entity_type == "company" else None
+                ),
+                "entity_label": company_name
+                or (str(entity_id)[:8] if entity_id else "—"),
+                "action": action,
+                "action_label": _audit_action_label(action),
+                "actor": _humanize_actor(actor),
+                "actor_raw": actor or "",
+                "changes": _audit_changes(old_v, new_v),
+                "created_at": created_at,
+                "created_at_iso": created_at.isoformat() if created_at else "",
+                "created_at_display": (
+                    created_at.strftime("%d %b %Y %H:%M") if created_at else ""
+                ),
+                "created_at_relative": _relative_time(created_at),
+            }
+        )
 
     action_choices = [(a, _audit_action_label(a)) for a in action_options]
 
@@ -1402,4 +1635,3 @@ def audit_log(request: Request):
             "action_choices": action_choices,
         },
     )
-

@@ -1,6 +1,14 @@
 import re
+from datetime import date
 
-SCORING_VERSION = "2026.1.0"
+SCORING_VERSION = "2026.2.0"
+
+DEFAULT_PRIORITY_WEIGHTS = {
+    "arie_fit": 0.40,
+    "founder": 0.30,
+    "lead": 0.20,
+    "risk": 0.10,
+}
 
 _FINANCIAL_KEYWORDS = {
     "capital",
@@ -323,3 +331,289 @@ def build_reason_summary(codes: list[str]) -> str:
     if lei_phrase:
         return f"{base}, {lei_phrase}."
     return f"{base}."
+
+
+# ---------------------------------------------------------------------------
+# PR 1: dimensional scores feeding the new priority_score
+# ---------------------------------------------------------------------------
+
+_FIT_FINANCIAL_SIC_PREFIXES = ("642", "663", "620", "649", "661", "662", "643", "651")
+_FIT_TRADE_SIC_PREFIXES = ("46", "47", "493", "521", "522", "461", "462", "463", "464")
+
+_CORE_CORRIDOR_JURISDICTIONS = {
+    "UK",
+    "GB",
+    "UAE",
+    "AE",
+    "MAURITIUS",
+    "MU",
+    "HK",
+    "HONG KONG",
+    "SG",
+    "SINGAPORE",
+}
+
+
+def calculate_arie_fit(company: dict) -> tuple[int, list[str]]:
+    """Pure ICP fit signal — does the entity look like an Arie target?
+    Returns (score 0-100, reason_codes).
+    """
+    score = 0
+    codes: list[str] = []
+
+    entity_type = (company.get("entity_type") or "").lower().strip()
+    jurisdiction = (company.get("jurisdiction") or "").strip()
+    sic_strs = [str(s).strip() for s in (company.get("sic_codes") or [])]
+
+    if "holding" in entity_type:
+        score += 40
+        codes.append("FIT_HOLDING")
+    elif "investment" in entity_type or "vehicle" in entity_type:
+        score += 40
+        codes.append("FIT_INVESTMENT_VEHICLE")
+    elif "fund" in entity_type:
+        score += 35
+        codes.append("FIT_FUND")
+    elif entity_type in {
+        "ltd",
+        "limited",
+        "plc",
+        "private limited company",
+        "public limited company",
+        "private limited",
+    }:
+        score += 10
+        codes.append("FIT_STANDARD_ENTITY")
+
+    if jurisdiction == "Mauritius":
+        if "gbc" in entity_type or "global business" in entity_type:
+            score += 35
+            codes.append("FIT_MAURITIUS_GBC")
+        elif "authorised" in entity_type or entity_type == "ac":
+            score += 25
+            codes.append("FIT_MAURITIUS_AC")
+        else:
+            score += 15
+            codes.append("FIT_MAURITIUS_OTHER")
+    elif jurisdiction == "UK":
+        score += 5
+        codes.append("FIT_UK_BASE")
+
+    if any(s.startswith(p) for s in sic_strs for p in _FIT_FINANCIAL_SIC_PREFIXES):
+        score += 30
+        codes.append("FIT_FINANCIAL_SIC")
+    if any(s.startswith(p) for s in sic_strs for p in _FIT_TRADE_SIC_PREFIXES):
+        score += 20
+        codes.append("FIT_TRADE_SIC")
+
+    return min(score, 100), codes
+
+
+def calculate_freshness(
+    incorporation_date: date | None, *, today: date | None = None
+) -> int:
+    """Newer companies are more valuable — they're still picking a bank."""
+    if incorporation_date is None:
+        return 0
+    today = today or date.today()
+    try:
+        age_days = (today - incorporation_date).days
+    except Exception:
+        return 0
+    if age_days < 0:
+        return 0
+    if age_days <= 7:
+        return 100
+    if age_days <= 30:
+        return 80
+    if age_days <= 90:
+        return 50
+    if age_days <= 180:
+        return 25
+    return 10
+
+
+def calculate_keyword_score(
+    name: str, keywords: list[dict] | None
+) -> tuple[int, list[str]]:
+    """Name-keyword score driven by the lead_keywords config table.
+    `keywords` rows: {term, polarity, weight}. Returns (0-100, matched terms).
+    """
+    if not name or not keywords:
+        return 50, []  # neutral when config empty
+    words = _name_words(name)
+    score = 50
+    matched: list[str] = []
+    for kw in keywords:
+        term = (kw.get("term") or "").lower().strip()
+        if not term:
+            continue
+        polarity = kw.get("polarity") or "positive"
+        weight = int(kw.get("weight") or 0)
+        if term in words or term in name.lower():
+            if polarity == "positive":
+                score += weight
+                matched.append(f"+{term}")
+            else:
+                score -= weight
+                matched.append(f"-{term}")
+    return max(0, min(score, 100)), matched
+
+
+def derive_reachability_status(
+    *, website: str | None, has_email: bool, linkedin_url: str | None
+) -> str:
+    """Status enum: ready_outreach / research_required / no_contact_path."""
+    web = bool((website or "").strip())
+    li = bool((linkedin_url or "").strip())
+    channels = sum([web, has_email, li])
+    if channels >= 2:
+        return "ready_outreach"
+    if channels == 1:
+        return "research_required"
+    return "no_contact_path"
+
+
+def derive_lead_readiness(
+    *,
+    arie_fit_score: int,
+    reachability_status: str,
+    rm_status: str | None,
+) -> str:
+    """Stage enum: discovered / qualified / contactable / engaged."""
+    engaged_statuses = {"Contacted", "Onboarding", "Qualified"}
+    if rm_status in engaged_statuses:
+        return "engaged"
+    if arie_fit_score >= 60 and reachability_status == "ready_outreach":
+        return "contactable"
+    if arie_fit_score >= 60:
+        return "qualified"
+    return "discovered"
+
+
+def derive_enrichment_tier(priority_score: int) -> str:
+    """Tiered vendor gating: A top 5% (on-demand), B top 20% (nightly), C never."""
+    if priority_score >= 80:
+        return "A"
+    if priority_score >= 60:
+        return "B"
+    return "C"
+
+
+def compute_priority_score(
+    *,
+    arie_fit_score: int,
+    founder_quality_score: int,
+    freshness_score: int,
+    keyword_score: int,
+    cross_border_score: int,
+    risk_score: int,
+    weights: dict | None = None,
+) -> int:
+    """Weighted combination. `lead` = average of freshness, keyword, cross_border."""
+    w = {**DEFAULT_PRIORITY_WEIGHTS, **(weights or {})}
+    lead_component = (freshness_score + keyword_score + cross_border_score) / 3.0
+    raw = (
+        w["arie_fit"] * arie_fit_score
+        + w["founder"] * founder_quality_score
+        + w["lead"] * lead_component
+        + w["risk"] * risk_score
+    )
+    return max(0, min(100, int(round(raw))))
+
+
+def build_why_reasons(
+    *,
+    company: dict,
+    arie_fit_score: int,
+    freshness_score: int,
+    reachability_status: str,
+    has_website: bool,
+    has_email: bool,
+    has_linkedin: bool,
+    lei: dict | None,
+    officers_count: int,
+) -> list[str]:
+    """Deterministic bullet list shown above the narrative."""
+    bullets: list[str] = []
+    inc = company.get("incorporation_date")
+    if inc:
+        try:
+            age = (date.today() - inc).days
+            if age <= 7:
+                bullets.append(f"Incorporated {age} day{'s' if age != 1 else ''} ago")
+            elif age <= 30:
+                bullets.append(f"Incorporated {age} days ago")
+            elif age <= 90:
+                bullets.append("Incorporated within last 90 days")
+        except Exception:
+            pass
+
+    sic_strs = [str(s).strip() for s in (company.get("sic_codes") or [])]
+    if any(s.startswith(p) for s in sic_strs for p in _FIT_FINANCIAL_SIC_PREFIXES):
+        bullets.append("Financial / fund-management SIC code")
+    if any(s.startswith(p) for s in sic_strs for p in _FIT_TRADE_SIC_PREFIXES):
+        bullets.append("Import / export / trading SIC code")
+
+    entity_type = (company.get("entity_type") or "").lower()
+    if "holding" in entity_type:
+        bullets.append("Holding-company structure")
+    elif "fund" in entity_type:
+        bullets.append("Fund structure")
+
+    if has_website:
+        bullets.append("Website discovered")
+    if has_email:
+        bullets.append("Contact email on file")
+    if has_linkedin:
+        bullets.append("LinkedIn page found")
+
+    if lei:
+        if (
+            lei.get("days_since_registration") is not None
+            and lei["days_since_registration"] <= 90
+        ):
+            bullets.append("Fresh LEI (active onboarding)")
+        else:
+            bullets.append("Legal Entity Identifier registered")
+
+    if officers_count >= 1:
+        bullets.append(
+            f"{officers_count} active director{'s' if officers_count != 1 else ''} on record"
+        )
+
+    if arie_fit_score >= 70:
+        bullets.append("Arie Fit: High")
+    elif arie_fit_score >= 40:
+        bullets.append("Arie Fit: Medium")
+
+    if reachability_status == "ready_outreach":
+        bullets.append("Ready for outreach")
+
+    return bullets
+
+
+def load_priority_weights(conn) -> dict:
+    """Pull current weights from scoring_weights config table, else defaults."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT weights FROM scoring_weights WHERE id = 'priority'")
+            row = cur.fetchone()
+            if row and row[0]:
+                return {**DEFAULT_PRIORITY_WEIGHTS, **row[0]}
+    except Exception:
+        pass
+    return dict(DEFAULT_PRIORITY_WEIGHTS)
+
+
+def load_lead_keywords(conn) -> list[dict]:
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT term, polarity, weight FROM lead_keywords WHERE active = TRUE"
+            )
+            return [
+                {"term": r[0], "polarity": r[1], "weight": r[2]} for r in cur.fetchall()
+            ]
+    except Exception:
+        return []

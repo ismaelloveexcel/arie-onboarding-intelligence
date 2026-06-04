@@ -9,11 +9,28 @@ import time
 
 from src.config import CH_ENRICHMENT_BATCH_SIZE
 from src.db import get_conn
-from src.ingestion.companies_house import fetch_uk_incorporations, run_ch_enrichment_batch
+from src.ingestion.companies_house import (
+    fetch_uk_incorporations,
+    run_ch_enrichment_batch,
+)
 from src.ingestion.gleif import fetch_gleif_registrations
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.ingestion.mauritius import fetch_mauritius_incorporations
-from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
+from src.scoring import (
+    SCORING_VERSION,
+    build_reason_summary,
+    build_why_reasons,
+    calculate_arie_fit,
+    calculate_freshness,
+    calculate_keyword_score,
+    calculate_score,
+    compute_priority_score,
+    derive_enrichment_tier,
+    derive_lead_readiness,
+    derive_reachability_status,
+    load_lead_keywords,
+    load_priority_weights,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +51,14 @@ def _release_lock(conn) -> None:
 def _score_new_companies(conn) -> int:
     """Score companies that have no current score or whose current score
     was produced by a different scoring_version. Returns count scored."""
+    weights = load_priority_weights(conn)
+    keywords = load_lead_keywords(conn)
+
     with conn.cursor() as cur:
         cur.execute(
             """
             SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
-                   c.sic_codes, c.incorporation_date
+                   c.sic_codes, c.incorporation_date, c.website
             FROM companies c
             WHERE NOT EXISTS (
                 SELECT 1 FROM lead_scores ls
@@ -53,7 +73,7 @@ def _score_new_companies(conn) -> int:
 
     count = 0
     for row in rows:
-        company_id, name, jurisdiction, entity_type, sic_codes, inc_date = row
+        company_id, name, jurisdiction, entity_type, sic_codes, inc_date, website = row
         company = {
             "company_name": name,
             "jurisdiction": jurisdiction,
@@ -82,31 +102,108 @@ def _score_new_companies(conn) -> int:
 
         with conn.cursor() as psc_cur:
             psc_cur.execute(
-                "SELECT country_of_residence, ceased_on FROM company_pscs WHERE company_id = %s",
+                "SELECT country_of_residence, ceased_on, email FROM company_pscs WHERE company_id = %s",
                 (company_id,),
             )
+            psc_raw = psc_cur.fetchall()
             pscs_data = [
-                {"country_of_residence": row[0], "ceased_on": row[1]}
-                for row in psc_cur.fetchall()
+                {"country_of_residence": r[0], "ceased_on": r[1]} for r in psc_raw
             ]
+            psc_email_present = any((r[2] or "").strip() for r in psc_raw)
 
         with conn.cursor() as off_cur:
             off_cur.execute(
-                "SELECT nationality, resigned_on FROM company_officers WHERE company_id = %s",
+                "SELECT nationality, resigned_on, email FROM company_officers WHERE company_id = %s",
                 (company_id,),
             )
+            off_raw = off_cur.fetchall()
             officers_data = [
-                {"nationality": row[0], "resigned_on": row[1]}
-                for row in off_cur.fetchall()
+                {"nationality": r[0], "resigned_on": r[1]} for r in off_raw
             ]
+            officer_email_present = any((r[2] or "").strip() for r in off_raw)
+            active_officers = sum(1 for r in off_raw if r[1] is None)
 
+        # Legacy intelligence score (drives the existing Score Breakdown card)
         score, codes, tier = calculate_score(
-            company, lei=lei_data, pscs=pscs_data or None, officers=officers_data or None
+            company,
+            lei=lei_data,
+            pscs=pscs_data or None,
+            officers=officers_data or None,
         )
         summary = build_reason_summary(codes)
 
+        # New dimensional scores
+        arie_fit_score, _fit_codes = calculate_arie_fit(company)
+        freshness_score = calculate_freshness(inc_date)
+        keyword_score, _kw_matched = calculate_keyword_score(name or "", keywords)
+        founder_quality_score = 50  # neutral until PR 3
+        cross_border_score = 0  # populated in PR 3
+        risk_score = 50  # neutral until PR 5
+
+        # Pull company-level contact assets (empty until PR 2)
+        with conn.cursor() as cc_cur:
+            cc_cur.execute(
+                "SELECT website, generic_email, linkedin_url FROM company_contacts WHERE company_id = %s",
+                (company_id,),
+            )
+            cc_row = cc_cur.fetchone()
+        cc_website = cc_row[0] if cc_row else None
+        cc_email = cc_row[1] if cc_row else None
+        cc_linkedin = cc_row[2] if cc_row else None
+
+        has_website = bool((website or "").strip()) or bool((cc_website or "").strip())
+        has_email = (
+            officer_email_present or psc_email_present or bool((cc_email or "").strip())
+        )
+        has_linkedin = bool((cc_linkedin or "").strip())
+
+        reachability_status = derive_reachability_status(
+            website=website or cc_website,
+            has_email=has_email,
+            linkedin_url=cc_linkedin,
+        )
+
+        # Get existing RM status (if any) so readiness reflects engagement
+        with conn.cursor() as ra_cur:
+            ra_cur.execute(
+                "SELECT status FROM rm_actions WHERE company_id = %s", (company_id,)
+            )
+            ra_row = ra_cur.fetchone()
+        rm_status = ra_row[0] if ra_row else None
+
+        lead_readiness = derive_lead_readiness(
+            arie_fit_score=arie_fit_score,
+            reachability_status=reachability_status,
+            rm_status=rm_status,
+        )
+
+        priority_score = compute_priority_score(
+            arie_fit_score=arie_fit_score,
+            founder_quality_score=founder_quality_score,
+            freshness_score=freshness_score,
+            keyword_score=keyword_score,
+            cross_border_score=cross_border_score,
+            risk_score=risk_score,
+            weights=weights,
+        )
+
+        enrichment_tier = derive_enrichment_tier(priority_score)
+
+        why_reasons = build_why_reasons(
+            company=company,
+            arie_fit_score=arie_fit_score,
+            freshness_score=freshness_score,
+            reachability_status=reachability_status,
+            has_website=has_website,
+            has_email=has_email,
+            has_linkedin=has_linkedin,
+            lei=lei_data,
+            officers_count=active_officers,
+        )
+
+        from psycopg.types.json import Jsonb
+
         with conn.cursor() as cur:
-            # Invalidate any existing current score first
             cur.execute(
                 "UPDATE lead_scores SET is_current = FALSE WHERE company_id = %s AND is_current = TRUE",
                 (company_id,),
@@ -115,10 +212,36 @@ def _score_new_companies(conn) -> int:
                 """
                 INSERT INTO lead_scores (
                     company_id, score, tier, reason_codes,
-                    reason_summary, scoring_version, is_current
-                ) VALUES (%s, %s, %s, %s, %s, %s, TRUE)
+                    reason_summary, scoring_version, is_current,
+                    arie_fit_score, keyword_score, freshness_score,
+                    founder_quality_score, cross_border_score, risk_score,
+                    priority_score, reachability_status, lead_readiness,
+                    enrichment_tier, why_reasons
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, TRUE,
+                    %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
+                )
                 """,
-                (company_id, score, tier, codes, summary, SCORING_VERSION),
+                (
+                    company_id,
+                    score,
+                    tier,
+                    codes,
+                    summary,
+                    SCORING_VERSION,
+                    arie_fit_score,
+                    keyword_score,
+                    freshness_score,
+                    founder_quality_score,
+                    cross_border_score,
+                    risk_score,
+                    priority_score,
+                    reachability_status,
+                    lead_readiness,
+                    enrichment_tier,
+                    Jsonb(why_reasons),
+                ),
             )
         count += 1
 
@@ -152,7 +275,7 @@ def _refresh_queue(conn) -> int:
             FROM companies c
             JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
             WHERE c.canonical_company_id IS NULL
-            ORDER BY ls.score DESC
+            ORDER BY GREATEST(COALESCE(ls.priority_score, 0), ls.score) DESC
             """)
         cur.execute("SELECT COUNT(*) FROM queue_snapshot")
         count = cur.fetchone()[0]
