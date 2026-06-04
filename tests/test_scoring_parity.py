@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
-from src.shadow_scoring import recompute_lead
+from src.shadow_scoring import MODEL_VERSION, RULES_VERSION, SCORE_VERSION, WEIGHTS_VERSION, recompute_lead
 
 
 def _snapshot() -> dict:
@@ -69,6 +69,10 @@ def test_parity_manual_nightly_backfill_identical_invariants(monkeypatch):
             conn,
             "11111111-1111-1111-1111-111111111111",
             trigger_type=trigger,
+            scoring_version=SCORE_VERSION,
+            weights_version=WEIGHTS_VERSION,
+            rules_version=RULES_VERSION,
+            model_version=MODEL_VERSION,
             snapshot_timestamp=fixed_timestamp,
         )
         signal_insert, evidence_insert = _extract_run_inserts(cur)

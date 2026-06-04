@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 SCORE_VERSION = "2026.2.0-shadow"
 WEIGHTS_VERSION = "2026.2.0-w1"
 RULES_VERSION = "2026.2.0-r1"
+MODEL_VERSION = "deterministic-v1"
 
 ALLOWED_TRIGGER_TYPES = ("nightly", "manual", "webhook", "backfill", "view")
 
@@ -105,7 +106,14 @@ def _why_from_evidence(evidence: list[EvidenceSignal]) -> str:
     return " | ".join(f"{item.label} (+{item.impact})" for item in top)
 
 
-def compute_shadow_score(snapshot: dict[str, Any]) -> dict[str, Any]:
+def compute_shadow_score(
+    snapshot: dict[str, Any],
+    *,
+    scoring_version: str,
+    weights_version: str,
+    rules_version: str,
+    model_version: str,
+) -> dict[str, Any]:
     company = snapshot["company"]
     lei = snapshot.get("lei")
     pscs = snapshot.get("pscs") or None
@@ -116,6 +124,7 @@ def compute_shadow_score(snapshot: dict[str, Any]) -> dict[str, Any]:
         lei=lei,
         pscs=pscs,
         officers=officers,
+        reference_date=snapshot["snapshot_timestamp"].date(),
     )
 
     keyword_score = min(
@@ -144,9 +153,10 @@ def compute_shadow_score(snapshot: dict[str, Any]) -> dict[str, Any]:
         "snapshot": snapshot,
         "reason_codes": sorted(reason_codes),
         "evidence": [item.as_dict() for item in evidence],
-        "score_version": SCORE_VERSION,
-        "weights_version": WEIGHTS_VERSION,
-        "rules_version": RULES_VERSION,
+        "score_version": scoring_version,
+        "weights_version": weights_version,
+        "rules_version": rules_version,
+        "model_version": model_version,
     }
     evidence_hash = hashlib.sha256(
         json.dumps(
@@ -168,9 +178,10 @@ def compute_shadow_score(snapshot: dict[str, Any]) -> dict[str, Any]:
         "why_output": why_output,
         "evidence": [item.as_dict() for item in evidence],
         "evidence_hash": evidence_hash,
-        "score_version": SCORE_VERSION,
-        "weights_version": WEIGHTS_VERSION,
-        "rules_version": RULES_VERSION,
+        "score_version": scoring_version,
+        "weights_version": weights_version,
+        "rules_version": rules_version,
+        "model_version": model_version,
     }
 
 
@@ -271,6 +282,7 @@ def _record_score_run(
     score_version: str,
     weights_version: str,
     rules_version: str,
+    model_version: str,
     evidence_hash: str | None = None,
     snapshot_timestamp: datetime | None = None,
     error_code: str | None = None,
@@ -283,10 +295,10 @@ def _record_score_run(
             """
             INSERT INTO score_runs (
                 lead_id, trigger_type, score_version, weights_version, rules_version,
-                status, duration_ms, error_code, error_message, evidence_hash,
-                snapshot_timestamp, idempotency_key, source_event_id
+                model_version, status, duration_ms, error_code, error_message,
+                evidence_hash, snapshot_timestamp, idempotency_key, source_event_id
             )
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING run_id
             """,
             (
@@ -295,6 +307,7 @@ def _record_score_run(
                 score_version,
                 weights_version,
                 rules_version,
+                model_version,
                 status,
                 duration_ms,
                 error_code,
@@ -313,6 +326,10 @@ def recompute_lead(
     lead_id: str | UUID,
     *,
     trigger_type: str,
+    scoring_version: str,
+    weights_version: str,
+    rules_version: str,
+    model_version: str,
     snapshot_timestamp: datetime | None = None,
     idempotency_key: str | None = None,
     source_event_id: str | None = None,
@@ -347,9 +364,10 @@ def recompute_lead(
                 trigger_type=trigger_type,
                 status="skipped",
                 duration_ms=0,
-                score_version=SCORE_VERSION,
-                weights_version=WEIGHTS_VERSION,
-                rules_version=RULES_VERSION,
+                score_version=scoring_version,
+                weights_version=weights_version,
+                rules_version=rules_version,
+                model_version=model_version,
                 error_code="idempotent_replay",
                 error_message="Existing successful run found for idempotency key",
                 idempotency_key=idempotency_key,
@@ -365,22 +383,29 @@ def recompute_lead(
 
     try:
         snapshot = load_lead_snapshot(conn, lead_id_str, snapshot_at)
-        score = compute_shadow_score(snapshot)
+        score = compute_shadow_score(
+            snapshot,
+            scoring_version=scoring_version,
+            weights_version=weights_version,
+            rules_version=rules_version,
+            model_version=model_version,
+        )
 
         with conn.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO score_versions (
-                    score_version, weights_version, rules_version,
+                    score_version, weights_version, rules_version, model_version,
                     changed_by, change_reason
                 )
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (score_version, weights_version, rules_version) DO NOTHING
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (score_version, weights_version, rules_version, model_version) DO NOTHING
                 """,
                 (
                     score["score_version"],
                     score["weights_version"],
                     score["rules_version"],
+                    score["model_version"],
                     "system",
                     "shadow baseline",
                 ),
@@ -399,12 +424,12 @@ def recompute_lead(
                 INSERT INTO lead_signal_scores (
                     company_id, snapshot_timestamp, score_state, fit_score,
                     founder_quality_score, keyword_score, risk_score, priority_score,
-                    score_version, weights_version, rules_version, evidence_hash,
+                    score_version, weights_version, rules_version, model_version, evidence_hash,
                     why_output, computed_at, is_current
                 )
                 VALUES (
                     %s, %s, 'scored', %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, NOW(), TRUE
+                    %s, %s, %s, %s, %s, %s, NOW(), TRUE
                 )
                 RETURNING id
                 """,
@@ -419,6 +444,7 @@ def recompute_lead(
                     score["score_version"],
                     score["weights_version"],
                     score["rules_version"],
+                    score["model_version"],
                     score["evidence_hash"],
                     score["why_output"],
                 ),
@@ -459,6 +485,7 @@ def recompute_lead(
             score_version=score["score_version"],
             weights_version=score["weights_version"],
             rules_version=score["rules_version"],
+            model_version=score["model_version"],
             evidence_hash=score["evidence_hash"],
             snapshot_timestamp=snapshot_at,
             idempotency_key=idempotency_key,
@@ -474,6 +501,7 @@ def recompute_lead(
             "score_version": score["score_version"],
             "weights_version": score["weights_version"],
             "rules_version": score["rules_version"],
+            "model_version": score["model_version"],
             "evidence_hash": score["evidence_hash"],
             "priority_score": score["priority_score"],
         }
@@ -498,9 +526,10 @@ def recompute_lead(
             trigger_type=trigger_type,
             status="failure",
             duration_ms=duration_ms,
-            score_version=SCORE_VERSION,
-            weights_version=WEIGHTS_VERSION,
-            rules_version=RULES_VERSION,
+            score_version=scoring_version,
+            weights_version=weights_version,
+            rules_version=rules_version,
+            model_version=model_version,
             error_code=exc.__class__.__name__,
             error_message=message,
             snapshot_timestamp=snapshot_at,
@@ -530,7 +559,7 @@ def select_active_lead_ids(
             LEFT JOIN queue_snapshot qs ON qs.canonical_company_id = c.id
             WHERE
                 (qs.canonical_company_id IS NOT NULL OR COALESCE(ra.assigned_to, '') <> '')
-                AND COALESCE(ra.status, 'New') <> ALL(%s)
+                AND COALESCE(ra.status, 'new') <> ALL(%s)
                 AND c.updated_at >= NOW() - (%s || ' days')::interval
                 AND (
                     c.score_state <> 'scored'
@@ -568,7 +597,15 @@ def backfill_active_shadow_scores(
         for lead_id in lead_ids:
             total_scanned += 1
             try:
-                recompute_lead(conn, lead_id, trigger_type="backfill")
+                recompute_lead(
+                    conn,
+                    lead_id,
+                    trigger_type="backfill",
+                    scoring_version=SCORE_VERSION,
+                    weights_version=WEIGHTS_VERSION,
+                    rules_version=RULES_VERSION,
+                    model_version=MODEL_VERSION,
+                )
                 total_scored += 1
             except Exception:
                 total_failed += 1

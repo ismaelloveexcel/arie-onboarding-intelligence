@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
 from unittest.mock import MagicMock
 
-from src.shadow_scoring import recompute_lead
+from src.shadow_scoring import MODEL_VERSION, RULES_VERSION, SCORE_VERSION, WEIGHTS_VERSION, recompute_lead
 
 
 def _mock_conn():
@@ -53,6 +53,10 @@ def test_recompute_uses_exact_snapshot_timestamp_across_triggers(monkeypatch):
             conn,
             "11111111-1111-1111-1111-111111111111",
             trigger_type=trigger,
+            scoring_version=SCORE_VERSION,
+            weights_version=WEIGHTS_VERSION,
+            rules_version=RULES_VERSION,
+            model_version=MODEL_VERSION,
             snapshot_timestamp=fixed_ts,
         )
         for trigger in ("manual", "nightly", "backfill")
@@ -79,12 +83,20 @@ def test_same_snapshot_timestamp_yields_same_scoring_fingerprint(monkeypatch):
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="manual",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=fixed_ts,
     )
     second = recompute_lead(
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="nightly",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=fixed_ts,
     )
 
@@ -93,3 +105,4 @@ def test_same_snapshot_timestamp_yields_same_scoring_fingerprint(monkeypatch):
     assert first["score_version"] == second["score_version"]
     assert first["weights_version"] == second["weights_version"]
     assert first["rules_version"] == second["rules_version"]
+    assert first["model_version"] == second["model_version"]
