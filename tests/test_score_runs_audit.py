@@ -96,6 +96,11 @@ def test_score_runs_idempotent_replay_records_skipped(monkeypatch):
     assert captured and captured[-1]["status"] == "skipped"
     assert captured[-1]["error_code"] == "idempotent_replay"
     assert captured[-1]["idempotency_key"] == "evt-123"
+    assert captured[-1]["score_version"] == SCORE_VERSION
+    assert captured[-1]["weights_version"] == WEIGHTS_VERSION
+    assert captured[-1]["rules_version"] == RULES_VERSION
+    assert captured[-1]["model_version"] == MODEL_VERSION
+    assert captured[-1]["snapshot_timestamp"] == datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
 
 def test_score_runs_failure_record_contains_error_metadata(monkeypatch):

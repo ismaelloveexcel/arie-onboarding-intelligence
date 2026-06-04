@@ -370,6 +370,7 @@ def recompute_lead(
                 model_version=model_version,
                 error_code="idempotent_replay",
                 error_message="Existing successful run found for idempotency key",
+                snapshot_timestamp=snapshot_at,
                 idempotency_key=idempotency_key,
                 source_event_id=source_event_id,
             )
