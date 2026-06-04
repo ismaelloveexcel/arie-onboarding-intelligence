@@ -41,6 +41,7 @@ from src.domain.statuses import (
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
+from src.security.write_auth import write_guard_required
 from src.shadow_scoring import backfill_active_shadow_scores
 
 # --- Logging setup ---
@@ -902,6 +903,7 @@ def lead_detail(request: Request, lead_id: UUID):
 
 
 @app.post("/leads/{lead_id}/action", response_class=HTMLResponse)
+@write_guard_required
 def lead_action(
     request: Request,
     lead_id: UUID,
@@ -978,6 +980,7 @@ def lead_action(
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
+@write_guard_required
 def add_lead_contact(
     request: Request,
     lead_id: UUID,
@@ -1006,6 +1009,7 @@ def add_lead_contact(
 
 
 @app.post("/leads/{lead_id}/contacts/{contact_id}/delete", response_class=HTMLResponse)
+@write_guard_required
 def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -1020,6 +1024,7 @@ def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
 
 # --- Inline assign/status endpoint for queue HTMX ---
 @app.post("/leads/{lead_id}/assign", response_class=HTMLResponse)
+@write_guard_required
 def lead_assign(
         request: Request,
         lead_id: UUID,
@@ -1139,6 +1144,7 @@ def upload_form(request: Request):
 
 
 @app.post("/upload", response_class=HTMLResponse)
+@write_guard_required
 def upload_preview(request: Request, file: UploadFile = File(...)):
     file_bytes = file.file.read()
     columns, rows, validation_errors = _parse_upload_csv(file_bytes)
@@ -1179,7 +1185,8 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
 
 
 @app.post("/upload/{upload_id}/confirm")
-def upload_confirm(upload_id: UUID):
+@write_guard_required
+def upload_confirm(request: Request, upload_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             # Atomically claim the upload: only succeeds if status is currently 'pending'.

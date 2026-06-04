@@ -22,6 +22,7 @@ from psycopg.types.json import Jsonb
 from src.config import ACTOR_NAMES, RM_NAMES
 from src.db import get_conn
 from src.domain.statuses import normalize_status, require_canonical_status, status_label, status_options
+from src.security.write_auth import write_guard_required
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +298,7 @@ def _render_introducer_action_panel(introducer_id: UUID, assigned_to: str, statu
 
 
 @router.post("/{introducer_id}/action", response_class=HTMLResponse)
+@write_guard_required
 def introducer_action(
     request: Request,
     introducer_id: UUID,
@@ -358,6 +360,7 @@ def introducer_action(
 
 # ---------------------------------------------------------------- EDIT DETAILS
 @router.post("/{introducer_id}/edit", response_class=HTMLResponse)
+@write_guard_required
 def introducer_edit(
     request: Request,
     introducer_id: UUID,
@@ -461,6 +464,7 @@ def introducer_edit(
 
 # ---------------------------------------------------------------- INLINE ASSIGN
 @router.post("/{introducer_id}/assign", response_class=HTMLResponse)
+@write_guard_required
 def introducer_assign(
     request: Request,
     introducer_id: UUID,
@@ -567,6 +571,7 @@ def introducer_upload_form(request: Request):
 
 
 @router.post("/upload", response_class=HTMLResponse)
+@write_guard_required
 def introducer_upload_preview(request: Request, file: UploadFile = File(...)):
     file_bytes = file.file.read()
     columns, rows, validation_errors = _parse_introducer_csv(file_bytes)
@@ -611,7 +616,8 @@ def introducer_upload_preview(request: Request, file: UploadFile = File(...)):
 
 
 @router.post("/upload/{upload_id}/confirm")
-def introducer_upload_confirm(upload_id: UUID):
+@write_guard_required
+def introducer_upload_confirm(request: Request, upload_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
