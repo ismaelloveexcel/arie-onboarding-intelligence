@@ -39,6 +39,32 @@ CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200")
 CH_ENRICHMENT_SAFE_LIMIT: int = int(os.getenv("CH_ENRICHMENT_SAFE_LIMIT", "5"))
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SCORING_SHADOW_MODE: bool = _env_bool("SCORING_SHADOW_MODE", True)
+SCORING_DISPLAY_ENABLED: bool = _env_bool("SCORING_DISPLAY_ENABLED", False)
+SHADOW_SCORE_ACTIVE_STALE_DAYS: int = int(
+    os.getenv("SHADOW_SCORE_ACTIVE_STALE_DAYS", "120")
+)
+SHADOW_BACKFILL_BATCH_SIZE: int = int(os.getenv("SHADOW_BACKFILL_BATCH_SIZE", "100"))
+SHADOW_BACKFILL_MAX_BATCHES: int = int(os.getenv("SHADOW_BACKFILL_MAX_BATCHES", "20"))
+SHADOW_BACKFILL_LOCK_TIMEOUT_MS: int = int(
+    os.getenv("SHADOW_BACKFILL_LOCK_TIMEOUT_MS", "3000")
+)
+ACTIVE_TERMINAL_STATUSES: tuple[str, ...] = tuple(
+    item.strip()
+    for item in os.getenv(
+        "ACTIVE_TERMINAL_STATUSES", "Client,Closed - Not Fit,Not Fit,Archived"
+    ).split(",")
+    if item.strip()
+)
+
+
 def _assert_db_host_allowed() -> None:
     """Fail-closed guard: if ALLOWED_DB_HOSTS is set, the host parsed from
     DATABASE_URL must contain at least one of the comma-separated substrings.

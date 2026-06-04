@@ -16,11 +16,26 @@ from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
-from src.config import ACTOR_NAMES, ADMIN_TOKEN, APP_ENV, CH_ENRICHMENT_SAFE_LIMIT, LOG_LEVEL, RM_NAMES, SECRET_KEY
+from src.config import (
+    ACTOR_NAMES,
+    ADMIN_TOKEN,
+    APP_ENV,
+    CH_ENRICHMENT_SAFE_LIMIT,
+    LOG_LEVEL,
+    RM_NAMES,
+    SCORING_DISPLAY_ENABLED,
+    SCORING_SHADOW_MODE,
+    SECRET_KEY,
+    SHADOW_BACKFILL_BATCH_SIZE,
+    SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+    SHADOW_BACKFILL_MAX_BATCHES,
+    SHADOW_SCORE_ACTIVE_STALE_DAYS,
+)
 from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
+from src.shadow_scoring import backfill_active_shadow_scores
 
 # --- Logging setup ---
 handler = logging.StreamHandler()
@@ -228,6 +243,7 @@ def health(response: Response):
     queue_fresh = False
     mauritius_last_seen = None
     last_pipeline_run = None
+    shadow_counts = {"scored": 0, "unscored": 0, "failed": 0}
 
     if db_ok:
         try:
@@ -283,6 +299,29 @@ def health(response: Response):
         except Exception as exc:
             logger.warning("health_queue_check_failed", extra={"error": str(exc)})
 
+    if db_ok:
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        SELECT
+                            COUNT(*) FILTER (WHERE score_state = 'scored') AS scored,
+                            COUNT(*) FILTER (WHERE score_state = 'unscored') AS unscored,
+                            COUNT(*) FILTER (WHERE score_state = 'failed') AS failed
+                        FROM companies
+                        """
+                    )
+                    shadow_row = cur.fetchone()
+                    if shadow_row:
+                        shadow_counts = {
+                            "scored": shadow_row[0] or 0,
+                            "unscored": shadow_row[1] or 0,
+                            "failed": shadow_row[2] or 0,
+                        }
+        except Exception as exc:
+            logger.warning("health_shadow_score_check_failed", extra={"error": str(exc)})
+
     if not db_ok:
         response.status_code = 503
     elif not queue_fresh and queue_rows > 0:
@@ -297,6 +336,9 @@ def health(response: Response):
         "mauritius_last_seen": mauritius_last_seen.isoformat() if mauritius_last_seen else None,
         "last_pipeline_run": last_pipeline_run,
         "scoring_version": SCORING_VERSION,
+        "shadow_scoring_enabled": SCORING_SHADOW_MODE,
+        "shadow_scoring_display_enabled": SCORING_DISPLAY_ENABLED,
+        "shadow_score_counts": shadow_counts,
     }
 
 
@@ -315,6 +357,24 @@ def admin_ch_enrichment(request: Request, limit: int = None):
     with get_conn() as conn:
         result = run_ch_enrichment_batch(conn, actual_limit)
     return result
+
+
+@app.post("/admin/shadow-scoring/backfill")
+def admin_shadow_scoring_backfill(request: Request):
+    _require_admin_token(request)
+    with get_conn() as conn:
+        result = backfill_active_shadow_scores(
+            conn,
+            stale_days=SHADOW_SCORE_ACTIVE_STALE_DAYS,
+            batch_size=SHADOW_BACKFILL_BATCH_SIZE,
+            max_batches=SHADOW_BACKFILL_MAX_BATCHES,
+            lock_timeout_ms=SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+        )
+    return {
+        "shadow_scoring_enabled": SCORING_SHADOW_MODE,
+        "display_enabled": SCORING_DISPLAY_ENABLED,
+        **result,
+    }
 
 
 @app.post("/me")

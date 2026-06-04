@@ -7,12 +7,20 @@ Or via GitHub Actions cron.
 import logging
 import time
 
-from src.config import CH_ENRICHMENT_BATCH_SIZE
+from src.config import (
+    CH_ENRICHMENT_BATCH_SIZE,
+    SCORING_SHADOW_MODE,
+    SHADOW_BACKFILL_BATCH_SIZE,
+    SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+    SHADOW_BACKFILL_MAX_BATCHES,
+    SHADOW_SCORE_ACTIVE_STALE_DAYS,
+)
 from src.db import get_conn
 from src.ingestion.companies_house import fetch_uk_incorporations, run_ch_enrichment_batch
 from src.ingestion.gleif import fetch_gleif_registrations
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.ingestion.mauritius import fetch_mauritius_incorporations
+from src.shadow_scoring import backfill_active_shadow_scores
 from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
 
 logger = logging.getLogger(__name__)
@@ -301,6 +309,20 @@ def run() -> None:
                 )
             scores_count = _score_new_companies(conn)
             queue_rows = _refresh_queue(conn)
+            shadow_result = {
+                "batches_processed": 0,
+                "scanned": 0,
+                "scored": 0,
+                "failed": 0,
+            }
+            if SCORING_SHADOW_MODE:
+                shadow_result = backfill_active_shadow_scores(
+                    conn,
+                    stale_days=SHADOW_SCORE_ACTIVE_STALE_DAYS,
+                    batch_size=SHADOW_BACKFILL_BATCH_SIZE,
+                    max_batches=SHADOW_BACKFILL_MAX_BATCHES,
+                    lock_timeout_ms=SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+                )
             zero_streak = _mauritius_zero_streak(conn)
 
             if zero_streak >= 3:
@@ -325,6 +347,9 @@ def run() -> None:
                     "enrichment_failures": enrichment_result["failed"],
                     "enrichment_skipped_rate_limit": 0,
                     "scores_generated": scores_count,
+                    "shadow_scoring_scanned": shadow_result["scanned"],
+                    "shadow_scoring_scored": shadow_result["scored"],
+                    "shadow_scoring_failed": shadow_result["failed"],
                     "queue_rows": queue_rows,
                     "duration_seconds": duration,
                     "scoring_version": SCORING_VERSION,
