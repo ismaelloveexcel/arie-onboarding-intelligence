@@ -42,6 +42,7 @@ from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
 from src.security.write_auth import write_guard_required
+from src.security.url_safety import sanitize_external_url
 from src.shadow_scoring import backfill_active_shadow_scores
 
 # --- Logging setup ---
@@ -671,7 +672,7 @@ def queue(request: Request):
             "jurisdiction": row[2],
             "entity_type": _format_entity_type(row[3]),
             "incorporation_date": row[4],
-            "verify_url": row[5],
+            "verify_url": sanitize_external_url(row[5]),
             "priority_score": row[6],
             "tier": row[7],
             "reason_summary": row[8],
@@ -882,7 +883,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 "registered_address": row[5],
                 "source_system": row[6],
                 "source_ref": row[7],
-                "verify_url": row[8],
+                "verify_url": sanitize_external_url(row[8]),
             },
             "score": score,
             "action": action,
@@ -1081,7 +1082,7 @@ def lead_assign(
         r = {
                 "id": row[0], "company_name": row[1], "jurisdiction": row[2],
                 "entity_type": _format_entity_type(row[3]),
-                "incorporation_date": row[4], "verify_url": row[5],
+                "incorporation_date": row[4], "verify_url": sanitize_external_url(row[5]),
                 "priority_score": row[6], "tier": row[7], "reason_summary": row[8],
                 "assigned_to": row[9], "status": normalize_status(row[10]) or "new",
         }
@@ -1096,7 +1097,11 @@ def lead_assign(
                 f'<option value="{s["value"]}" {"selected" if s["value"] == (r["status"] or "new") else ""}>{s["label"]}</option>'
                 for s in _STATUS_OPTIONS
         )
-        verify = f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>' if r["verify_url"] else ""
+        verify = (
+            f'<a href="{escape(r["verify_url"], quote=True)}" target="_blank" style="font-size:11px">↗</a>'
+            if r["verify_url"]
+            else ""
+        )
 
         return HTMLResponse(f"""
         <tr>

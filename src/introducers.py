@@ -23,6 +23,7 @@ from src.config import ACTOR_NAMES, RM_NAMES
 from src.db import get_conn
 from src.domain.statuses import normalize_status, require_canonical_status, status_label, status_options
 from src.security.write_auth import write_guard_required
+from src.security.url_safety import sanitize_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +158,7 @@ def introducers_list(request: Request):
             "id": r[0], "company_name": r[1], "jurisdiction": r[2],
             "entity_type": r[3] or "—",
             "contact_name": r[4], "contact_email": r[5],
-            "phone_number": r[6], "verify_url": r[7],
+            "phone_number": r[6], "verify_url": sanitize_external_url(r[7]),
             "assigned_to": r[8], "status": normalize_status(r[9]) or "new",
             "status_label": status_label(r[9]),
         }
@@ -223,7 +224,7 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
         "id": row[0], "company_name": row[1], "jurisdiction": row[2],
         "entity_type": row[3], "incorporation_date": row[4],
         "source": row[5], "company_number": row[6], "file_no": row[7],
-        "sic_codes": row[8], "verify_url": row[9],
+        "sic_codes": row[8], "verify_url": sanitize_external_url(row[9]),
         "contact_email": row[10], "phone_number": row[11],
         "contact_name": row[12], "address": row[13], "notes": row[14],
     }
@@ -419,7 +420,7 @@ def introducer_edit(
                     new_company, _normalise(new_company), new_jx,
                     entity_type.strip(), incorporation_date.strip(),
                     company_number.strip(), file_no.strip(), sic_codes.strip(),
-                    verify_url.strip(), contact_name.strip(), contact_email.strip(),
+                    sanitize_external_url(verify_url), contact_name.strip(), contact_email.strip(),
                     phone_number.strip(), address.strip(), notes.strip(),
                     introducer_id,
                 ),
@@ -440,7 +441,7 @@ def introducer_edit(
                 "company_number": company_number.strip() or None,
                 "file_no": file_no.strip() or None,
                 "sic_codes": sic_codes.strip() or None,
-                "verify_url": verify_url.strip() or None,
+                "verify_url": sanitize_external_url(verify_url),
                 "contact_name": contact_name.strip() or None,
                 "contact_email": contact_email.strip() or None,
                 "phone_number": phone_number.strip() or None,
@@ -523,7 +524,7 @@ def introducer_assign(
         f'<option value="{escape(s["value"])}" {"selected" if s["value"] == row_status else ""}>{escape(s["label"])}</option>'
         for s in _STATUS_OPTIONS
     )
-    verify = f'<a href="{escape(row[7], quote=True)}" target="_blank" style="font-size:11px">↗</a>' if row[7] else ""
+    verify = f'<a href="{escape(sanitize_external_url(row[7]) or "", quote=True)}" target="_blank" style="font-size:11px">↗</a>' if sanitize_external_url(row[7]) else ""
     email_html = f'<a href="mailto:{escape(row[5])}">{escape(row[5])}</a>' if row[5] else "—"
 
     return HTMLResponse(f"""
@@ -690,7 +691,7 @@ def introducer_upload_confirm(request: Request, upload_id: UUID):
                         (row.get("company_number") or "").strip() or None,
                         (row.get("file_no") or "").strip() or None,
                         (row.get("sic_codes") or "").strip() or None,
-                        (row.get("verify_url") or "").strip() or None,
+                        sanitize_external_url(row.get("verify_url")),
                         (row.get("contact_email") or "").strip() or None,
                         (row.get("phone_number") or "").strip() or None,
                         (row.get("contact_name") or "").strip() or None,
