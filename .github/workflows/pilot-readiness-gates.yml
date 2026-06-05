@@ -29,43 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Gate lint
-        run: |
-          python -m ruff check src tests scripts
-
-      - name: Gate compile
-        run: |
-          python -m compileall src tests scripts
-
-      - name: Gate A status integrity
-        run: |
-          python -m pytest -q tests/test_status_integrity.py
-
-      - name: Gate B write auth coverage
-        run: |
-          python -m pytest -q tests/test_write_guard.py
-
-      - name: Gate D URL safety
-        run: |
-          python -m pytest -q tests/test_url_safety.py
-
-      - name: Gate C deterministic scoring
-        run: |
-          python -m pytest -q \
-            tests/test_shadow_scoring.py \
-            tests/test_snapshot_determinism.py \
-            tests/test_scoring_parity.py \
-            tests/test_score_runs_audit.py \
-            tests/test_backfill_guardrails.py
-
-      - name: Gate E LEI matching safety
-        run: |
-          python -m pytest -q tests/test_lei_matching_safety.py
-
-      - name: Gate F mutation isolation
-        run: |
-          python -m pytest -q tests/test_mutation_isolation.py
-
       - name: Governance gate engine
         run: |
-          python scripts/pilot_gates/gate_engine.py --ci --deterministic-tests-passing true
+          python scripts/pilot_gates/gate_engine.py --ci

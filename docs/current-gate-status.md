@@ -22,13 +22,14 @@ These fields are mirrored from `docs/current-gate-status.yaml` and control Manus
 
 | Field | Value |
 |---|---|
-| stabilization_eligible | `false` |
 | stabilization_complete | `false` |
 | pilot_gates_ci_green | `true` |
 | open_incidents_p0_p1 | `0` |
 | phase_a_pass | `false` |
 | manus_phase_a_allowed | `false` |
 | manus_phase_b_allowed | `false` |
+
+`stabilization_eligible` is a computed output from `gate_engine.py` and is not persisted in YAML.
 
 ### Stabilization Evidence Snapshot (structured)
 
@@ -42,7 +43,6 @@ These fields are mirrored from `docs/current-gate-status.yaml` and control Manus
 ## Validation Snapshot
 
 - Local pilot gate suite: **31 passed**
-- Deterministic tests passing flag: **true**
 - Core checks:
   - `ruff check src tests scripts`
   - `compileall src tests scripts`

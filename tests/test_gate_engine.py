@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from scripts.pilot_gates.gate_engine import validate_gate_state
+from scripts.pilot_gates.gate_engine import CISuiteResult, validate_gate_state
 
 
 def _base_state() -> dict:
@@ -20,12 +20,10 @@ def _base_state() -> dict:
             "F": {"name": "Mutation Isolation", "status": "complete"},
         },
         "validation_snapshot": {
-            "deterministic_tests_passing": True,
             "local_pilot_gate_tests_passed": 31,
             "checks": [],
         },
         "transition_state": {
-            "stabilization_eligible": False,
             "stabilization_complete": False,
             "pilot_gates_ci_green": True,
             "open_incidents_p0_p1": 0,
@@ -54,7 +52,6 @@ def test_gate_engine_accepts_consistent_pre_stabilization_state(tmp_path: Path):
     result = validate_gate_state(
         state_path=state_path,
         repo_root=tmp_path,
-        run_static_scanners=False,
     )
 
     assert result.is_valid
@@ -72,7 +69,6 @@ def test_gate_engine_rejects_illegal_manus_phase_a_flag(tmp_path: Path):
     result = validate_gate_state(
         state_path=state_path,
         repo_root=tmp_path,
-        run_static_scanners=False,
     )
 
     assert not result.is_valid
@@ -82,14 +78,12 @@ def test_gate_engine_rejects_illegal_manus_phase_a_flag(tmp_path: Path):
 def test_gate_engine_requires_eligibility_before_stabilization_complete(tmp_path: Path):
     state = _base_state()
     state["transition_state"]["stabilization_complete"] = True
-    state["transition_state"]["stabilization_eligible"] = True
     state_path = tmp_path / "docs" / "current-gate-status.yaml"
     _write_state(state_path, state)
 
     result = validate_gate_state(
         state_path=state_path,
         repo_root=tmp_path,
-        run_static_scanners=False,
     )
 
     assert not result.is_valid
@@ -113,15 +107,36 @@ def test_gate_engine_computes_stabilization_eligibility_when_evidence_is_present
         "ci_run_id": "12345",
         "metrics_snapshot_hash": "deadbeef",
     }
-    state["transition_state"]["stabilization_eligible"] = True
     state_path = tmp_path / "docs" / "current-gate-status.yaml"
     _write_state(state_path, state)
 
     result = validate_gate_state(
         state_path=state_path,
         repo_root=tmp_path,
-        run_static_scanners=False,
+        ci_mode=True,
+        ci_suite_result=CISuiteResult(
+            deterministic_tests_passing=True,
+            command_failures=[],
+        ),
     )
 
     assert result.is_valid
     assert result.computed_state["stabilization_eligible"] is True
+
+
+def test_gate_engine_rejects_computed_state_field_in_yaml(tmp_path: Path):
+    state = _base_state()
+    state["transition_state"]["stabilization_eligible"] = False
+    state_path = tmp_path / "docs" / "current-gate-status.yaml"
+    _write_state(state_path, state)
+
+    result = validate_gate_state(
+        state_path=state_path,
+        repo_root=tmp_path,
+    )
+
+    assert not result.is_valid
+    assert any(
+        "must not be stored in YAML" in err
+        for err in result.errors
+    )

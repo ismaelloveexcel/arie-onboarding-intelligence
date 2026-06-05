@@ -26,14 +26,12 @@ gates:
 
 validation_snapshot:
   local_pilot_gate_tests_passed: 31
-  deterministic_tests_passing: true
   checks:
     - "ruff check src tests scripts"
     - "compileall src tests scripts"
     - "scripts/pilot_gates/gate_engine.py --ci"
 
 transition_state:
-  stabilization_eligible: false
   stabilization_complete: false
   pilot_gates_ci_green: true
   open_incidents_p0_p1: 0

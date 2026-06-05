@@ -3,36 +3,45 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-try:
-    from scripts.pilot_gates.check_mutation_isolation import (
-        find_mutation_isolation_violations,
-    )
-    from scripts.pilot_gates.check_write_guard import check_paths
-except ModuleNotFoundError:
-    # Supports direct execution via: python scripts/pilot_gates/gate_engine.py
-    from check_mutation_isolation import find_mutation_isolation_violations
-    from check_write_guard import check_paths
-
+# Hard rule:
+# YAML is declarative state.
+# Gate engine is authoritative computed state.
+# No external input may override computed truth.
 REQUIRED_GATE_IDS = ("A", "B", "C", "D", "E", "F")
+DETERMINISTIC_TEST_FILES = (
+    "tests/test_shadow_scoring.py",
+    "tests/test_snapshot_determinism.py",
+    "tests/test_scoring_parity.py",
+    "tests/test_score_runs_audit.py",
+    "tests/test_backfill_guardrails.py",
+)
 HASH_PATTERN = re.compile(r"^[0-9a-f]{7,64}$", flags=re.IGNORECASE)
 PLACEHOLDER_VALUE = "pending"
+
+
+@dataclass
+class CISuiteResult:
+    deterministic_tests_passing: bool
+    command_failures: list[str] = field(default_factory=list)
 
 
 @dataclass
 class GateEngineResult:
     computed_state: dict[str, Any]
     errors: list[str] = field(default_factory=list)
-    scanner_errors: list[str] = field(default_factory=list)
+    command_failures: list[str] = field(default_factory=list)
 
     @property
     def is_valid(self) -> bool:
-        return not self.errors and not self.scanner_errors
+        return not self.errors and not self.command_failures
 
 
 def _expect_mapping(
@@ -52,6 +61,14 @@ def _expect_bool(
         errors.append(f"{label}.{key} must be a boolean")
         return None
     return value
+
+
+def _optional_bool(
+    mapping: dict[str, Any], key: str, label: str, errors: list[str]
+) -> bool | None:
+    if key not in mapping:
+        return None
+    return _expect_bool(mapping, key, label, errors)
 
 
 def _expect_int(
@@ -83,9 +100,7 @@ def _is_placeholder(value: str) -> bool:
 
 def _resolve_path(repo_root: Path, path_str: str) -> Path:
     path = Path(path_str)
-    if path.is_absolute():
-        return path
-    return repo_root / path
+    return path if path.is_absolute() else repo_root / path
 
 
 def _evidence_exists(
@@ -105,7 +120,6 @@ def _evidence_exists(
         errors,
         allow_empty=False,
     )
-    # Optional but reserved field; allow empty.
     _expect_text(
         evidence,
         "ci_run_id",
@@ -172,30 +186,59 @@ def _all_gates_complete(gates: dict[str, Any], errors: list[str]) -> bool:
     return complete
 
 
-def _run_static_scanners(repo_root: Path) -> list[str]:
-    scanner_errors: list[str] = []
-
-    write_guard_failures = check_paths(
-        [repo_root / "src" / "main.py", repo_root / "src" / "introducers.py"]
+def _command_failure_message(name: str, command: list[str], output: str) -> str:
+    lines = [line for line in output.splitlines() if line.strip()]
+    tail = "\n".join(lines[-20:]) if lines else "(no command output captured)"
+    return (
+        f"{name} failed: {' '.join(command)}\n"
+        f"--- output tail ---\n{tail}\n--- end output tail ---"
     )
-    for failure in write_guard_failures:
-        scanner_errors.append(
-            f"Write guard validator failure: missing @write_guard_required at {failure}"
+
+
+def _run_ci_suite(repo_root: Path) -> CISuiteResult:
+    command_failures: list[str] = []
+    deterministic_tests_passing = False
+    python = sys.executable
+    deterministic_command = [python, "-m", "pytest", "-q", *DETERMINISTIC_TEST_FILES]
+    ci_commands: list[tuple[str, list[str]]] = [
+        ("ruff", [python, "-m", "ruff", "check", "src", "tests", "scripts"]),
+        ("compile", [python, "-m", "compileall", "src", "tests", "scripts"]),
+        ("gate-a", [python, "-m", "pytest", "-q", "tests/test_status_integrity.py"]),
+        ("gate-b", [python, "-m", "pytest", "-q", "tests/test_write_guard.py"]),
+        ("gate-d", [python, "-m", "pytest", "-q", "tests/test_url_safety.py"]),
+        ("gate-c-deterministic", deterministic_command),
+        ("gate-e", [python, "-m", "pytest", "-q", "tests/test_lei_matching_safety.py"]),
+        ("gate-f", [python, "-m", "pytest", "-q", "tests/test_mutation_isolation.py"]),
+    ]
+
+    for name, command in ci_commands:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            text=True,
+            capture_output=True,
+            check=False,
         )
+        combined_output = f"{completed.stdout}\n{completed.stderr}"
+        if name == "gate-c-deterministic":
+            deterministic_tests_passing = completed.returncode == 0
+        if completed.returncode != 0:
+            command_failures.append(
+                _command_failure_message(name, command, combined_output)
+            )
 
-    mutation_violations = find_mutation_isolation_violations(repo_root)
-    for violation in mutation_violations:
-        scanner_errors.append(f"Mutation isolation validator failure: {violation}")
-
-    return scanner_errors
+    return CISuiteResult(
+        deterministic_tests_passing=deterministic_tests_passing,
+        command_failures=command_failures,
+    )
 
 
 def validate_gate_state(
     *,
     state_path: Path,
     repo_root: Path,
-    deterministic_tests_override: bool | None = None,
-    run_static_scanners: bool = False,
+    ci_mode: bool = False,
+    ci_suite_result: CISuiteResult | None = None,
 ) -> GateEngineResult:
     errors: list[str] = []
     try:
@@ -228,6 +271,11 @@ def validate_gate_state(
         or {}
     )
 
+    if "stabilization_eligible" in transition:
+        errors.append(
+            "transition_state.stabilization_eligible is computed and must not be stored in YAML"
+        )
+
     pilot_gates_ci_green = _expect_bool(
         transition, "pilot_gates_ci_green", "transition_state", errors
     )
@@ -244,23 +292,26 @@ def validate_gate_state(
     yaml_phase_b_allowed = _expect_bool(
         transition, "manus_phase_b_allowed", "transition_state", errors
     )
-    yaml_stabilization_eligible = _expect_bool(
-        transition, "stabilization_eligible", "transition_state", errors
+
+    declared_deterministic = _optional_bool(
+        validation_snapshot,
+        "deterministic_tests_passing",
+        "validation_snapshot",
+        errors,
     )
 
-    if deterministic_tests_override is None:
-        deterministic_tests_passing = _expect_bool(
-            validation_snapshot,
-            "deterministic_tests_passing",
-            "validation_snapshot",
-            errors,
-        )
+    command_failures: list[str] = []
+    if ci_mode:
+        ci_result = ci_suite_result or _run_ci_suite(repo_root)
+        deterministic_tests_passing = ci_result.deterministic_tests_passing
+        command_failures = ci_result.command_failures
     else:
-        deterministic_tests_passing = deterministic_tests_override
+        deterministic_tests_passing = (
+            declared_deterministic if declared_deterministic is not None else False
+        )
 
     all_gates_complete = _all_gates_complete(gates, errors)
     evidence_exists = _evidence_exists(evidence, repo_root, errors)
-
     stabilization_eligible = (
         pilot_gates_ci_green is True
         and open_incidents == 0
@@ -288,6 +339,10 @@ def validate_gate_state(
         errors.append(
             "Illegal state: manus_phase_b_allowed cannot be true when phase_a_pass is false"
         )
+    if phase_a_pass is True and stabilization_complete is not True:
+        errors.append(
+            "Illegal state: phase_a_pass cannot be true when stabilization_complete is false"
+        )
 
     if yaml_phase_a_allowed is not None and yaml_phase_a_allowed != computed_phase_a_allowed:
         errors.append(
@@ -297,37 +352,15 @@ def validate_gate_state(
         errors.append(
             "Flag mismatch: transition_state.manus_phase_b_allowed does not match computed eligibility"
         )
-    if (
-        yaml_stabilization_eligible is not None
-        and yaml_stabilization_eligible != stabilization_eligible
-    ):
-        errors.append(
-            "Flag mismatch: transition_state.stabilization_eligible does not match computed readiness"
-        )
     if stabilization_complete is True and stabilization_eligible is not True:
         errors.append(
             "Illegal state: stabilization_complete cannot be true while stabilization_eligible is false"
         )
 
-    scanner_errors = _run_static_scanners(repo_root) if run_static_scanners else []
-
     return GateEngineResult(
         computed_state=computed_state,
         errors=errors,
-        scanner_errors=scanner_errors,
-    )
-
-
-def _parse_bool_arg(raw: str | None) -> bool | None:
-    if raw is None:
-        return None
-    normalized = raw.strip().lower()
-    if normalized in {"1", "true", "yes"}:
-        return True
-    if normalized in {"0", "false", "no"}:
-        return False
-    raise ValueError(
-        "--deterministic-tests-passing must be one of: true, false, 1, 0, yes, no"
+        command_failures=command_failures,
     )
 
 
@@ -343,28 +376,16 @@ def main() -> int:
     parser.add_argument(
         "--ci",
         action="store_true",
-        help="Run CI mode (includes static scanner enforcement).",
-    )
-    parser.add_argument(
-        "--deterministic-tests-passing",
-        default=None,
-        help="Override deterministic test result: true/false.",
+        help="Run CI mode (gate engine executes enforcement suite internally).",
     )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[2]
     state_path = repo_root / args.state_file
-    try:
-        deterministic_override = _parse_bool_arg(args.deterministic_tests_passing)
-    except ValueError as exc:
-        print(str(exc))
-        return 1
-
     result = validate_gate_state(
         state_path=state_path,
         repo_root=repo_root,
-        deterministic_tests_override=deterministic_override,
-        run_static_scanners=args.ci,
+        ci_mode=args.ci,
     )
 
     print("Computed state:")
@@ -375,9 +396,9 @@ def main() -> int:
         for failure in result.errors:
             print(f" - {failure}")
 
-    if result.scanner_errors:
-        print("\nStatic validator failures:")
-        for failure in result.scanner_errors:
+    if result.command_failures:
+        print("\nEnforcement command failures:")
+        for failure in result.command_failures:
             print(f" - {failure}")
 
     if result.is_valid:
