@@ -1,67 +1,125 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — Arie Leads{% endblock %}
 {% block content %}
+
 <div class="page-head" style="margin-bottom:1.25rem">
   <h1>Dashboard</h1>
   <small>Read-only · auto-queries on load</small>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start">
+<!-- =========================================================================
+     DECISION ZONE — RM Productivity (answers: "what needs attention today?")
+     ========================================================================= -->
+<div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>RM Productivity</span>
+    <span class="ds-meta">Team pipeline velocity &amp; follow-up compliance</span>
+  </div>
 
-  <!-- ===== PANEL 1: Pipeline Freshness ===== -->
-  <div class="card">
-    <h2>Pipeline Freshness</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Source</th>
-            <th>Last Run</th>
-            <th>Status</th>
-            <th>Counts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for src in sources %}
-          <tr>
-            <td>
-              <span style="font-weight:600">{{ src.name }}</span>
-              <br><span style="color:var(--ink-4); font-size:11px">{{ src.detail }}</span>
-            </td>
-            <td
-              {% if src.stale %}style="color:var(--danger); font-weight:600"{% endif %}>
-              {{ src.last_run }}
-            </td>
-            <td><span class="status status-{{ src.status|lower }}">{{ src.status }}</span></td>
-            <td style="color:var(--ink-3); font-size:12px">{{ src.counts }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4" style="color:var(--ink-4); text-align:center">No pipeline runs yet</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
+  <div class="ds-grid-5" style="margin-bottom:1.25rem">
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ rm_summary.total_with_actions }}</div>
+      <div class="ds-stat-tile-label">Leads with actions</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ rm_summary.contact_rate }}%</div>
+      <div class="ds-stat-tile-label">Contact rate</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ rm_summary.conversion_rate }}%</div>
+      <div class="ds-stat-tile-label">Conversion rate</div>
+    </div>
+    <div class="ds-stat-tile {% if rm_summary.total_overdue > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ rm_summary.total_overdue }}</div>
+      <div class="ds-stat-tile-label">Overdue follow-ups</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">
+        {% if rm_summary.avg_days_to_contact is not none %}{{ rm_summary.avg_days_to_contact }}d{% else %}—{% endif %}
+      </div>
+      <div class="ds-stat-tile-label">Avg days to contact</div>
     </div>
   </div>
 
-  <!-- ===== PANEL 2: Lead Volume + Scoring ===== -->
-  <div class="card">
-    <h2>Lead Volume &amp; Scoring</h2>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:.5rem; margin-bottom:1rem">
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ total_leads }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Total Leads</div>
+  {% if rm_productivity %}
+  <div class="table-wrap">
+    <table class="ds-table-premium">
+      <thead>
+        <tr>
+          <th>RM</th>
+          <th style="text-align:right">Assigned</th>
+          <th style="text-align:right">Contacted</th>
+          <th style="text-align:right">Contact rate</th>
+          <th style="text-align:right">Converted</th>
+          <th style="text-align:right">Conv. rate</th>
+          <th style="text-align:right">Pending follow-ups</th>
+          <th style="text-align:right">Overdue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for rm in rm_productivity %}
+        <tr>
+          <td style="font-weight:600">{{ rm.name }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.total_assigned }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.contacted }}</td>
+          <td style="text-align:right">
+            <span class="ds-chip {% if rm.contact_rate >= 50 %}ds-chip-high{% elif rm.contact_rate >= 25 %}ds-chip-med{% else %}ds-chip-risk{% endif %}">
+              {{ rm.contact_rate }}%
+            </span>
+          </td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.converted }}</td>
+          <td style="text-align:right">
+            <span class="ds-chip {% if rm.conversion_rate >= 20 %}ds-chip-high{% elif rm.conversion_rate >= 10 %}ds-chip-med{% else %}ds-chip-low{% endif %}">
+              {{ rm.conversion_rate }}%
+            </span>
+          </td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.pending_followups }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">
+            {% if rm.overdue_followups > 0 %}
+            <span class="ds-chip ds-chip-risk">{{ rm.overdue_followups }}</span>
+            {% else %}
+            <span style="color:var(--ink-4)">0</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="ds-meta" style="padding:.5rem 0; font-style:italic">
+    No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
+  </div>
+  {% endif %}
+</div>
+
+<!-- =========================================================================
+     INTELLIGENCE ZONE — Lead Volume + Pipeline Freshness
+     (answers: "is the pipeline healthy?")
+     ========================================================================= -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.25rem; align-items:start">
+
+  <!-- Lead Volume & Scoring -->
+  <div class="ds-layer-intelligence ds-card" style="margin-bottom:0">
+    <div class="ds-card-header">Lead Volume &amp; Scoring</div>
+
+    <div class="ds-grid-3" style="margin-bottom:1rem">
+      <div class="ds-stat-tile">
+        <div class="ds-stat-tile-value">{{ total_leads }}</div>
+        <div class="ds-stat-tile-label">Total Leads</div>
       </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ leads_7d }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Last 7 days</div>
+      <div class="ds-stat-tile">
+        <div class="ds-stat-tile-value">{{ leads_7d }}</div>
+        <div class="ds-stat-tile-label">Last 7 days</div>
       </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ leads_30d }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Last 30 days</div>
+      <div class="ds-stat-tile">
+        <div class="ds-stat-tile-value">{{ leads_30d }}</div>
+        <div class="ds-stat-tile-label">Last 30 days</div>
       </div>
     </div>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Score Distribution (current, {{ total_scored }} scored)
+
+    <div class="ds-label-panel" style="margin-bottom:.5rem">
+      Score Distribution <span class="ds-meta">({{ total_scored }} scored)</span>
     </div>
     <div class="table-wrap">
       <table>
@@ -106,9 +164,100 @@
     </div>
   </div>
 
-  <!-- ===== PANEL 3: Enrichment Coverage ===== -->
-  <div class="card">
-    <h2>Enrichment Coverage</h2>
+  <!-- Pipeline Freshness -->
+  <div class="ds-layer-intelligence ds-card" style="margin-bottom:0">
+    <div class="ds-card-header">Pipeline Freshness</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Last Run</th>
+            <th>Status</th>
+            <th>Counts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for src in sources %}
+          <tr>
+            <td>
+              <span style="font-weight:600">{{ src.name }}</span>
+              <br><span class="ds-meta">{{ src.detail }}</span>
+            </td>
+            <td {% if src.stale %}style="color:var(--danger); font-weight:600"{% endif %}>
+              {{ src.last_run }}
+            </td>
+            <td><span class="status status-{{ src.status|lower }}">{{ src.status }}</span></td>
+            <td class="ds-meta">{{ src.counts }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="ds-meta" style="text-align:center">No pipeline runs yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- =========================================================================
+     REFERENCE ZONE — Queue breakdown + Enrichment Coverage
+     (operational data, low urgency)
+     ========================================================================= -->
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start">
+
+  <!-- Queue & Workflow -->
+  <div class="ds-layer-reference ds-card ds-card-reference" style="margin-bottom:0">
+    <div class="ds-card-header">Queue &amp; Workflow</div>
+
+    <div class="ds-label-panel" style="margin-bottom:.5rem">By Status</div>
+    <div class="table-wrap" style="margin-bottom:1rem">
+      <table>
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th style="text-align:right">Leads</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for status, cnt in status_counts %}
+          <tr>
+            <td><span class="status status-{{ status|lower|replace(' ', '-') }}">{{ status }}</span></td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="ds-meta" style="text-align:center">No actions yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="ds-label-panel" style="margin-bottom:.5rem">Top 5 Introducers</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Introducer</th>
+            <th style="text-align:right">Leads</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for name, cnt in top_introducers %}
+          <tr>
+            <td>{{ name }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="2" class="ds-meta" style="text-align:center">No introducers yet</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Enrichment Coverage -->
+  <div class="ds-layer-reference ds-card ds-card-reference" style="margin-bottom:0">
+    <div class="ds-card-header">Enrichment Coverage</div>
     <div class="table-wrap">
       <table>
         <thead>
@@ -120,7 +269,7 @@
         </thead>
         <tbody>
           <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">UK (Companies House)</td>
+            <td class="ds-label-panel" colspan="3" style="text-transform:uppercase; letter-spacing:.05em">UK (Companies House)</td>
           </tr>
           <tr>
             <td>Total companies</td>
@@ -147,7 +296,7 @@
             </td>
           </tr>
           <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">LEI (GLEIF)</td>
+            <td class="ds-label-panel" colspan="3" style="text-transform:uppercase; letter-spacing:.05em">LEI (GLEIF)</td>
           </tr>
           <tr>
             <td>Total LEI records</td>
@@ -160,7 +309,7 @@
             <td style="text-align:right; color:var(--ink-4)">of LEI total</td>
           </tr>
           <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">Mauritius (MNS)</td>
+            <td class="ds-label-panel" colspan="3" style="text-transform:uppercase; letter-spacing:.05em">Mauritius (MNS)</td>
           </tr>
           <tr>
             <td>Total companies</td>
@@ -172,134 +321,6 @@
     </div>
   </div>
 
-  <!-- ===== PANEL 4: Queue + Workflow ===== -->
-  <div class="card">
-    <h2>Queue &amp; Workflow</h2>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      By Status
-    </div>
-    <div class="table-wrap" style="margin-bottom:1rem">
-      <table>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th style="text-align:right">Leads</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for status, cnt in status_counts %}
-          <tr>
-            <td><span class="status status-{{ status|lower|replace(' ', '-') }}">{{ status }}</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="2" style="color:var(--ink-4); text-align:center">No actions yet</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Top 5 Introducers by Lead Count
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Introducer</th>
-            <th style="text-align:right">Leads</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for name, cnt in top_introducers %}
-          <tr>
-            <td>{{ name }}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="2" style="color:var(--ink-4); text-align:center">No introducers yet</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ===== PANEL 5: RM Productivity ===== -->
-  <div class="card" style="grid-column: 1 / -1">
-    <h2>RM Productivity</h2>
-
-    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:.75rem; margin-bottom:1.25rem">
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.total_with_actions }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Leads with actions</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.contact_rate }}%</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Contact rate</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.conversion_rate }}%</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Conversion rate</div>
-      </div>
-      <div style="background:{% if rm_summary.total_overdue > 0 %}#fef2f2{% else %}var(--surface-2){% endif %}; border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:{% if rm_summary.total_overdue > 0 %}#dc2626{% else %}inherit{% endif %}">{{ rm_summary.total_overdue }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Overdue follow-ups</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">
-          {% if rm_summary.avg_days_to_contact is not none %}{{ rm_summary.avg_days_to_contact }}d{% else %}—{% endif %}
-        </div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Avg days to contact</div>
-      </div>
-    </div>
-
-    {% if rm_productivity %}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>RM</th>
-            <th style="text-align:right">Assigned</th>
-            <th style="text-align:right">Contacted</th>
-            <th style="text-align:right">Contact rate</th>
-            <th style="text-align:right">Converted</th>
-            <th style="text-align:right">Conv. rate</th>
-            <th style="text-align:right">Pending follow-ups</th>
-            <th style="text-align:right">Overdue</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for rm in rm_productivity %}
-          <tr>
-            <td style="font-weight:600">{{ rm.name }}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.total_assigned }}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.contacted }}</td>
-            <td style="text-align:right">
-              <span style="color:{% if rm.contact_rate >= 50 %}#16a34a{% elif rm.contact_rate >= 25 %}#d97706{% else %}#dc2626{% endif %}; font-weight:600">
-                {{ rm.contact_rate }}%
-              </span>
-            </td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.converted }}</td>
-            <td style="text-align:right">
-              <span style="color:{% if rm.conversion_rate >= 20 %}#16a34a{% elif rm.conversion_rate >= 10 %}#d97706{% else %}var(--ink-3){% endif %}; font-weight:600">
-                {{ rm.conversion_rate }}%
-              </span>
-            </td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.pending_followups }}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums; color:{% if rm.overdue_followups > 0 %}#dc2626{% else %}var(--ink-3){% endif %}; font-weight:{% if rm.overdue_followups > 0 %}700{% else %}400{% endif %}">
-              {{ rm.overdue_followups }}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div style="color:var(--ink-4); font-size:13px; font-style:italic; padding:.5rem 0">
-      No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
-    </div>
-    {% endif %}
-  </div>
-
 </div>
+
 {% endblock %}

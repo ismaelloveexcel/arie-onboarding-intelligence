@@ -86,6 +86,8 @@
   border: 1.5px solid var(--layer-decision-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 3;
 }
 
 /* Intelligence Layer — context, explanations, signals */
@@ -94,6 +96,8 @@
   border: 1px solid var(--layer-intelligence-border);
   border-radius: var(--radius-card);
   box-shadow: var(--shadow-xs);
+  position: relative;
+  z-index: 2;
 }
 
 /* Reference Layer — raw data, history, audit, admin */
@@ -103,6 +107,8 @@
   border-radius: var(--radius-card);
   box-shadow: none;
   opacity: 0.92;
+  position: relative;
+  z-index: 1;
 }
 
 /* =============================================================================
@@ -135,14 +141,14 @@
   border-bottom: 1px solid #f3f4f6;
 }
 
-/* Decision card variant — blue left accent bar */
+/* Decision card variant — gold left accent (Arie brand: decision always uses gold) */
 .ds-card-decision {
-  border-left: 3px solid var(--layer-decision-border);
+  border-left: 3px solid var(--arie-gold);
 }
 
-/* Priority card variant — gold left accent (Arie brand) */
+/* Priority card variant — green left accent (high-value signal) */
 .ds-card-priority {
-  border-left: 3px solid var(--arie-gold);
+  border-left: 3px solid var(--signal-high);
 }
 
 /* Reference card variant — muted, visually recessed */
