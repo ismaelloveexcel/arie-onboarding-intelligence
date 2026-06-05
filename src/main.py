@@ -32,9 +32,17 @@ from src.config import (
     SHADOW_SCORE_ACTIVE_STALE_DAYS,
 )
 from src.db import check_connection, get_conn
+from src.domain.statuses import (
+    normalize_status,
+    require_canonical_status,
+    status_label,
+    status_options,
+)
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
+from src.security.write_auth import write_guard_required
+from src.security.url_safety import sanitize_external_url
 from src.shadow_scoring import backfill_active_shadow_scores
 
 # --- Logging setup ---
@@ -109,16 +117,14 @@ templates = Jinja2Templates(directory="src/templates")
 from src.introducers import router as introducers_router  # noqa: E402
 app.include_router(introducers_router)
 
-_STATUSES = [
-    "New",
-    "Researching",
-    "Qualified",
-    "Outreach Ready",
-    "Contacted",
-    "Opportunity",
-    "Client",
-    "Closed — Not Fit",
-]
+_STATUS_OPTIONS = status_options()
+
+
+def _canonical_status_or_422(raw_status: str) -> str:
+    try:
+        return require_canonical_status(raw_status)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _format_entity_type(raw: str | None) -> str:
@@ -172,7 +178,10 @@ def _render_action_panel(lead_id: UUID, assigned_to: str, status: str, notes: st
             <div>
               <label>Status</label>
               <select name="status">
-                {''.join(f'<option value="{escape(item)}" {"selected" if item == status else ""}>{escape(item)}</option>' for item in _STATUSES)}
+                {''.join(
+                    f'<option value="{escape(item["value"])}" {"selected" if item["value"] == status else ""}>{escape(item["label"])}</option>'
+                    for item in _STATUS_OPTIONS
+                )}
               </select>
             </div>
             <div>
@@ -600,8 +609,10 @@ def queue(request: Request):
         where_clauses.append("ra.assigned_to = %s")
         params.append(filters["assigned_to"])
     if filters["status"]:
-        where_clauses.append("ra.status = %s")
-        params.append(filters["status"])
+        status_filter = normalize_status(filters["status"])
+        if status_filter:
+            where_clauses.append("ra.status = %s")
+            params.append(status_filter)
     if filters["date_from"]:
         where_clauses.append("c.incorporation_date >= %s")
         params.append(filters["date_from"])
@@ -661,12 +672,13 @@ def queue(request: Request):
             "jurisdiction": row[2],
             "entity_type": _format_entity_type(row[3]),
             "incorporation_date": row[4],
-            "verify_url": row[5],
+            "verify_url": sanitize_external_url(row[5]),
             "priority_score": row[6],
             "tier": row[7],
             "reason_summary": row[8],
             "assigned_to": row[9],
-            "status": row[10],
+            "status": normalize_status(row[10]) or "new",
+            "status_label": status_label(row[10]),
             "refreshed_at": row[11],
         }
         for row in rows
@@ -683,7 +695,7 @@ def queue(request: Request):
             "refreshed_at": f"{refreshed_at.day} {refreshed_at.strftime('%b %Y, %H:%M')} UTC" if refreshed_at else None,
             "filters": filters,
             "rm_names": RM_NAMES,
-            "statuses": _STATUSES,
+            "statuses": _STATUS_OPTIONS,
             "page": page,
             "total_pages": total_pages,
             "query_string": _build_query_string(query_params),
@@ -782,7 +794,7 @@ def lead_detail(request: Request, lead_id: UUID):
     }
     action = {
         "assigned_to": row[14],
-        "status": row[15] or "New",
+        "status": normalize_status(row[15]) or "new",
         "notes": row[16] or "",
         "contacted_at": row[17],
         "follow_up_at": row[18],
@@ -871,7 +883,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 "registered_address": row[5],
                 "source_system": row[6],
                 "source_ref": row[7],
-                "verify_url": row[8],
+                "verify_url": sanitize_external_url(row[8]),
             },
             "score": score,
             "action": action,
@@ -882,7 +894,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "pscs": pscs,
             "contacts": contacts,
             "rm_names": RM_NAMES,
-            "statuses": _STATUSES,
+            "statuses": _STATUS_OPTIONS,
             "saved": False,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
@@ -892,15 +904,17 @@ def lead_detail(request: Request, lead_id: UUID):
 
 
 @app.post("/leads/{lead_id}/action", response_class=HTMLResponse)
+@write_guard_required
 def lead_action(
     request: Request,
     lead_id: UUID,
     assigned_to: str = Form(""),
-    status: str = Form("New"),
+    status: str = Form("new"),
     notes: str = Form(""),
     contacted_at: str = Form(""),
     follow_up_at: str = Form(""),
 ):
+    status_canonical = _canonical_status_or_422(status)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -928,12 +942,19 @@ def lead_action(
                     follow_up_at = EXCLUDED.follow_up_at,
                     updated_at = NOW()
                 """,
-                (lead_id, assigned_to or None, status, notes or None, contacted_at, follow_up_at),
+                (
+                    lead_id,
+                    assigned_to or None,
+                    status_canonical,
+                    notes or None,
+                    contacted_at,
+                    follow_up_at,
+                ),
             )
 
             new_value = {
                 "assigned_to": assigned_to or None,
-                "status": status,
+                "status": status_canonical,
                 "notes": notes or None,
                 "contacted_at": contacted_at or None,
                 "follow_up_at": follow_up_at or None,
@@ -948,10 +969,19 @@ def lead_action(
             )
             conn.commit()
 
-    return _render_action_panel(lead_id, assigned_to or "", status, notes, None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"), None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"), saved=True)
+    return _render_action_panel(
+        lead_id,
+        assigned_to or "",
+        status_canonical,
+        notes,
+        None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"),
+        None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"),
+        saved=True,
+    )
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
+@write_guard_required
 def add_lead_contact(
     request: Request,
     lead_id: UUID,
@@ -980,6 +1010,7 @@ def add_lead_contact(
 
 
 @app.post("/leads/{lead_id}/contacts/{contact_id}/delete", response_class=HTMLResponse)
+@write_guard_required
 def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -994,12 +1025,14 @@ def delete_lead_contact(request: Request, lead_id: UUID, contact_id: UUID):
 
 # --- Inline assign/status endpoint for queue HTMX ---
 @app.post("/leads/{lead_id}/assign", response_class=HTMLResponse)
+@write_guard_required
 def lead_assign(
         request: Request,
         lead_id: UUID,
         assigned_to: str = Form(""),
-        status: str = Form("New"),
+        status: str = Form("new"),
 ):
+        status_canonical = _canonical_status_or_422(status)
         with get_conn() as conn:
                 with conn.cursor() as cur:
                         cur.execute(
@@ -1011,7 +1044,7 @@ def lead_assign(
                                         status = EXCLUDED.status,
                                         updated_at = NOW()
                                 """,
-                                (lead_id, assigned_to or None, status),
+                                (lead_id, assigned_to or None, status_canonical),
                         )
                         cur.execute(
                                 """
@@ -1019,8 +1052,11 @@ def lead_assign(
                                     (entity_type, entity_id, action, actor, new_value)
                                 VALUES ('company', %s, 'quick_assign', %s, %s)
                                 """,
-                                (lead_id, (_read_actor(request) or "unknown"),
-                                 Jsonb({"assigned_to": assigned_to or None, "status": status})),
+                                (
+                                    lead_id,
+                                    (_read_actor(request) or "unknown"),
+                                    Jsonb({"assigned_to": assigned_to or None, "status": status_canonical}),
+                                ),
                         )
                         conn.commit()
 
@@ -1046,9 +1082,9 @@ def lead_assign(
         r = {
                 "id": row[0], "company_name": row[1], "jurisdiction": row[2],
                 "entity_type": _format_entity_type(row[3]),
-                "incorporation_date": row[4], "verify_url": row[5],
+                "incorporation_date": row[4], "verify_url": sanitize_external_url(row[5]),
                 "priority_score": row[6], "tier": row[7], "reason_summary": row[8],
-                "assigned_to": row[9], "status": row[10],
+                "assigned_to": row[9], "status": normalize_status(row[10]) or "new",
         }
 
         score_pct = r["priority_score"]
@@ -1058,10 +1094,14 @@ def lead_assign(
                 for nm in RM_NAMES
         )
         status_opts = "".join(
-                f'<option value="{s}" {"selected" if s == (r["status"] or "New") else ""}>{s}</option>'
-                for s in _STATUSES
+                f'<option value="{s["value"]}" {"selected" if s["value"] == (r["status"] or "new") else ""}>{s["label"]}</option>'
+                for s in _STATUS_OPTIONS
         )
-        verify = f'<a href="{r["verify_url"]}" target="_blank" style="font-size:11px">↗</a>' if r["verify_url"] else ""
+        verify = (
+            f'<a href="{escape(r["verify_url"], quote=True)}" target="_blank" style="font-size:11px">↗</a>'
+            if r["verify_url"]
+            else ""
+        )
 
         return HTMLResponse(f"""
         <tr>
@@ -1078,7 +1118,7 @@ def lead_assign(
             <td><span class=\"tier tier-{r['tier']}\">{r['tier']}</span></td>
             <td>
                 <form hx-post=\"/leads/{r['id']}/assign\" hx-target=\"closest tr\" hx-swap=\"outerHTML\" style=\"margin:0\">
-                    <input type=\"hidden\" name=\"status\" value=\"{escape(r['status'] or 'New')}\">
+                    <input type=\"hidden\" name=\"status\" value=\"{escape(r['status'] or 'new')}\">
                     <select name=\"assigned_to\" onchange=\"this.form.requestSubmit()\"
                         style=\"font-size:11px;padding:2px 4px;border:1px solid #ddd;border-radius:4px;max-width:90px\">
                         <option value=\"\">—</option>
@@ -1109,6 +1149,7 @@ def upload_form(request: Request):
 
 
 @app.post("/upload", response_class=HTMLResponse)
+@write_guard_required
 def upload_preview(request: Request, file: UploadFile = File(...)):
     file_bytes = file.file.read()
     columns, rows, validation_errors = _parse_upload_csv(file_bytes)
@@ -1149,7 +1190,8 @@ def upload_preview(request: Request, file: UploadFile = File(...)):
 
 
 @app.post("/upload/{upload_id}/confirm")
-def upload_confirm(upload_id: UUID):
+@write_guard_required
+def upload_confirm(request: Request, upload_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
             # Atomically claim the upload: only succeeds if status is currently 'pending'.

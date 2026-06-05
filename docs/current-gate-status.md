@@ -1,0 +1,73 @@
+# Current Pilot Gate Status (Single Source of Truth)
+
+Last updated: 2026-06-05  
+Branch baseline: `cursor/pilot-readiness-gates-3f07`
+Canonical state file: `docs/current-gate-status.yaml`
+
+## Gate Status
+
+| Gate | Name | Status | Notes |
+|---|---|---|---|
+| A | Status Integrity | ✅ Complete | Canonical status model, mapping, rejection tests in place |
+| B | Write Authorization | ✅ Complete | Decorator + runtime registry + AST/static checks |
+| C | Deterministic Scoring | ✅ Complete | Explicit version inputs, deterministic tests, skip audit hardening |
+| D | URL Safety | ✅ Complete | Render + ingestion sanitization and tests |
+| E | LEI Matching Safety | ✅ Complete | Deterministic matching, confidence, ambiguous review queue |
+| F | Mutation Isolation | ✅ Complete | Static isolation scanner + enforcement tests |
+| CI | Pilot Readiness Workflow | ✅ Complete | Dedicated `pilot-readiness-gates` workflow added |
+
+## Transition State Snapshot
+
+These fields are mirrored from `docs/current-gate-status.yaml` and control Manus readiness.
+
+| Field | Value |
+|---|---|
+| stabilization_complete | `false` |
+| pilot_gates_ci_green | `true` |
+| open_incidents_p0_p1 | `0` |
+| phase_a_pass | `false` |
+| manus_phase_a_allowed | `false` |
+| manus_phase_b_allowed | `false` |
+
+`stabilization_eligible` is a computed output from `gate_engine.py` and is not persisted in YAML.
+
+### Stabilization Evidence Snapshot (structured)
+
+| Field | Value |
+|---|---|
+| report_path | `pending` |
+| commit_hash | `pending` |
+| ci_run_id | `` |
+| metrics_snapshot_hash | `pending` |
+
+## Validation Snapshot
+
+- Local pilot gate suite: **31 passed**
+- Core checks:
+  - `ruff check src tests scripts`
+  - `compileall src tests scripts`
+  - `scripts/pilot_gates/gate_engine.py --ci`
+
+## Operational Phase
+
+Current phase recommendation: **Pilot Stabilization Phase**  
+(See `docs/stabilization-phase.md` for entry/exit criteria.)
+
+## Update Protocol
+
+Update this file whenever any of the following changes:
+
+- gate implementation status
+- CI gate behavior
+- validation results that affect deploy confidence
+- operational phase recommendation
+
+Canonical process:
+
+1. Update `docs/current-gate-status.yaml` first.
+2. Update this markdown file as a readable mirror.
+3. Keep readiness booleans consistent with transition rules in:
+   - `docs/stabilization-phase.md`
+   - `docs/manus-phase-gate.md`
+
+Do not rely on chat memory, Slack, or ad-hoc notes for gate truth.

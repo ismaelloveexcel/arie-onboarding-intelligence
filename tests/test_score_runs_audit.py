@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.shadow_scoring import recompute_lead
+from src.shadow_scoring import MODEL_VERSION, RULES_VERSION, SCORE_VERSION, WEIGHTS_VERSION, recompute_lead
 
 
 def _snapshot() -> dict:
@@ -54,6 +54,10 @@ def test_score_runs_success_record_contains_versions_and_evidence_hash(monkeypat
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="manual",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
     )
 
@@ -62,6 +66,7 @@ def test_score_runs_success_record_contains_versions_and_evidence_hash(monkeypat
     assert captured[-1]["score_version"] == result["score_version"]
     assert captured[-1]["weights_version"] == result["weights_version"]
     assert captured[-1]["rules_version"] == result["rules_version"]
+    assert captured[-1]["model_version"] == result["model_version"]
     assert captured[-1]["evidence_hash"] == result["evidence_hash"]
 
 
@@ -79,6 +84,10 @@ def test_score_runs_idempotent_replay_records_skipped(monkeypatch):
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="webhook",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         idempotency_key="evt-123",
         snapshot_timestamp=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
     )
@@ -87,6 +96,11 @@ def test_score_runs_idempotent_replay_records_skipped(monkeypatch):
     assert captured and captured[-1]["status"] == "skipped"
     assert captured[-1]["error_code"] == "idempotent_replay"
     assert captured[-1]["idempotency_key"] == "evt-123"
+    assert captured[-1]["score_version"] == SCORE_VERSION
+    assert captured[-1]["weights_version"] == WEIGHTS_VERSION
+    assert captured[-1]["rules_version"] == RULES_VERSION
+    assert captured[-1]["model_version"] == MODEL_VERSION
+    assert captured[-1]["snapshot_timestamp"] == datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
 
 
 def test_score_runs_failure_record_contains_error_metadata(monkeypatch):
@@ -110,6 +124,10 @@ def test_score_runs_failure_record_contains_error_metadata(monkeypatch):
             conn,
             "11111111-1111-1111-1111-111111111111",
             trigger_type="manual",
+            scoring_version=SCORE_VERSION,
+            weights_version=WEIGHTS_VERSION,
+            rules_version=RULES_VERSION,
+            model_version=MODEL_VERSION,
             snapshot_timestamp=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
         )
 

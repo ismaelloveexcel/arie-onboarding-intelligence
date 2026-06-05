@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.shadow_scoring import (
+    MODEL_VERSION,
     RULES_VERSION,
     SCORE_VERSION,
     WEIGHTS_VERSION,
@@ -42,18 +43,37 @@ def _mock_conn():
 
 
 def test_compute_shadow_score_populates_version_fields():
-    score = compute_shadow_score(_snapshot())
+    score = compute_shadow_score(
+        _snapshot(),
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
+    )
     assert score["score_version"] == SCORE_VERSION
     assert score["weights_version"] == WEIGHTS_VERSION
     assert score["rules_version"] == RULES_VERSION
+    assert score["model_version"] == MODEL_VERSION
     assert score["evidence_hash"]
     assert isinstance(score["priority_score"], int)
     assert 0 <= score["priority_score"] <= 100
 
 
 def test_compute_shadow_score_is_reproducible_from_same_snapshot():
-    first = compute_shadow_score(_snapshot())
-    second = compute_shadow_score(_snapshot())
+    first = compute_shadow_score(
+        _snapshot(),
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
+    )
+    second = compute_shadow_score(
+        _snapshot(),
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
+    )
     assert first["evidence_hash"] == second["evidence_hash"]
     assert first["priority_score"] == second["priority_score"]
     assert first["why_output"] == second["why_output"]
@@ -61,7 +81,13 @@ def test_compute_shadow_score_is_reproducible_from_same_snapshot():
 
 
 def test_evidence_drives_why_output_consistently():
-    score = compute_shadow_score(_snapshot())
+    score = compute_shadow_score(
+        _snapshot(),
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
+    )
     positive_labels = {
         item["label"] for item in score["evidence"] if int(item["impact"]) > 0
     }
@@ -88,18 +114,30 @@ def test_recompute_parity_manual_nightly_backfill(monkeypatch):
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="manual",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=fixed_timestamp,
     )
     nightly = recompute_lead(
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="nightly",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=fixed_timestamp,
     )
     backfill = recompute_lead(
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="backfill",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         snapshot_timestamp=fixed_timestamp,
     )
 
@@ -109,13 +147,22 @@ def test_recompute_parity_manual_nightly_backfill(monkeypatch):
     assert manual["score_version"] == nightly["score_version"] == backfill["score_version"]
     assert manual["weights_version"] == nightly["weights_version"] == backfill["weights_version"]
     assert manual["rules_version"] == nightly["rules_version"] == backfill["rules_version"]
+    assert manual["model_version"] == nightly["model_version"] == backfill["model_version"]
     assert conn.commit.call_count == 3
 
 
 def test_recompute_rejects_unknown_trigger_type():
     conn = _mock_conn()
     with pytest.raises(ValueError):
-        recompute_lead(conn, "11111111-1111-1111-1111-111111111111", trigger_type="cron")
+        recompute_lead(
+            conn,
+            "11111111-1111-1111-1111-111111111111",
+            trigger_type="cron",
+            scoring_version=SCORE_VERSION,
+            weights_version=WEIGHTS_VERSION,
+            rules_version=RULES_VERSION,
+            model_version=MODEL_VERSION,
+        )
 
 
 
@@ -132,6 +179,10 @@ def test_recompute_idempotency_returns_skipped(monkeypatch):
         conn,
         "11111111-1111-1111-1111-111111111111",
         trigger_type="webhook",
+        scoring_version=SCORE_VERSION,
+        weights_version=WEIGHTS_VERSION,
+        rules_version=RULES_VERSION,
+        model_version=MODEL_VERSION,
         idempotency_key="evt-123",
     )
     assert result["status"] == "skipped"

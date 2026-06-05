@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 
+from src.config import ACTOR_NAMES
 from src.db import get_conn, upsert_company
-from src.main import app
+from src.main import _ACTOR_COOKIE, _actor_signer, app
 from src.scoring import calculate_score
 
 
@@ -26,6 +27,9 @@ def test_uk_holding_company_scores_at_least_70():
 def test_audit_log_write_on_rm_action():
     client = TestClient(app)
     company_ref = "TEST_AUDIT_LOG_WRITE"
+    actor_cookie = {
+        _ACTOR_COOKIE: _actor_signer.sign((ACTOR_NAMES[0] if ACTOR_NAMES else "pilot-user").encode("utf-8")).decode("ascii"),
+    }
 
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -57,6 +61,7 @@ def test_audit_log_write_on_rm_action():
     response = client.post(
         f"/leads/{company_id}/action",
         data={"assigned_to": "Test", "status": "Reviewing", "notes": "Checked"},
+        cookies=actor_cookie,
     )
     assert response.status_code == 200
 

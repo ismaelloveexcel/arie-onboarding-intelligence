@@ -1,0 +1,57 @@
+updated_at: "2026-06-05"
+branch_baseline: "cursor/pilot-readiness-gates-3f07"
+
+gates:
+  A:
+    name: "Status Integrity"
+    status: "complete"
+  B:
+    name: "Write Authorization"
+    status: "complete"
+  C:
+    name: "Deterministic Scoring"
+    status: "complete"
+  D:
+    name: "URL Safety"
+    status: "complete"
+  E:
+    name: "LEI Matching Safety"
+    status: "complete"
+  F:
+    name: "Mutation Isolation"
+    status: "complete"
+  CI:
+    name: "Pilot Readiness Workflow"
+    status: "complete"
+
+validation_snapshot:
+  local_pilot_gate_tests_passed: 31
+  checks:
+    - "ruff check src tests scripts"
+    - "compileall src tests scripts"
+    - "scripts/pilot_gates/gate_engine.py --ci"
+
+transition_state:
+  stabilization_complete: false
+  pilot_gates_ci_green: true
+  open_incidents_p0_p1: 0
+  phase_a_pass: false
+  manus_phase_a_allowed: false
+  manus_phase_b_allowed: false
+
+stabilization_evidence:
+  report_path: "pending"
+  commit_hash: "pending"
+  ci_run_id: ""
+  metrics_snapshot_hash: "pending"
+
+rules:
+  manus_phase_a_allowed_when:
+    - "stabilization_complete == true"
+    - "pilot_gates_ci_green == true"
+    - "open_incidents_p0_p1 == 0"
+  manus_phase_b_allowed_when:
+    - "stabilization_complete == true"
+    - "pilot_gates_ci_green == true"
+    - "open_incidents_p0_p1 == 0"
+    - "phase_a_pass == true"

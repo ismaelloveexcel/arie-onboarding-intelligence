@@ -4,6 +4,7 @@ from contextlib import contextmanager
 import psycopg
 
 from src.config import DATABASE_URL
+from src.security.url_safety import sanitize_external_url
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,8 @@ def get_conn():
 
 def upsert_company(conn, data: dict) -> str:
     """Insert or update a company row. Returns the UUID string."""
+    payload = dict(data)
+    payload["verify_url"] = sanitize_external_url(payload.get("verify_url"))
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -48,7 +51,7 @@ def upsert_company(conn, data: dict) -> str:
                 updated_at        = NOW()
             RETURNING id
             """,
-            data,
+            payload,
         )
         return str(cur.fetchone()[0])
 

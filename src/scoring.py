@@ -1,4 +1,5 @@
 import re
+import datetime
 
 SCORING_VERSION = "2026.1.0"
 
@@ -165,6 +166,8 @@ def calculate_score(
     lei: dict | None = None,
     pscs: list[dict] | None = None,
     officers: list[dict] | None = None,
+    *,
+    reference_date: datetime.date | None = None,
 ) -> tuple[int, list[str], str]:
     """
     Pure function. No DB access. No API calls.
@@ -229,13 +232,11 @@ def calculate_score(
         score += 15
         codes.append("FINTECH_SIC")
 
-    # --- Recently incorporated ---
-    from datetime import date as _date
-
     inc_date = company.get("incorporation_date")
     if inc_date is not None:
         try:
-            age_days = (_date.today() - inc_date).days
+            today = reference_date or datetime.date.today()
+            age_days = (today - inc_date).days
             if age_days <= 90:
                 score += 5
                 codes.append("RECENTLY_INCORPORATED")

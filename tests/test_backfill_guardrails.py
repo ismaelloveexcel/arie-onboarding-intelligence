@@ -23,9 +23,22 @@ def test_backfill_respects_max_batches_and_lock_timeout(monkeypatch):
         assert limit == 2
         return ["lead-1", "lead-2"]
 
-    def _recompute(_conn, lead_id, *, trigger_type):
+    def _recompute(
+        _conn,
+        lead_id,
+        *,
+        trigger_type,
+        scoring_version,
+        weights_version,
+        rules_version,
+        model_version,
+    ):
         calls["recompute"] += 1
         assert trigger_type == "backfill"
+        assert scoring_version
+        assert weights_version
+        assert rules_version
+        assert model_version
         return {"lead_id": lead_id}
 
     monkeypatch.setattr("src.shadow_scoring.select_active_lead_ids", _select)
@@ -57,10 +70,26 @@ def test_backfill_counts_failures_without_crashing(monkeypatch):
         lambda *_a, **_k: ["lead-1", "lead-2"],
     )
 
-    def _recompute(_conn, lead_id, *, trigger_type):
+    def _recompute(
+        _conn,
+        lead_id,
+        *,
+        trigger_type,
+        scoring_version,
+        weights_version,
+        rules_version,
+        model_version,
+    ):
         if lead_id == "lead-2":
             raise RuntimeError("forced failure")
-        return {"lead_id": lead_id, "trigger_type": trigger_type}
+        return {
+            "lead_id": lead_id,
+            "trigger_type": trigger_type,
+            "scoring_version": scoring_version,
+            "weights_version": weights_version,
+            "rules_version": rules_version,
+            "model_version": model_version,
+        }
 
     monkeypatch.setattr("src.shadow_scoring.recompute_lead", _recompute)
 

@@ -34,7 +34,7 @@
     <select name="status">
       <option value="">All</option>
       {% for s in statuses %}
-        <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+        <option value="{{ s.value }}" {% if filters.status == s.value %}selected{% endif %}>{{ s.label }}</option>
       {% endfor %}
     </select>
   </label>
@@ -74,7 +74,7 @@
         <td>{% if row.contact_email %}<a href="mailto:{{ row.contact_email }}">{{ row.contact_email }}</a>{% else %}—{% endif %}</td>
         <td class="cell-meta nowrap">{{ row.phone_number or "—" }}</td>
         <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
-        <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
+        <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span></td>
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="icon-btn" title="Open website">↗</a>
