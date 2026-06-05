@@ -26,19 +26,26 @@ gates:
 
 validation_snapshot:
   local_pilot_gate_tests_passed: 31
+  deterministic_tests_passing: true
   checks:
     - "ruff check src tests scripts"
     - "compileall src tests scripts"
-    - "scripts/pilot_gates/check_write_guard.py"
-    - "scripts/pilot_gates/check_mutation_isolation.py"
+    - "scripts/pilot_gates/gate_engine.py --ci"
 
 transition_state:
+  stabilization_eligible: false
   stabilization_complete: false
   pilot_gates_ci_green: true
   open_incidents_p0_p1: 0
   phase_a_pass: false
   manus_phase_a_allowed: false
   manus_phase_b_allowed: false
+
+stabilization_evidence:
+  report_path: "pending"
+  commit_hash: "pending"
+  ci_run_id: ""
+  metrics_snapshot_hash: "pending"
 
 rules:
   manus_phase_a_allowed_when:

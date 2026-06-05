@@ -9,5 +9,6 @@ PLAN.md, BACKLOG.md, and SYSTEM_STATE.md remain at the repo root by convention �
 - `manus-phase-gate.md` — Phase A/Phase B rubric and decision boundary for Manus strategy work
 - `minimal-compliance-contract.md` — MVP data/compliance handling contract for enrichment/contact intelligence
 - `system-principles.md` — Long-term product/system principles to prevent operational drift
+- `scripts/pilot_gates/gate_engine.py` — CI enforcement authority for governance state validation
 - `runbooks/` — Operational runbooks for pipeline failures, data source debugging, deployment, and routing changes
 - `decisions/` — Architectural decision records (ADRs) for significant technical or operational decisions

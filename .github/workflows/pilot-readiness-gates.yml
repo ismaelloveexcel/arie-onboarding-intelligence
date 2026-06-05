@@ -43,7 +43,6 @@ jobs:
 
       - name: Gate B write auth coverage
         run: |
-          python scripts/pilot_gates/check_write_guard.py
           python -m pytest -q tests/test_write_guard.py
 
       - name: Gate D URL safety
@@ -65,5 +64,8 @@ jobs:
 
       - name: Gate F mutation isolation
         run: |
-          python scripts/pilot_gates/check_mutation_isolation.py
           python -m pytest -q tests/test_mutation_isolation.py
+
+      - name: Governance gate engine
+        run: |
+          python scripts/pilot_gates/gate_engine.py --ci --deterministic-tests-passing true

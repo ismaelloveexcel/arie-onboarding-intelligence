@@ -11,3 +11,4 @@ httpx
 playwright
 pytest
 ruff
+PyYAML

@@ -21,6 +21,7 @@ Rules:
 - Higher-priority document always overrides lower-priority guidance.
 - If conflict remains ambiguous, default to the **more restrictive** interpretation.
 - `current-gate-status.yaml` is the canonical operational state artifact.
+- `scripts/pilot_gates/gate_engine.py` is the enforcement authority in CI.
 
 ## Phase A: Audit Only
 
@@ -77,3 +78,9 @@ Phase B should not re-litigate Phase A findings; it should design within them.
 - Manus Phase B is allowed only when:
   - all Phase A conditions are true, and
   - `phase_a_pass == true`
+
+## Enforcement Entry Point
+
+CI must enforce this gate through a single command:
+
+`python scripts/pilot_gates/gate_engine.py --ci`

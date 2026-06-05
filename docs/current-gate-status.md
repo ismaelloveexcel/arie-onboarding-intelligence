@@ -22,6 +22,7 @@ These fields are mirrored from `docs/current-gate-status.yaml` and control Manus
 
 | Field | Value |
 |---|---|
+| stabilization_eligible | `false` |
 | stabilization_complete | `false` |
 | pilot_gates_ci_green | `true` |
 | open_incidents_p0_p1 | `0` |
@@ -29,14 +30,23 @@ These fields are mirrored from `docs/current-gate-status.yaml` and control Manus
 | manus_phase_a_allowed | `false` |
 | manus_phase_b_allowed | `false` |
 
+### Stabilization Evidence Snapshot (structured)
+
+| Field | Value |
+|---|---|
+| report_path | `pending` |
+| commit_hash | `pending` |
+| ci_run_id | `` |
+| metrics_snapshot_hash | `pending` |
+
 ## Validation Snapshot
 
 - Local pilot gate suite: **31 passed**
+- Deterministic tests passing flag: **true**
 - Core checks:
   - `ruff check src tests scripts`
   - `compileall src tests scripts`
-  - `scripts/pilot_gates/check_write_guard.py`
-  - `scripts/pilot_gates/check_mutation_isolation.py`
+  - `scripts/pilot_gates/gate_engine.py --ci`
 
 ## Operational Phase
 

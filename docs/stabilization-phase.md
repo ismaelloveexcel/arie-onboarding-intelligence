@@ -77,6 +77,11 @@ Interpretation:
 - If the first three conditions are true, Manus **Phase A (diagnose)** is allowed.
 - Manus **Phase B (design)** is blocked until all four conditions are true.
 
+Enforcement rule:
+
+- `stabilization_complete` is not a narrative toggle.
+- It can only be asserted when `gate_engine.py` computes `stabilization_eligible=true`.
+
 ## Deliverable
 
 Create a short stabilization report with:
