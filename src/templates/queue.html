@@ -135,6 +135,9 @@
             {% endif %}
             <div class="ds-queue-chip-row">
               {{ primary_chip(row.reason_codes) }}
+              {% if row.tier == 'HIGH' and row.reason_codes %}
+              <span class="ds-priority-match">· Priority match</span>
+              {% endif %}
             </div>
             {# Muted inline metadata — replaces 3 hidden columns #}
             <div class="ds-queue-meta-line">
@@ -193,11 +196,12 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="text-align:center; padding:3rem 2rem">
-          <div style="color:#9ca3af; font-size:13px; line-height:1.8">
-            <div style="font-size:24px; margin-bottom:.5rem">—</div>
-            No leads match the current filters.<br>
-            <a href="/" style="font-size:12px; color:#6b7280">Clear filters</a>
+        <td colspan="9" style="padding:3rem 2rem">
+          <div class="ds-empty-state">
+            <span class="ds-empty-state-icon">🔍</span>
+            <span class="ds-empty-state-title">No leads match the current filters</span>
+            System is monitoring new incorporations daily across UK and Mauritius registries.<br>
+            <a href="/" style="font-size:12px; color:#0B3D91; margin-top:.5rem; display:inline-block">Clear filters</a>
           </div>
         </td>
       </tr>

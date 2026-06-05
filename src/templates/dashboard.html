@@ -93,8 +93,9 @@
       </table>
     </div>
     {% else %}
-    <div class="ds-meta" style="padding:.5rem 0; font-style:italic">
-      No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
+    <div class="ds-empty-state" style="text-align:left">
+      <span class="ds-empty-state-title">No RM actions recorded yet</span>
+      Productivity metrics will appear here once leads are assigned to relationship managers.
     </div>
     {% endif %}
     </div>
@@ -199,7 +200,7 @@
             <td class="ds-meta">{{ src.counts }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="4" class="ds-meta" style="text-align:center">No pipeline runs yet</td></tr>
+          <tr><td colspan="4" class="ds-meta" style="text-align:center; padding:1rem">Awaiting first pipeline run.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -234,7 +235,7 @@
             <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="2" class="ds-meta" style="text-align:center">No actions yet</td></tr>
+          <tr><td colspan="2" class="ds-meta" style="text-align:center; padding:1rem">Pipeline is active — no status transitions recorded yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -256,7 +257,7 @@
             <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="2" class="ds-meta" style="text-align:center">No introducers yet</td></tr>
+          <tr><td colspan="2" class="ds-meta" style="text-align:center; padding:1rem">No introducer-linked leads yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>

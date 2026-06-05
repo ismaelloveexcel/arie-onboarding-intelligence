@@ -78,20 +78,20 @@
   {% endif %}
 
   {# Decision framing strip — Contact Now is primary (filled); others are subordinate #}
-  <div style="display:flex; gap:.5rem; margin-top:.875rem; flex-wrap:wrap; align-items:center">
+  <div class="ds-action-strip" style="margin-top:.875rem">
     {# PRIMARY — filled navy/gold, visually dominant #}
     <a href="#action-panel"
        style="display:inline-flex; align-items:center; gap:6px; padding:7px 20px; background:var(--arie-navy); border:none; border-radius:var(--radius-chip); font-size:13px; font-weight:700; color:var(--arie-gold); text-decoration:none; box-shadow:var(--shadow-sm); letter-spacing:.01em">
       ✓ Contact Now
     </a>
     {# SECONDARY — outline only, no fill #}
+    <span class="ds-action-strip-divider"></span>
     <a href="#action-panel"
        style="display:inline-flex; align-items:center; gap:5px; padding:6px 14px; background:transparent; border:1.5px solid #fde68a; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#d97706; text-decoration:none">
       ⏱ Review Later
     </a>
-    {# TERTIARY — text only, no fill or border #}
     <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:5px; padding:6px 10px; background:transparent; border:none; border-radius:var(--radius-chip); font-size:12px; font-weight:500; color:#dc2626; text-decoration:none; opacity:.75">
+       style="display:inline-flex; align-items:center; gap:5px; padding:6px 10px; background:transparent; border:none; border-radius:var(--radius-chip); font-size:12px; font-weight:500; color:#9ca3af; text-decoration:none">
       ✕ Do Not Contact
     </a>
   </div>
@@ -171,8 +171,10 @@
         </tbody>
       </table>
       {% else %}
-      <div style="padding:.75rem 0; color:#9ca3af; font-size:12px; line-height:1.8">
-        No contacts yet. Import directors below or add manually.
+      <div class="ds-empty-state">
+        <span class="ds-empty-state-icon">👤</span>
+        <span class="ds-empty-state-title">No contacts enriched yet</span>
+        Import directors from registry below, or add contacts manually.
       </div>
       {% endif %}
 
@@ -294,7 +296,10 @@
         {% endfor %}
       </div>
       {% else %}
-      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">No timeline events yet.</p>
+      <div class="ds-empty-state">
+        <span class="ds-empty-state-icon">📅</span>
+        Timeline builds as events are recorded — incorporations, LEI registrations, officer changes, and RM activity will appear here.
+      </div>
       {% endif %}
     </div>
 
@@ -348,12 +353,19 @@
       <h2>Company Details</h2>
       <dl class="def-list">
         <dt>Source</dt>
-        <dd>{{
-          {"companies_house": "Companies House",
-           "manual_upload": "Manual Upload",
-           "mauritius_mns": "Mauritius MNS"
-          }.get(lead.source_system, lead.source_system)
-        }}</dd>
+        <dd>
+          {{
+            {"companies_house": "Companies House",
+             "manual_upload": "Manual Upload",
+             "mauritius_mns": "Mauritius MNS"
+            }.get(lead.source_system, lead.source_system)
+          }}
+          {% if lead.source_system == 'companies_house' %}
+          <span class="ds-trust-label ds-trust-label-verified" style="margin-left:6px">✓ Registry-confirmed</span>
+          {% elif lead.source_system == 'mauritius_mns' %}
+          <span class="ds-trust-label ds-trust-label-verified" style="margin-left:6px">✓ MNS-confirmed</span>
+          {% endif %}
+        </dd>
         <dt>Ref</dt><dd><code>{{ lead.source_ref }}</code></dd>
         <dt>Jurisdiction</dt><dd>{{ lead.jurisdiction }}</dd>
         <dt>Entity Type</dt><dd>{{ lead.entity_type or "—" }}</dd>
@@ -505,6 +517,7 @@
             {% if lei.fresh %}
               <span class="ds-chip ds-chip-high" style="font-size:10px; margin-left:6px">NEW · &lt;90 days</span>
             {% endif %}
+            <span class="ds-trust-label ds-trust-label-gleif" style="margin-left:6px">✓ GLEIF matched</span>
           </td>
         </tr>
         <tr>
@@ -531,10 +544,11 @@
     </div>
     {% else %}
     <div class="card ds-layer-reference" style="border:1px dashed #e5e7eb; background:#fafafa">
-      <h2 style="color:#9ca3af; font-size:14px">No Legal ID Yet</h2>
-      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0">
-        No LEI registered yet. Companies often register one just before opening institutional accounts. We check daily.
-      </p>
+      <h2>Legal ID (LEI)</h2>
+      <div class="ds-empty-state" style="padding:.5rem 0; text-align:left">
+        <span class="ds-empty-state-title">No LEI registered yet</span>
+        Companies typically register a Legal Entity Identifier just before opening regulated accounts — a strong onboarding signal. System monitors GLEIF daily.
+      </div>
     </div>
     {% endif %}
 
@@ -560,8 +574,9 @@
         </div>
         {% endfor %}
       {% else %}
-        <div style="color:#9ca3af; font-size:12px; font-style:italic; padding:.5rem 0">
-          No actions recorded yet. Assign this lead or update its status to begin the audit trail.
+        <div class="ds-empty-state">
+          <span class="ds-empty-state-icon">📋</span>
+          No actions recorded yet. All RM activity on this lead will appear here as an immutable audit trail.
         </div>
       {% endif %}
     </div>
