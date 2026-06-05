@@ -6,6 +6,16 @@
   <a href="/" class="back-link">← Back to queue</a>
 </div>
 
+{% if score.reason_summary and score.reason_summary != "No priority signals matched." %}
+<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:.75rem 1rem; margin-bottom:1rem; display:flex; gap:.75rem; align-items:flex-start">
+  <span style="font-size:18px; line-height:1.2">💡</span>
+  <div>
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#1d4ed8; margin-bottom:2px">Why contact now</div>
+    <div style="font-size:13px; color:#1e3a5f; line-height:1.6">{{ score.reason_summary }}</div>
+  </div>
+</div>
+{% endif %}
+
 <div style="border-bottom: 1px solid #e5e7eb; padding: .75rem 0 1rem 0; display: flex; gap: 2rem; flex-wrap: wrap;">
   <div>
     <div style="font-size:12px; color:#6b7280;">Score</div>
@@ -53,6 +63,10 @@
           }.get(lead.source_system, lead.source_system)
         }}</dd>
         <dt>Ref</dt><dd><code>{{ lead.source_ref }}</code></dd>
+        {% if lead.website %}
+        <dt>Website</dt>
+        <dd><a href="{{ lead.website }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">{{ lead.website }}</a></dd>
+        {% endif %}
         {% if lead.verify_url %}
         <dt>Registry</dt>
         <dd>
@@ -377,6 +391,36 @@
 
   <!-- Right: RM action panel -->
   <div>
+    <div class="card" style="background:#f0fdf4; border:1px solid #bbf7d0">
+      <h2 style="color:#15803d">Outreach Briefing</h2>
+      <div style="font-size:12px; color:#166534; line-height:1.8">
+        {% if score.reason_summary and score.reason_summary != "No priority signals matched." %}
+        <div style="margin-bottom:.6rem">{{ score.reason_summary }}</div>
+        {% endif %}
+        {% if lead.website %}
+        <div><span style="color:#6b7280">Web:</span> <a href="{{ lead.website }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">{{ lead.website }}</a></div>
+        {% endif %}
+        {% if lead.incorporation_date %}
+        <div><span style="color:#6b7280">Incorporated:</span> {{ lead.incorporation_date }}</div>
+        {% endif %}
+        {% if lead.jurisdiction %}
+        <div><span style="color:#6b7280">Jurisdiction:</span> {{ lead.jurisdiction }}</div>
+        {% endif %}
+        {% if lead.entity_type %}
+        <div><span style="color:#6b7280">Entity type:</span> {{ lead.entity_type }}</div>
+        {% endif %}
+        {% set active_directors = officers | selectattr("resigned_on", "none") | list %}
+        {% if active_directors %}
+        <div style="margin-top:.4rem"><span style="color:#6b7280">Key contacts:</span>
+          {% for d in active_directors[:3] %}{{ d.name }}{% if d.role %} ({{ d.role | replace("_"," ") | title }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
+        </div>
+        {% endif %}
+        {% if not score.reason_summary and not lead.website and not active_directors %}
+        <span style="color:#9ca3af; font-style:italic">Add enrichment data to generate an outreach brief.</span>
+        {% endif %}
+      </div>
+    </div>
+
     <div class="card" id="action-panel">
       <h2>RM Actions</h2>
       <form

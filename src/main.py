@@ -647,7 +647,8 @@ def queue(request: Request):
             qs.reason_summary,
             ra.assigned_to,
             ra.status,
-            qs.refreshed_at
+            qs.refreshed_at,
+            c.website
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -680,6 +681,7 @@ def queue(request: Request):
             "status": normalize_status(row[10]) or "new",
             "status_label": status_label(row[10]),
             "refreshed_at": row[11],
+            "website": sanitize_external_url(row[12]),
         }
         for row in rows
     ]
@@ -713,7 +715,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 """
                 SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
                        c.incorporation_date, c.registered_address, c.source_system,
-                       c.source_ref, c.verify_url,
+                       c.source_ref, c.verify_url, c.website,
                        ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
                        ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at
                 FROM companies c
@@ -786,18 +788,18 @@ def lead_detail(request: Request, lead_id: UUID):
             contacts_rows = cur.fetchall()
 
     score = {
-        "score": row[9] if row[9] is not None else 0,
-        "tier": row[10] if row[10] is not None else "LOW",
-        "reason_codes": row[11] if row[11] is not None else [],
-        "reason_summary": row[12] if row[12] is not None else "No signals matched.",
-        "scoring_version": row[13] if row[13] is not None else SCORING_VERSION,
+        "score": row[10] if row[10] is not None else 0,
+        "tier": row[11] if row[11] is not None else "LOW",
+        "reason_codes": row[12] if row[12] is not None else [],
+        "reason_summary": row[13] if row[13] is not None else "No signals matched.",
+        "scoring_version": row[14] if row[14] is not None else SCORING_VERSION,
     }
     action = {
-        "assigned_to": row[14],
-        "status": normalize_status(row[15]) or "new",
-        "notes": row[16] or "",
-        "contacted_at": row[17],
-        "follow_up_at": row[18],
+        "assigned_to": row[15],
+        "status": normalize_status(row[16]) or "new",
+        "notes": row[17] or "",
+        "contacted_at": row[18],
+        "follow_up_at": row[19],
     }
     audit_rendered = [
         {
@@ -884,6 +886,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 "source_system": row[6],
                 "source_ref": row[7],
                 "verify_url": sanitize_external_url(row[8]),
+                "website": sanitize_external_url(row[9]),
             },
             "score": score,
             "action": action,

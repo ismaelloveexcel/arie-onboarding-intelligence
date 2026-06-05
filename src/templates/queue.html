@@ -78,19 +78,25 @@
         <th>Tier</th>
         <th>Assigned</th>
         <th>Status</th>
+        <th>Web</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
       <tr>
-        <td><a href="/leads/{{ row.id }}">{{ row.company_name }}</a></td>
+        <td>
+          <a href="/leads/{{ row.id }}">{{ row.company_name }}</a>
+          {% if row.reason_summary and row.reason_summary != "No priority signals matched." %}
+          <div style="font-size:11px; color:#6b7280; margin-top:2px; line-height:1.4; max-width:280px">{{ row.reason_summary }}</div>
+          {% endif %}
+        </td>
         <td>{{ row.jurisdiction }}</td>
         <td>{{ row.entity_type or "—" }}</td>
         <td class="cell-meta nowrap">{{ row.incorporation_date or "—" }}</td>
         <td class="col-num">
-          <div class="score-cell">
-            <span class="score">{{ row.priority_score }}</span>
+          <div class="score-cell" style="position:relative">
+            <span class="score" style="cursor:default" title="{{ row.reason_summary }}">{{ row.priority_score }}</span>
             <div class="score-bar">
               <div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div>
             </div>
@@ -99,6 +105,13 @@
         <td><span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span></td>
         <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span></td>
+        <td>
+          {% if row.website %}
+            <a href="{{ row.website }}" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#0057b8" title="{{ row.website }}">↗ web</a>
+          {% else %}
+            <span style="color:#d1d5db; font-size:11px">—</span>
+          {% endif %}
+        </td>
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm btn-verify" title="Open registry">↗</a>
