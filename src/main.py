@@ -856,6 +856,75 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             contacts_rows = cur.fetchall()
 
+            # Timeline: incorporation, LEI events, officer appointments, RM actions
+            cur.execute(
+                """
+                SELECT event_date, event_type, event_label, event_meta
+                FROM (
+                    -- Incorporation
+                    SELECT
+                        incorporation_date      AS event_date,
+                        'incorporation'         AS event_type,
+                        'Company incorporated'  AS event_label,
+                        json_build_object(
+                            'jurisdiction', jurisdiction,
+                            'entity_type',  entity_type
+                        )::text                 AS event_meta
+                    FROM companies WHERE id = %(cid)s AND incorporation_date IS NOT NULL
+
+                    UNION ALL
+
+                    -- LEI registration
+                    SELECT
+                        registered_on           AS event_date,
+                        'lei'                   AS event_type,
+                        'LEI registered'        AS event_label,
+                        json_build_object(
+                            'lei_code', lei_code,
+                            'status',   registration_status
+                        )::text                 AS event_meta
+                    FROM lei_records WHERE company_id = %(cid)s AND registered_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- Officer appointments
+                    SELECT
+                        appointed_on            AS event_date,
+                        'officer_appointed'     AS event_type,
+                        officer_name || ' appointed as ' || COALESCE(role, 'officer') AS event_label,
+                        json_build_object('role', role)::text AS event_meta
+                    FROM company_officers
+                    WHERE company_id = %(cid)s AND appointed_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- Officer resignations
+                    SELECT
+                        resigned_on             AS event_date,
+                        'officer_resigned'      AS event_type,
+                        officer_name || ' resigned'  AS event_label,
+                        json_build_object('role', role)::text AS event_meta
+                    FROM company_officers
+                    WHERE company_id = %(cid)s AND resigned_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- RM status changes from audit log
+                    SELECT
+                        created_at::date        AS event_date,
+                        'rm_action'             AS event_type,
+                        action                  AS event_label,
+                        COALESCE(new_value::text, '') AS event_meta
+                    FROM audit_log
+                    WHERE entity_type = 'company' AND entity_id = %(cid)s
+                ) t
+                ORDER BY event_date DESC NULLS LAST
+                LIMIT 30
+                """,
+                {"cid": lead_id},
+            )
+            timeline_rows = cur.fetchall()
+
     score = {
         "score": row[10] if row[10] is not None else 0,
         "tier": row[11] if row[11] is not None else "LOW",
@@ -946,6 +1015,31 @@ def lead_detail(request: Request, lead_id: UUID):
         for r in contacts_rows
     ]
 
+    _TIMELINE_ICONS = {
+        "incorporation":    "🏢",
+        "lei":              "🔑",
+        "officer_appointed":"👤",
+        "officer_resigned": "👋",
+        "rm_action":        "📋",
+    }
+    _TIMELINE_COLORS = {
+        "incorporation":    "#1d4ed8",
+        "lei":              "#15803d",
+        "officer_appointed":"#6b7280",
+        "officer_resigned": "#dc2626",
+        "rm_action":        "#7c3aed",
+    }
+    timeline = [
+        {
+            "date": r[0],
+            "type": r[1],
+            "label": r[2],
+            "icon": _TIMELINE_ICONS.get(r[1], "•"),
+            "color": _TIMELINE_COLORS.get(r[1], "#6b7280"),
+        }
+        for r in timeline_rows
+    ]
+
     return templates.TemplateResponse(
         request=request,
         name="lead_detail.html",
@@ -976,6 +1070,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "signal_details": SIGNAL_DETAILS,
+            "timeline": timeline,
         },
     )
 

@@ -336,6 +336,28 @@
   </div>
 
   <div class="card">
+    <h2>Company Timeline</h2>
+    {% if timeline %}
+    <div style="position:relative; padding-left:1.25rem">
+      <div style="position:absolute; left:5px; top:0; bottom:0; width:2px; background:#e5e7eb; border-radius:1px"></div>
+      {% for event in timeline %}
+      <div style="position:relative; margin-bottom:.75rem; padding-left:.5rem">
+        <span style="position:absolute; left:-1.05rem; top:2px; font-size:13px; line-height:1">{{ event.icon }}</span>
+        <div style="font-size:12px; font-weight:600; color:{{ event.color }}">{{ event.label }}</div>
+        <div style="font-size:11px; color:#9ca3af; margin-top:1px">
+          {% if event.date %}{{ event.date.strftime("%d %b %Y") if event.date else "—" }}{% else %}—{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
+      No timeline events yet.
+    </p>
+    {% endif %}
+  </div>
+
+  <div class="card">
     <h2>Directors</h2>
     {% if officers %}
     <table style="width:100%; border-collapse:collapse; font-size:12px">
