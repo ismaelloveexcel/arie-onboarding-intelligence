@@ -46,6 +46,9 @@
       </span>
     </div>
   </div>
+  <a href="/leads/export?{{ query_string }}" class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:0 16px; height:34px; border-radius:6px; text-decoration:none">
+    ↓ Export to Excel
+  </a>
 </div>
 
 {# ============================================================
@@ -171,9 +174,26 @@
           </div>
         </td>
 
-        {# ── STATUS + ACTION HINT ── #}
+        {# ── STATUS + FOLLOW-UP INDICATOR + ACTION HINT ── #}
         <td>
           <span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span>
+          {% if row.follow_up_at %}
+            {% set today = now_date %}
+            {% set delta = (row.follow_up_at - today).days %}
+            {% if delta < 0 %}
+              <div style="font-size:10px; color:#dc2626; font-weight:600; margin-top:3px; white-space:nowrap">
+                ⚠ Overdue ({{ delta | abs }}d)
+              </div>
+            {% elif delta == 0 %}
+              <div style="font-size:10px; color:#d97706; font-weight:600; margin-top:3px; white-space:nowrap">
+                📅 Due today
+              </div>
+            {% elif delta <= 7 %}
+              <div style="font-size:10px; color:#6b7280; margin-top:3px; white-space:nowrap">
+                📅 In {{ delta }}d
+              </div>
+            {% endif %}
+          {% endif %}
           <span class="ds-action-hint"> · <a href="/leads/{{ row.id }}" style="color:#0B3D91">View →</a></span>
         </td>
 

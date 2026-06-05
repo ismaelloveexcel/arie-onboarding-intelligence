@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
@@ -716,7 +716,8 @@ def queue(request: Request):
             ra.status,
             qs.refreshed_at,
             c.website,
-            qs.reason_codes
+            qs.reason_codes,
+            ra.follow_up_at
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -751,6 +752,7 @@ def queue(request: Request):
             "refreshed_at": row[11],
             "website": sanitize_external_url(row[12]),
             "reason_codes": row[13] or [],
+            "follow_up_at": row[14],
         }
         for row in rows
     ]
@@ -772,7 +774,143 @@ def queue(request: Request):
             "query_string": _build_query_string(query_params),
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
+            "now_date": date.today(),
         },
+    )
+
+
+@app.get("/leads/export")
+def export_leads(request: Request):
+    """Export the current filtered queue view as an Excel file."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    filters = {
+        "tier": request.query_params.get("tier", ""),
+        "jurisdiction": request.query_params.get("jurisdiction", ""),
+        "assigned_to": request.query_params.get("assigned_to", ""),
+        "status": request.query_params.get("status", ""),
+        "date_from": request.query_params.get("date_from", ""),
+        "date_to": request.query_params.get("date_to", ""),
+        "sort": request.query_params.get("sort", "score"),
+    }
+
+    where_clauses = ["1=1"]
+    params: list[object] = []
+    if filters["tier"]:
+        where_clauses.append("qs.tier = %s")
+        params.append(filters["tier"])
+    if filters["jurisdiction"]:
+        where_clauses.append("c.jurisdiction = %s")
+        params.append(filters["jurisdiction"])
+    if filters["assigned_to"]:
+        where_clauses.append("ra.assigned_to = %s")
+        params.append(filters["assigned_to"])
+    if filters["status"]:
+        status_filter = normalize_status(filters["status"])
+        if status_filter:
+            where_clauses.append("ra.status = %s")
+            params.append(status_filter)
+    if filters["date_from"]:
+        where_clauses.append("c.incorporation_date >= %s")
+        params.append(filters["date_from"])
+    if filters["date_to"]:
+        where_clauses.append("c.incorporation_date <= %s")
+        params.append(filters["date_to"])
+
+    sort_sql = {
+        "score": "qs.priority_score DESC, c.company_name ASC",
+        "date": "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+        "date_asc": "c.incorporation_date ASC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+        "name": "c.company_name ASC",
+    }.get(filters["sort"], "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    c.company_name,
+                    qs.priority_score,
+                    qs.tier,
+                    ra.status,
+                    ra.assigned_to,
+                    c.jurisdiction,
+                    c.entity_type,
+                    c.incorporation_date,
+                    c.website,
+                    qs.reason_summary,
+                    lr.lei_code,
+                    ra.follow_up_at,
+                    c.verify_url
+                FROM queue_snapshot qs
+                JOIN companies c ON c.id = qs.canonical_company_id
+                LEFT JOIN rm_actions ra ON ra.company_id = c.id
+                LEFT JOIN lei_records lr ON lr.company_id = c.id
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY {sort_sql}
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Lead Queue"
+
+    header_fill = PatternFill("solid", fgColor="1A0B3D")
+    header_font = Font(bold=True, color="C9A44A", size=11)
+    header_align = Alignment(horizontal="left", vertical="center", wrap_text=False)
+
+    headers = [
+        "Company Name", "Score", "Tier", "Status", "Assigned RM",
+        "Jurisdiction", "Entity Type", "Incorporation Date", "Website",
+        "Primary Reason", "LEI", "Follow-up Date", "Registry Link",
+    ]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+
+    # Column widths
+    col_widths = [38, 8, 10, 18, 18, 14, 22, 18, 35, 55, 24, 16, 40]
+    for i, w in enumerate(col_widths, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    for row in rows:
+        company_name, score, tier, status_raw, assigned_to, jurisdiction, \
+            entity_type, inc_date, website, reason_summary, lei_code, \
+            follow_up_at, verify_url = row
+        ws.append([
+            company_name or "",
+            score or 0,
+            tier or "",
+            status_label(status_raw) if status_raw else "New",
+            assigned_to or "",
+            jurisdiction or "",
+            _format_entity_type(entity_type) or "",
+            inc_date.isoformat() if inc_date else "",
+            sanitize_external_url(website) or "",
+            reason_summary or "",
+            lei_code or "",
+            follow_up_at.isoformat() if follow_up_at else "",
+            sanitize_external_url(verify_url) or "",
+        ])
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"lead-queue-{date.today().isoformat()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -1089,6 +1227,17 @@ def lead_action(
     follow_up_at: str = Form(""),
 ):
     status_canonical = _canonical_status_or_422(status)
+
+    # Auto follow-up: if contacted_at is provided and follow_up_at is blank,
+    # propose contacted_at + 7 days. Never overwrites a user-entered date.
+    effective_follow_up = follow_up_at
+    if contacted_at and not follow_up_at:
+        try:
+            contacted_dt = datetime.strptime(contacted_at, "%Y-%m-%d").date()
+            effective_follow_up = (contacted_dt + timedelta(days=7)).isoformat()
+        except ValueError:
+            pass
+
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1096,6 +1245,9 @@ def lead_action(
                 (lead_id,),
             )
             existing = cur.fetchone()
+            # If existing follow_up_at already set and user submitted blank, preserve it.
+            if existing and existing[4] and not follow_up_at:
+                effective_follow_up = existing[4].isoformat()
             old_value = None if existing is None else {
                 "assigned_to": existing[0],
                 "status": existing[1],
@@ -1122,7 +1274,7 @@ def lead_action(
                     status_canonical,
                     notes or None,
                     contacted_at,
-                    follow_up_at,
+                    effective_follow_up,
                 ),
             )
 
@@ -1149,7 +1301,7 @@ def lead_action(
         status_canonical,
         notes,
         None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"),
-        None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"),
+        None if not effective_follow_up else datetime.strptime(effective_follow_up, "%Y-%m-%d"),
         saved=True,
     )
 

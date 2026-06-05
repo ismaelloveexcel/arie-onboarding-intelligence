@@ -12,3 +12,4 @@ playwright
 pytest
 ruff
 PyYAML
+openpyxl
