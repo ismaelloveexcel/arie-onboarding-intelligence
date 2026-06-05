@@ -9,7 +9,7 @@ from urllib.parse import urlencode
 from uuid import UUID
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
@@ -495,6 +495,41 @@ def dashboard(request: Request):
             """)
             top_introducers = cur.fetchall()
 
+            # Panel 5 — RM productivity metrics
+            cur.execute("""
+                SELECT
+                    assigned_to,
+                    COUNT(*)                                                            AS total_assigned,
+                    COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)                   AS contacted,
+                    COUNT(*) FILTER (WHERE status IN ('Client','Qualified'))            AS converted,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at >= CURRENT_DATE)                AS pending_followups,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at < CURRENT_DATE
+                                      AND status NOT IN ('Client','Closed - Not Fit',
+                                                         'Not Fit','Archived'))        AS overdue_followups
+                FROM rm_actions
+                WHERE assigned_to IS NOT NULL
+                GROUP BY assigned_to
+                ORDER BY total_assigned DESC
+            """)
+            rm_productivity = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    COUNT(*)                                                            AS total_with_actions,
+                    COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)                   AS total_contacted,
+                    COUNT(*) FILTER (WHERE status IN ('Client','Qualified'))            AS total_converted,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at < CURRENT_DATE
+                                      AND status NOT IN ('Client','Closed - Not Fit',
+                                                         'Not Fit','Archived'))        AS total_overdue,
+                    AVG(EXTRACT(EPOCH FROM (contacted_at - ra.created_at))/86400)
+                        FILTER (WHERE contacted_at IS NOT NULL)                        AS avg_days_to_contact
+                FROM rm_actions ra
+            """)
+            rm_summary = cur.fetchone()
+
     def _ts(ts: datetime | None) -> datetime | None:
         if ts is None:
             return None
@@ -576,6 +611,38 @@ def dashboard(request: Request):
             # Panel 4
             "status_counts":   status_counts,
             "top_introducers": top_introducers,
+            # Panel 5 — RM productivity
+            "rm_productivity": [
+                {
+                    "name": r[0],
+                    "total_assigned": r[1],
+                    "contacted": r[2],
+                    "converted": r[3],
+                    "pending_followups": r[4],
+                    "overdue_followups": r[5],
+                    "contact_rate": round(r[2] * 100 / r[1], 0) if r[1] else 0,
+                    "conversion_rate": round(r[3] * 100 / r[1], 0) if r[1] else 0,
+                }
+                for r in rm_productivity
+            ],
+            "rm_summary": {
+                "total_with_actions": rm_summary[0] if rm_summary else 0,
+                "total_contacted": rm_summary[1] if rm_summary else 0,
+                "total_converted": rm_summary[2] if rm_summary else 0,
+                "total_overdue": rm_summary[3] if rm_summary else 0,
+                "avg_days_to_contact": (
+                    round(float(rm_summary[4]), 1)
+                    if rm_summary and rm_summary[4] is not None else None
+                ),
+                "contact_rate": (
+                    round(rm_summary[1] * 100 / rm_summary[0], 0)
+                    if rm_summary and rm_summary[0] else 0
+                ),
+                "conversion_rate": (
+                    round(rm_summary[2] * 100 / rm_summary[0], 0)
+                    if rm_summary and rm_summary[0] else 0
+                ),
+            },
         }
     )
 
@@ -647,7 +714,10 @@ def queue(request: Request):
             qs.reason_summary,
             ra.assigned_to,
             ra.status,
-            qs.refreshed_at
+            qs.refreshed_at,
+            c.website,
+            qs.reason_codes,
+            ra.follow_up_at
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -680,6 +750,9 @@ def queue(request: Request):
             "status": normalize_status(row[10]) or "new",
             "status_label": status_label(row[10]),
             "refreshed_at": row[11],
+            "website": sanitize_external_url(row[12]),
+            "reason_codes": row[13] or [],
+            "follow_up_at": row[14],
         }
         for row in rows
     ]
@@ -701,7 +774,143 @@ def queue(request: Request):
             "query_string": _build_query_string(query_params),
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
+            "now_date": date.today(),
         },
+    )
+
+
+@app.get("/leads/export")
+def export_leads(request: Request):
+    """Export the current filtered queue view as an Excel file."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    filters = {
+        "tier": request.query_params.get("tier", ""),
+        "jurisdiction": request.query_params.get("jurisdiction", ""),
+        "assigned_to": request.query_params.get("assigned_to", ""),
+        "status": request.query_params.get("status", ""),
+        "date_from": request.query_params.get("date_from", ""),
+        "date_to": request.query_params.get("date_to", ""),
+        "sort": request.query_params.get("sort", "score"),
+    }
+
+    where_clauses = ["1=1"]
+    params: list[object] = []
+    if filters["tier"]:
+        where_clauses.append("qs.tier = %s")
+        params.append(filters["tier"])
+    if filters["jurisdiction"]:
+        where_clauses.append("c.jurisdiction = %s")
+        params.append(filters["jurisdiction"])
+    if filters["assigned_to"]:
+        where_clauses.append("ra.assigned_to = %s")
+        params.append(filters["assigned_to"])
+    if filters["status"]:
+        status_filter = normalize_status(filters["status"])
+        if status_filter:
+            where_clauses.append("ra.status = %s")
+            params.append(status_filter)
+    if filters["date_from"]:
+        where_clauses.append("c.incorporation_date >= %s")
+        params.append(filters["date_from"])
+    if filters["date_to"]:
+        where_clauses.append("c.incorporation_date <= %s")
+        params.append(filters["date_to"])
+
+    sort_sql = {
+        "score": "qs.priority_score DESC, c.company_name ASC",
+        "date": "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+        "date_asc": "c.incorporation_date ASC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC",
+        "name": "c.company_name ASC",
+    }.get(filters["sort"], "c.incorporation_date DESC NULLS LAST, c.jurisdiction ASC, qs.priority_score DESC, c.company_name ASC")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""
+                SELECT
+                    c.company_name,
+                    qs.priority_score,
+                    qs.tier,
+                    ra.status,
+                    ra.assigned_to,
+                    c.jurisdiction,
+                    c.entity_type,
+                    c.incorporation_date,
+                    c.website,
+                    qs.reason_summary,
+                    lr.lei_code,
+                    ra.follow_up_at,
+                    c.verify_url
+                FROM queue_snapshot qs
+                JOIN companies c ON c.id = qs.canonical_company_id
+                LEFT JOIN rm_actions ra ON ra.company_id = c.id
+                LEFT JOIN lei_records lr ON lr.company_id = c.id
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY {sort_sql}
+                """,
+                params,
+            )
+            rows = cur.fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Lead Queue"
+
+    header_fill = PatternFill("solid", fgColor="1A0B3D")
+    header_font = Font(bold=True, color="C9A44A", size=11)
+    header_align = Alignment(horizontal="left", vertical="center", wrap_text=False)
+
+    headers = [
+        "Company Name", "Score", "Tier", "Status", "Assigned RM",
+        "Jurisdiction", "Entity Type", "Incorporation Date", "Website",
+        "Primary Reason", "LEI", "Follow-up Date", "Registry Link",
+    ]
+    ws.append(headers)
+    for col_idx, _ in enumerate(headers, start=1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_align
+
+    # Column widths
+    col_widths = [38, 8, 10, 18, 18, 14, 22, 18, 35, 55, 24, 16, 40]
+    for i, w in enumerate(col_widths, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    for row in rows:
+        company_name, score, tier, status_raw, assigned_to, jurisdiction, \
+            entity_type, inc_date, website, reason_summary, lei_code, \
+            follow_up_at, verify_url = row
+        ws.append([
+            company_name or "",
+            score or 0,
+            tier or "",
+            status_label(status_raw) if status_raw else "New",
+            assigned_to or "",
+            jurisdiction or "",
+            _format_entity_type(entity_type) or "",
+            inc_date.isoformat() if inc_date else "",
+            sanitize_external_url(website) or "",
+            reason_summary or "",
+            lei_code or "",
+            follow_up_at.isoformat() if follow_up_at else "",
+            sanitize_external_url(verify_url) or "",
+        ])
+
+    # Freeze header row
+    ws.freeze_panes = "A2"
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"lead-queue-{date.today().isoformat()}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -713,7 +922,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 """
                 SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
                        c.incorporation_date, c.registered_address, c.source_system,
-                       c.source_ref, c.verify_url,
+                       c.source_ref, c.verify_url, c.website,
                        ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
                        ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at
                 FROM companies c
@@ -776,28 +985,99 @@ def lead_detail(request: Request, lead_id: UUID):
 
             cur.execute(
                 """
-                SELECT id, name, role, email, phone, linkedin_url, source, notes, created_at
+                SELECT id, name, role, email, phone, linkedin_url, source, notes,
+                       created_at, email_confidence, linkedin_verified,
+                       is_decision_maker, contact_priority, enrichment_status
                 FROM lead_contacts
                 WHERE company_id = %s
-                ORDER BY created_at ASC
+                ORDER BY contact_priority DESC, is_decision_maker DESC, created_at ASC
                 """,
                 (lead_id,),
             )
             contacts_rows = cur.fetchall()
 
+            # Timeline: incorporation, LEI events, officer appointments, RM actions
+            cur.execute(
+                """
+                SELECT event_date, event_type, event_label, event_meta
+                FROM (
+                    -- Incorporation
+                    SELECT
+                        incorporation_date      AS event_date,
+                        'incorporation'         AS event_type,
+                        'Company incorporated'  AS event_label,
+                        json_build_object(
+                            'jurisdiction', jurisdiction,
+                            'entity_type',  entity_type
+                        )::text                 AS event_meta
+                    FROM companies WHERE id = %(cid)s AND incorporation_date IS NOT NULL
+
+                    UNION ALL
+
+                    -- LEI registration
+                    SELECT
+                        registered_on           AS event_date,
+                        'lei'                   AS event_type,
+                        'LEI registered'        AS event_label,
+                        json_build_object(
+                            'lei_code', lei_code,
+                            'status',   registration_status
+                        )::text                 AS event_meta
+                    FROM lei_records WHERE company_id = %(cid)s AND registered_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- Officer appointments
+                    SELECT
+                        appointed_on            AS event_date,
+                        'officer_appointed'     AS event_type,
+                        officer_name || ' appointed as ' || COALESCE(role, 'officer') AS event_label,
+                        json_build_object('role', role)::text AS event_meta
+                    FROM company_officers
+                    WHERE company_id = %(cid)s AND appointed_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- Officer resignations
+                    SELECT
+                        resigned_on             AS event_date,
+                        'officer_resigned'      AS event_type,
+                        officer_name || ' resigned'  AS event_label,
+                        json_build_object('role', role)::text AS event_meta
+                    FROM company_officers
+                    WHERE company_id = %(cid)s AND resigned_on IS NOT NULL
+
+                    UNION ALL
+
+                    -- RM status changes from audit log
+                    SELECT
+                        created_at::date        AS event_date,
+                        'rm_action'             AS event_type,
+                        action                  AS event_label,
+                        COALESCE(new_value::text, '') AS event_meta
+                    FROM audit_log
+                    WHERE entity_type = 'company' AND entity_id = %(cid)s
+                ) t
+                ORDER BY event_date DESC NULLS LAST
+                LIMIT 30
+                """,
+                {"cid": lead_id},
+            )
+            timeline_rows = cur.fetchall()
+
     score = {
-        "score": row[9] if row[9] is not None else 0,
-        "tier": row[10] if row[10] is not None else "LOW",
-        "reason_codes": row[11] if row[11] is not None else [],
-        "reason_summary": row[12] if row[12] is not None else "No signals matched.",
-        "scoring_version": row[13] if row[13] is not None else SCORING_VERSION,
+        "score": row[10] if row[10] is not None else 0,
+        "tier": row[11] if row[11] is not None else "LOW",
+        "reason_codes": row[12] if row[12] is not None else [],
+        "reason_summary": row[13] if row[13] is not None else "No signals matched.",
+        "scoring_version": row[14] if row[14] is not None else SCORING_VERSION,
     }
     action = {
-        "assigned_to": row[14],
-        "status": normalize_status(row[15]) or "new",
-        "notes": row[16] or "",
-        "contacted_at": row[17],
-        "follow_up_at": row[18],
+        "assigned_to": row[15],
+        "status": normalize_status(row[16]) or "new",
+        "notes": row[17] or "",
+        "contacted_at": row[18],
+        "follow_up_at": row[19],
     }
     audit_rendered = [
         {
@@ -866,8 +1146,38 @@ def lead_detail(request: Request, lead_id: UUID):
             "source": r[6] or "",
             "notes": r[7] or "",
             "created_at": r[8],
+            "email_confidence": r[9] or "",
+            "linkedin_verified": r[10] or False,
+            "is_decision_maker": r[11] or False,
+            "contact_priority": r[12] or 0,
+            "enrichment_status": r[13] or "manual",
         }
         for r in contacts_rows
+    ]
+
+    _TIMELINE_ICONS = {
+        "incorporation":    "🏢",
+        "lei":              "🔑",
+        "officer_appointed":"👤",
+        "officer_resigned": "👋",
+        "rm_action":        "📋",
+    }
+    _TIMELINE_COLORS = {
+        "incorporation":    "#1d4ed8",
+        "lei":              "#15803d",
+        "officer_appointed":"#6b7280",
+        "officer_resigned": "#dc2626",
+        "rm_action":        "#7c3aed",
+    }
+    timeline = [
+        {
+            "date": r[0],
+            "type": r[1],
+            "label": r[2],
+            "icon": _TIMELINE_ICONS.get(r[1], "•"),
+            "color": _TIMELINE_COLORS.get(r[1], "#6b7280"),
+        }
+        for r in timeline_rows
     ]
 
     return templates.TemplateResponse(
@@ -884,6 +1194,7 @@ def lead_detail(request: Request, lead_id: UUID):
                 "source_system": row[6],
                 "source_ref": row[7],
                 "verify_url": sanitize_external_url(row[8]),
+                "website": sanitize_external_url(row[9]),
             },
             "score": score,
             "action": action,
@@ -899,6 +1210,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "signal_details": SIGNAL_DETAILS,
+            "timeline": timeline,
         },
     )
 
@@ -915,6 +1227,17 @@ def lead_action(
     follow_up_at: str = Form(""),
 ):
     status_canonical = _canonical_status_or_422(status)
+
+    # Auto follow-up: if contacted_at is provided and follow_up_at is blank,
+    # propose contacted_at + 7 days. Never overwrites a user-entered date.
+    effective_follow_up = follow_up_at
+    if contacted_at and not follow_up_at:
+        try:
+            contacted_dt = datetime.strptime(contacted_at, "%Y-%m-%d").date()
+            effective_follow_up = (contacted_dt + timedelta(days=7)).isoformat()
+        except ValueError:
+            pass
+
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -922,6 +1245,9 @@ def lead_action(
                 (lead_id,),
             )
             existing = cur.fetchone()
+            # If existing follow_up_at already set and user submitted blank, preserve it.
+            if existing and existing[4] and not follow_up_at:
+                effective_follow_up = existing[4].isoformat()
             old_value = None if existing is None else {
                 "assigned_to": existing[0],
                 "status": existing[1],
@@ -948,7 +1274,7 @@ def lead_action(
                     status_canonical,
                     notes or None,
                     contacted_at,
-                    follow_up_at,
+                    effective_follow_up,
                 ),
             )
 
@@ -975,7 +1301,7 @@ def lead_action(
         status_canonical,
         notes,
         None if not contacted_at else datetime.strptime(contacted_at, "%Y-%m-%d"),
-        None if not follow_up_at else datetime.strptime(follow_up_at, "%Y-%m-%d"),
+        None if not effective_follow_up else datetime.strptime(effective_follow_up, "%Y-%m-%d"),
         saved=True,
     )
 

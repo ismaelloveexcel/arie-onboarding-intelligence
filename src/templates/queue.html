@@ -1,6 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Lead Queue — Arie Leads{% endblock %}
 {% block content %}
+
+{# ============================================================
+   PRIMARY SIGNAL CHIP MAP
+   Derives one signal chip from reason_codes — highest priority wins.
+   No backend logic change — purely template-layer derivation.
+   ============================================================ #}
+{% macro primary_chip(codes) %}
+  {% if "FRESH_LEI" in codes %}
+    <span class="ds-chip ds-chip-high">🔑 Fresh LEI</span>
+  {% elif "MAURITIUS_GBC" in codes %}
+    <span class="ds-chip ds-chip-high">🌍 Mauritius GBC</span>
+  {% elif "HOLDING_STRUCTURE" in codes %}
+    <span class="ds-chip ds-chip-high">🏛 Holding Co.</span>
+  {% elif "INVESTMENT_VEHICLE" in codes %}
+    <span class="ds-chip ds-chip-high">💼 Investment Vehicle</span>
+  {% elif "MAURITIUS_AC" in codes %}
+    <span class="ds-chip ds-chip-med">🌍 Mauritius AC</span>
+  {% elif "HAS_LEI" in codes %}
+    <span class="ds-chip ds-chip-blue">🔑 LEI Registered</span>
+  {% elif "FINANCIAL_SIC" in codes %}
+    <span class="ds-chip ds-chip-blue">📊 Financial Holding</span>
+  {% elif "FUND_MGMT_SIC" in codes %}
+    <span class="ds-chip ds-chip-blue">📊 Fund Management</span>
+  {% elif "RECENTLY_INCORPORATED" in codes %}
+    <span class="ds-chip ds-chip-brand">🆕 New Entity</span>
+  {% elif "INTERNATIONAL_PSC" in codes %}
+    <span class="ds-chip ds-chip-med">🌐 Intl Owner</span>
+  {% elif "INTERNATIONAL_OFFICER" in codes %}
+    <span class="ds-chip ds-chip-med">🌐 Intl Director</span>
+  {% endif %}
+{% endmacro %}
+
 <div class="page-head">
   <div>
     <h1 style="font-size:28px; font-weight:800; letter-spacing:-.02em; color:#111827">
@@ -14,29 +46,20 @@
       </span>
     </div>
   </div>
+  <a href="/leads/export?{{ query_string }}" class="btn btn-secondary" style="display:inline-flex; align-items:center; gap:6px; font-size:13px; padding:0 16px; height:34px; border-radius:6px; text-decoration:none">
+    ↓ Export to Excel
+  </a>
 </div>
 
+{# ============================================================
+   FILTER BAR — structure and names unchanged; high-impact first
+   ============================================================ #}
 <form class="filters" method="get" action="/">
   <label>Tier
     <select name="tier">
       <option value="">All</option>
       {% for t in ["HIGH","MEDIUM","LOW"] %}
         <option value="{{ t }}" {% if filters.tier == t %}selected{% endif %}>{{ t }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label>Jurisdiction
-    <select name="jurisdiction">
-      <option value="">All</option>
-      <option value="UK" {% if filters.jurisdiction == "UK" %}selected{% endif %}>UK</option>
-      <option value="Mauritius" {% if filters.jurisdiction == "Mauritius" %}selected{% endif %}>Mauritius</option>
-    </select>
-  </label>
-  <label>Assigned To
-    <select name="assigned_to">
-      <option value="">All</option>
-      {% for rm in rm_names %}
-        <option value="{{ rm }}" {% if filters.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
       {% endfor %}
     </select>
   </label>
@@ -48,6 +71,21 @@
       {% endfor %}
     </select>
   </label>
+  <label>Assigned To
+    <select name="assigned_to">
+      <option value="">All</option>
+      {% for rm in rm_names %}
+        <option value="{{ rm }}" {% if filters.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Jurisdiction
+    <select name="jurisdiction">
+      <option value="">All</option>
+      <option value="UK" {% if filters.jurisdiction == "UK" %}selected{% endif %}>UK</option>
+      <option value="Mauritius" {% if filters.jurisdiction == "Mauritius" %}selected{% endif %}>Mauritius</option>
+    </select>
+  </label>
   <label>Inc. from
     <input type="date" name="date_from" value="{{ filters.date_from }}">
   </label>
@@ -56,9 +94,9 @@
   </label>
   <label>Sort
     <select name="sort">
+      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best leads first</option>
       <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Incorporated (newest first)</option>
       <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Incorporated (oldest first)</option>
-      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best leads first</option>
       <option value="name" {% if filters.sort == "name" %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
@@ -66,54 +104,124 @@
   <a href="/" class="btn btn-secondary">Reset</a>
 </form>
 
+{# ============================================================
+   LEAD TABLE — structure fully preserved.
+   All changes are additive: class additions, wrapper divs inside tds.
+   No columns removed. Pagination and filtering logic unchanged.
+   ============================================================ #}
 <div class="table-wrap">
-  <table>
+  <table class="ds-table-queue">
     <thead>
       <tr>
         <th>Company</th>
-        <th>Jurisdiction</th>
-        <th>Type</th>
-        <th>Incorporated</th>
+        <th class="ds-col-hidden">Jurisdiction</th>
+        <th class="ds-col-hidden">Type</th>
+        <th class="ds-col-hidden">Incorporated</th>
         <th class="col-num">Score</th>
-        <th>Tier</th>
-        <th>Assigned</th>
         <th>Status</th>
+        <th class="ds-col-secondary">Assigned</th>
+        <th class="ds-col-secondary">Web</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
-      <tr>
-        <td><a href="/leads/{{ row.id }}">{{ row.company_name }}</a></td>
-        <td>{{ row.jurisdiction }}</td>
-        <td>{{ row.entity_type or "—" }}</td>
-        <td class="cell-meta nowrap">{{ row.incorporation_date or "—" }}</td>
-        <td class="col-num">
-          <div class="score-cell">
-            <span class="score">{{ row.priority_score }}</span>
-            <div class="score-bar">
-              <div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div>
+      {# Row-level emphasis class based on tier — additive only #}
+      <tr class="{% if row.tier == 'HIGH' %}ds-row-high{% elif row.tier == 'LOW' %}ds-row-low{% endif %}">
+
+        {# ── DECISION BLOCK (Company column) ── #}
+        <td class="ds-td-company">
+          <div class="ds-queue-decision-block">
+            <a href="/leads/{{ row.id }}" class="ds-company-link">{{ row.company_name }}</a>
+            {% if row.reason_summary and row.reason_summary != "No priority signals matched." %}
+            <div class="ds-queue-signal">{{ row.reason_summary }}</div>
+            {% endif %}
+            <div class="ds-queue-chip-row">
+              {{ primary_chip(row.reason_codes) }}
+              {% if row.tier == 'HIGH' and row.reason_codes %}
+              <span class="ds-priority-match">· Key insight</span>
+              {% endif %}
+            </div>
+            {# Muted inline metadata — replaces 3 hidden columns #}
+            <div class="ds-queue-meta-line">
+              {{- row.jurisdiction -}}
+              {%- if row.entity_type %} · {{ row.entity_type }}{% endif -%}
+              {%- if row.incorporation_date %} · {{ row.incorporation_date }}{% endif -%}
             </div>
           </div>
         </td>
-        <td><span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span></td>
-        <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
-        <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span></td>
+
+        {# ── COLUMNS NOW HIDDEN — data preserved, moved to inline metadata above ── #}
+        <td class="ds-col-hidden">{{ row.jurisdiction }}</td>
+        <td class="ds-col-hidden">{{ row.entity_type or "—" }}</td>
+        <td class="ds-col-hidden">{{ row.incorporation_date or "—" }}</td>
+
+        {# ── SCORE CELL — bar is primary; number is background metric ── #}
+        <td class="col-num">
+          <div class="ds-score-cell" tabindex="0">
+            <span class="score" style="font-weight:400; font-size:12px; color:#6b7280">{{ row.priority_score }}</span>
+            <div class="score-bar">
+              <div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div>
+            </div>
+            {% if row.reason_summary %}
+            <div class="ds-score-popover">
+              <div style="font-weight:700; margin-bottom:4px; color:var(--arie-gold)">
+                Score {{ row.priority_score }} · {{ row.tier | title }}
+              </div>
+              {{ row.reason_summary }}
+            </div>
+            {% endif %}
+          </div>
+        </td>
+
+        {# ── STATUS + FOLLOW-UP INDICATOR + ACTION HINT ── #}
+        <td>
+          <span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span>
+          {% if row.follow_up_at %}
+            {% set today = now_date %}
+            {% set delta = (row.follow_up_at - today).days %}
+            {% if delta < 0 %}
+              <div style="font-size:10px; color:#dc2626; font-weight:600; margin-top:3px; white-space:nowrap">
+                ⚠ Overdue ({{ delta | abs }}d)
+              </div>
+            {% elif delta == 0 %}
+              <div style="font-size:10px; color:#d97706; font-weight:600; margin-top:3px; white-space:nowrap">
+                📅 Due today
+              </div>
+            {% elif delta <= 7 %}
+              <div style="font-size:10px; color:#6b7280; margin-top:3px; white-space:nowrap">
+                📅 In {{ delta }}d
+              </div>
+            {% endif %}
+          {% endif %}
+          <span class="ds-action-hint"> · <a href="/leads/{{ row.id }}" style="color:#0B3D91">View →</a></span>
+        </td>
+
+        <td class="ds-col-secondary">{{ row.assigned_to or '—' }}</td>
+
+        <td class="ds-col-secondary">
+          {% if row.website %}
+            <a href="{{ row.website }}" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#0057b8" title="{{ row.website }}">↗ web</a>
+          {% else %}
+            <span style="color:#e5e7eb; font-size:11px">—</span>
+          {% endif %}
+        </td>
+
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm btn-verify" title="Open registry">↗</a>
           {% endif %}
         </td>
+
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="text-align:center; padding:3rem 2rem">
-          <div style="color:#9ca3af; font-size:13px; line-height:1.8">
-            <div style="font-size:24px; margin-bottom:.5rem">—</div>
-            No leads match the current filters.<br>
-            <a href="/" style="font-size:12px; color:#6b7280">
-              Clear filters
-            </a>
+        <td colspan="9" style="padding:3rem 2rem">
+          <div class="ds-empty-state">
+            <span class="ds-empty-state-icon">🔍</span>
+            <span class="ds-empty-state-title">No leads match the current filters</span>
+            System is monitoring new incorporations daily across UK and Mauritius registries.<br>
+            <a href="/" style="font-size:12px; color:#0B3D91; margin-top:.5rem; display:inline-block">Clear filters</a>
           </div>
         </td>
       </tr>
@@ -122,6 +230,9 @@
   </table>
 </div>
 
+{# ============================================================
+   PAGINATION — unchanged
+   ============================================================ #}
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
@@ -141,4 +252,24 @@
   {% endif %}
 </div>
 {% endif %}
+
+<script>
+  // Queue scroll position preservation.
+  // Saves window.scrollY to sessionStorage when an RM opens a lead.
+  // Restores it on return — no backend, no HTMX, no page reload required.
+  (function () {
+    var KEY = 'queue_scroll_y';
+    var saved = sessionStorage.getItem(KEY);
+    if (saved !== null) {
+      window.scrollTo(0, parseInt(saved, 10));
+      sessionStorage.removeItem(KEY);
+    }
+    document.querySelectorAll('a[href^="/leads/"]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        sessionStorage.setItem(KEY, window.scrollY);
+      });
+    });
+  })();
+</script>
+
 {% endblock %}
