@@ -20,7 +20,7 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
     """
     Build a mock get_conn() context manager.
 
-    The route makes exactly 7 fetchone() calls and 2 fetchall() calls (in order):
+    The route makes exactly 9 fetchone() calls and 3 fetchall() calls (in order):
       fetchone[0] = last pipeline run row  (or None)
       fetchone[1] = last success run row   (or None)
       fetchone[2] = (last_enriched_at,)
@@ -31,6 +31,10 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
                                total_lei, linked_lei, total_mu)
       fetchall[0] = status_counts  [(status, cnt), ...]
       fetchall[1] = top_introducers [(name, cnt), ...]
+      fetchall[2] = rm_productivity [(name, assigned, contacted, converted,
+                                      pending_followups, overdue_followups), ...]
+      fetchone[7] = rm_summary  (total_with_actions, contacted, converted,
+                                  overdue, avg_days_to_contact)
     """
     mock_cur = MagicMock()
     mock_cur.fetchone.side_effect = fetchone_returns
@@ -58,8 +62,9 @@ _EMPTY_FETCHONE = [
     (0, 0, 0),          # vol_row
     (0, 0, 0, 0, 0),    # score_row
     (0, 0, 0, 0, 0, 0, 0),  # cov_row
+    (0, 0, 0, 0, None), # rm_summary
 ]
-_EMPTY_FETCHALL = [[], []]
+_EMPTY_FETCHALL = [[], [], []]  # status_counts, top_introducers, rm_productivity
 
 
 # ---------------------------------------------------------------------------
@@ -97,10 +102,12 @@ def test_dashboard_seeded_data():
         (500, 12, 48),                                        # vol_row
         (80, 120, 200, 100, 500),                             # score_row
         (300, 150, 80, 70, 1200, 900, 200),                   # cov_row
+        (60, 40, 10, 2, 3.5),                                 # rm_summary
     ]
     fetchall_returns = [
         [("New", 150), ("Reviewing", 80), ("Qualified", 60)],
         [("Acme Partners", 45), ("Global Funds Ltd", 30)],
+        [],  # rm_productivity (empty for this test)
     ]
 
     with patch("src.main.get_conn", return_value=_make_conn_mock(fetchone_returns, fetchall_returns)):
@@ -125,8 +132,9 @@ def test_dashboard_stale_source_flag():
         (100, 0, 0),                                           # vol_row
         (0, 0, 0, 0, 0),                                       # score_row
         (50, 25, 10, 8, 200, 150, 30),                         # cov_row
+        (0, 0, 0, 0, None),                                    # rm_summary
     ]
-    fetchall_returns = [[], []]
+    fetchall_returns = [[], [], []]  # status_counts, top_introducers, rm_productivity
 
     with patch("src.main.get_conn", return_value=_make_conn_mock(fetchone_returns, fetchall_returns)):
         resp = client.get("/dashboard")
