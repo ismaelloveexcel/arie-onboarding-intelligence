@@ -224,5 +224,82 @@
     </div>
   </div>
 
+  <!-- ===== PANEL 5: RM Productivity ===== -->
+  <div class="card" style="grid-column: 1 / -1">
+    <h2>RM Productivity</h2>
+
+    <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:.75rem; margin-bottom:1.25rem">
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.total_with_actions }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Leads with actions</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.contact_rate }}%</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Contact rate</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ rm_summary.conversion_rate }}%</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Conversion rate</div>
+      </div>
+      <div style="background:{% if rm_summary.total_overdue > 0 %}#fef2f2{% else %}var(--surface-2){% endif %}; border-radius:var(--r-md); padding:.75rem; text-align:center">
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; color:{% if rm_summary.total_overdue > 0 %}#dc2626{% else %}inherit{% endif %}">{{ rm_summary.total_overdue }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Overdue follow-ups</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
+        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">
+          {% if rm_summary.avg_days_to_contact is not none %}{{ rm_summary.avg_days_to_contact }}d{% else %}—{% endif %}
+        </div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Avg days to contact</div>
+      </div>
+    </div>
+
+    {% if rm_productivity %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>RM</th>
+            <th style="text-align:right">Assigned</th>
+            <th style="text-align:right">Contacted</th>
+            <th style="text-align:right">Contact rate</th>
+            <th style="text-align:right">Converted</th>
+            <th style="text-align:right">Conv. rate</th>
+            <th style="text-align:right">Pending follow-ups</th>
+            <th style="text-align:right">Overdue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rm in rm_productivity %}
+          <tr>
+            <td style="font-weight:600">{{ rm.name }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.total_assigned }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.contacted }}</td>
+            <td style="text-align:right">
+              <span style="color:{% if rm.contact_rate >= 50 %}#16a34a{% elif rm.contact_rate >= 25 %}#d97706{% else %}#dc2626{% endif %}; font-weight:600">
+                {{ rm.contact_rate }}%
+              </span>
+            </td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.converted }}</td>
+            <td style="text-align:right">
+              <span style="color:{% if rm.conversion_rate >= 20 %}#16a34a{% elif rm.conversion_rate >= 10 %}#d97706{% else %}var(--ink-3){% endif %}; font-weight:600">
+                {{ rm.conversion_rate }}%
+              </span>
+            </td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.pending_followups }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums; color:{% if rm.overdue_followups > 0 %}#dc2626{% else %}var(--ink-3){% endif %}; font-weight:{% if rm.overdue_followups > 0 %}700{% else %}400{% endif %}">
+              {{ rm.overdue_followups }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="color:var(--ink-4); font-size:13px; font-style:italic; padding:.5rem 0">
+      No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
+    </div>
+    {% endif %}
+  </div>
+
 </div>
 {% endblock %}

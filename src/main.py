@@ -495,6 +495,41 @@ def dashboard(request: Request):
             """)
             top_introducers = cur.fetchall()
 
+            # Panel 5 — RM productivity metrics
+            cur.execute("""
+                SELECT
+                    assigned_to,
+                    COUNT(*)                                                            AS total_assigned,
+                    COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)                   AS contacted,
+                    COUNT(*) FILTER (WHERE status IN ('Client','Qualified'))            AS converted,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at >= CURRENT_DATE)                AS pending_followups,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at < CURRENT_DATE
+                                      AND status NOT IN ('Client','Closed - Not Fit',
+                                                         'Not Fit','Archived'))        AS overdue_followups
+                FROM rm_actions
+                WHERE assigned_to IS NOT NULL
+                GROUP BY assigned_to
+                ORDER BY total_assigned DESC
+            """)
+            rm_productivity = cur.fetchall()
+
+            cur.execute("""
+                SELECT
+                    COUNT(*)                                                            AS total_with_actions,
+                    COUNT(*) FILTER (WHERE contacted_at IS NOT NULL)                   AS total_contacted,
+                    COUNT(*) FILTER (WHERE status IN ('Client','Qualified'))            AS total_converted,
+                    COUNT(*) FILTER (WHERE follow_up_at IS NOT NULL
+                                      AND follow_up_at < CURRENT_DATE
+                                      AND status NOT IN ('Client','Closed - Not Fit',
+                                                         'Not Fit','Archived'))        AS total_overdue,
+                    AVG(EXTRACT(EPOCH FROM (contacted_at - ra.created_at))/86400)
+                        FILTER (WHERE contacted_at IS NOT NULL)                        AS avg_days_to_contact
+                FROM rm_actions ra
+            """)
+            rm_summary = cur.fetchone()
+
     def _ts(ts: datetime | None) -> datetime | None:
         if ts is None:
             return None
@@ -576,6 +611,38 @@ def dashboard(request: Request):
             # Panel 4
             "status_counts":   status_counts,
             "top_introducers": top_introducers,
+            # Panel 5 — RM productivity
+            "rm_productivity": [
+                {
+                    "name": r[0],
+                    "total_assigned": r[1],
+                    "contacted": r[2],
+                    "converted": r[3],
+                    "pending_followups": r[4],
+                    "overdue_followups": r[5],
+                    "contact_rate": round(r[2] * 100 / r[1], 0) if r[1] else 0,
+                    "conversion_rate": round(r[3] * 100 / r[1], 0) if r[1] else 0,
+                }
+                for r in rm_productivity
+            ],
+            "rm_summary": {
+                "total_with_actions": rm_summary[0] if rm_summary else 0,
+                "total_contacted": rm_summary[1] if rm_summary else 0,
+                "total_converted": rm_summary[2] if rm_summary else 0,
+                "total_overdue": rm_summary[3] if rm_summary else 0,
+                "avg_days_to_contact": (
+                    round(float(rm_summary[4]), 1)
+                    if rm_summary and rm_summary[4] is not None else None
+                ),
+                "contact_rate": (
+                    round(rm_summary[1] * 100 / rm_summary[0], 0)
+                    if rm_summary and rm_summary[0] else 0
+                ),
+                "conversion_rate": (
+                    round(rm_summary[2] * 100 / rm_summary[0], 0)
+                    if rm_summary and rm_summary[0] else 0
+                ),
+            },
         }
     )
 
