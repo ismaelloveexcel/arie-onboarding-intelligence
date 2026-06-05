@@ -1,475 +1,446 @@
 {% extends "base.html" %}
 {% block title %}{{ lead.company_name }} — Arie Leads{% endblock %}
 {% block content %}
+
+{# ======================================================================
+   PAGE HEAD
+   ====================================================================== #}
 <div class="page-head">
   <h1>{{ lead.company_name }}</h1>
   <a href="/" class="back-link">← Back to queue</a>
 </div>
 
-{% if score.reason_summary and score.reason_summary != "No priority signals matched." %}
-<div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:.75rem 1rem; margin-bottom:1rem; display:flex; gap:.75rem; align-items:flex-start">
-  <span style="font-size:18px; line-height:1.2">💡</span>
-  <div>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:#1d4ed8; margin-bottom:2px">Why contact now</div>
-    <div style="font-size:13px; color:#1e3a5f; line-height:1.6">{{ score.reason_summary }}</div>
-  </div>
-</div>
-{% endif %}
+{# ======================================================================
+   DECISION ZONE — above fold.
+   Answers: "Should I contact this company now?"
+   Contains: score, status, why-contact (once only), decision framing.
+   ====================================================================== #}
+<div class="ds-layer-decision" style="padding:1.25rem; margin-bottom:1.125rem">
 
-<div style="border-bottom: 1px solid #e5e7eb; padding: .75rem 0 1rem 0; display: flex; gap: 2rem; flex-wrap: wrap;">
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Score</div>
-    <div style="font-size:13px; color:#111827; display:flex; align-items:center; gap:.5rem;">
-      <span>{{ score.score }}</span>
-      <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
+  {# Score hero + status strip #}
+  <div style="display:grid; grid-template-columns:auto 1fr; gap:1.25rem; align-items:start; margin-bottom:.875rem">
+
+    <div class="ds-score-hero">
+      <div>
+        <div class="ds-score-hero-label">Priority Score</div>
+        <div class="ds-score-hero-value">{{ score.score }}</div>
+      </div>
+      <div>
+        <span class="tier tier-{{ score.tier }}" style="font-size:14px; font-weight:700">{{ score.tier|title }}</span>
+        <div class="ds-score-hero-summary" style="margin-top:.4rem">
+          {{ lead.jurisdiction }} · {{ lead.entity_type or "—" }}
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:.5rem; padding-top:.2rem">
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center">
+        <span class="status status-{{ (action.status or 'new')|lower|replace(' ', '-') }}" style="font-size:13px; padding:3px 10px">
+          {{ action.status or "New" }}
+        </span>
+        {% if action.assigned_to %}
+        <span style="font-size:13px; color:#374151">👤 {{ action.assigned_to }}</span>
+        {% endif %}
+        {% if action.follow_up_at %}
+        <span style="font-size:13px; color:#d97706; font-weight:600">
+          📅 Follow-up {{ action.follow_up_at.strftime("%d %b %Y") }}
+        </span>
+        {% endif %}
+        {% if last_activity %}
+        <span class="ds-meta">Last activity {{ last_activity.strftime("%d %b %Y") }}</span>
+        {% endif %}
+      </div>
+      <div class="ds-meta" style="display:flex; gap:1rem; flex-wrap:wrap">
+        {% if lead.incorporation_date %}
+        <span>Incorporated {{ lead.incorporation_date }}</span>
+        {% endif %}
+        {% if lead.verify_url %}
+        <a href="{{ lead.verify_url }}" target="_blank" style="color:#0B3D91">
+          {% if lead.source_system == 'mauritius_mns' %}Open MNS ↗{% else %}View registry ↗{% endif %}
+        </a>
+        {% endif %}
+        {% if lead.source_system == 'mauritius_mns' and lead.verify_url %}
+        <span>· File No: <code style="font-size:10px; background:#f3f4f6; padding:1px 5px; border-radius:3px">{{ lead.source_ref }}</code></span>
+        {% endif %}
+      </div>
     </div>
   </div>
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Status</div>
-    <div style="font-size:13px; color:#111827;">{{ action.status or "New" }}</div>
+
+  {# Why Contact Now — SINGLE SOURCE OF TRUTH #}
+  {% if score.reason_summary and score.reason_summary != "No priority signals matched." %}
+  <div class="ds-why-contact">
+    <span class="ds-why-contact-icon">💡</span>
+    <div>
+      <div class="ds-why-contact-label">Why contact now</div>
+      <div class="ds-why-contact-text">{{ score.reason_summary }}</div>
+    </div>
   </div>
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Owner</div>
-    <div style="font-size:13px; color:#111827;">{{ action.assigned_to or "Unassigned" }}</div>
+  {% endif %}
+
+  {# Decision framing strip — visual anchors to action panel, not a workflow system #}
+  <div style="display:flex; gap:.5rem; margin-top:.75rem; flex-wrap:wrap">
+    <a href="#action-panel"
+       style="display:inline-flex; align-items:center; gap:5px; padding:5px 14px; background:#f0fdf4; border:1px solid #86efac; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#15803d; text-decoration:none">
+      ✓ Contact Now
+    </a>
+    <a href="#action-panel"
+       style="display:inline-flex; align-items:center; gap:5px; padding:5px 14px; background:#fffbeb; border:1px solid #fde68a; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#d97706; text-decoration:none">
+      ⏱ Review Later
+    </a>
+    <a href="#action-panel"
+       style="display:inline-flex; align-items:center; gap:5px; padding:5px 14px; background:#fef2f2; border:1px solid #fecaca; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#dc2626; text-decoration:none">
+      ✕ Do Not Contact
+    </a>
   </div>
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Follow-up</div>
-    <div style="font-size:13px; color:#111827;">{{ action.follow_up_at.strftime("%d %b %Y") if action.follow_up_at else "—" }}</div>
-  </div>
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Last activity</div>
-    <div style="font-size:13px; color:#111827;">{{ last_activity.strftime("%d %b %Y %H:%M") if last_activity else "—" }}</div>
-  </div>
-  <div>
-    <div style="font-size:12px; color:#6b7280;">Scoring version</div>
-    <div style="font-size:13px; color:#111827;">{{ score.scoring_version }}</div>
-  </div>
+
 </div>
 
+{# ======================================================================
+   MAIN GRID — Intelligence (left) + RM Action + Reference (right)
+   ====================================================================== #}
 <div class="grid-2">
-  <!-- Left: Company info + score breakdown -->
+
+  {# ── LEFT COLUMN: Intelligence → Reference ── #}
   <div>
-    <div class="card">
+
+    {# ── INTELLIGENCE: Contact Intelligence ── #}
+    <div class="card ds-layer-intelligence">
+      <h2>Contact Intelligence</h2>
+      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
+        Decision-makers and key contacts for this company.
+        {% if contacts %}{{ contacts | selectattr("is_decision_maker") | list | length }} decision-maker(s) identified.{% endif %}
+      </p>
+      {% if contacts %}
+      <table style="width:100%; border-collapse:collapse; font-size:12px">
+        <thead>
+          <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+            <th style="padding:4px 8px 4px 0">Name</th>
+            <th style="padding:4px 8px 4px 0">Role</th>
+            <th style="padding:4px 8px 4px 0">Email</th>
+            <th style="padding:4px 8px 4px 0">Phone</th>
+            <th style="padding:4px 8px 4px 0">LinkedIn</th>
+            <th style="padding:4px 8px 4px 0">Status</th>
+            <th style="padding:4px 0">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in contacts %}
+          <tr style="border-bottom:1px solid #f3f4f6; vertical-align:top; {% if c.is_decision_maker %}background:#f0fdf4{% endif %}">
+            <td style="padding:5px 8px 5px 0; font-weight:500; color:#111827">
+              {{ c.name }}
+              {% if c.is_decision_maker %}<span style="font-size:10px; background:#dcfce7; color:#15803d; border-radius:3px; padding:1px 5px; margin-left:4px; font-weight:600">DM</span>{% endif %}
+            </td>
+            <td style="padding:5px 8px 5px 0; color:#111827">{{ c.role or "—" }}</td>
+            <td style="padding:5px 8px 5px 0; color:#111827">
+              {% if c.email %}
+                <a href="mailto:{{ c.email }}" style="color:#0057b8">{{ c.email }}</a>
+                {% if c.email_confidence %}<span style="font-size:10px; color:#6b7280"> ({{ c.email_confidence }})</span>{% endif %}
+              {% else %}—{% endif %}
+            </td>
+            <td style="padding:5px 8px 5px 0; color:#111827">
+              {% if c.phone %}<a href="tel:{{ c.phone }}" style="color:#111827">{{ c.phone }}</a>{% else %}—{% endif %}
+            </td>
+            <td style="padding:5px 8px 5px 0; color:#111827">
+              {% if c.linkedin_url %}
+              <a href="{{ c.linkedin_url }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">LinkedIn ↗</a>
+              {% elif c.name %}
+              <a href="https://www.linkedin.com/search/results/people/?keywords={{ c.name | urlencode }}" target="_blank" rel="noopener noreferrer" style="color:#9ca3af; font-size:11px">Search ↗</a>
+              {% else %}—{% endif %}
+            </td>
+            <td style="padding:5px 8px 5px 0">
+              {% if c.enrichment_status == 'completed' %}
+                <span style="font-size:10px; color:#16a34a">● enriched</span>
+              {% elif c.enrichment_status == 'pending' %}
+                <span style="font-size:10px; color:#9ca3af">○ pending</span>
+              {% elif c.enrichment_status == 'failed' %}
+                <span style="font-size:10px; color:#dc2626">✕ failed</span>
+              {% else %}
+                <span style="font-size:10px; color:#9ca3af">manual</span>
+              {% endif %}
+            </td>
+            <td style="padding:5px 0; color:#111827">
+              <form method="post" action="/leads/{{ lead.id }}/contacts/{{ c.id }}/delete" style="display:inline">
+                <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:4px; padding:2px 8px; cursor:pointer;">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div style="padding:.75rem 0; color:#9ca3af; font-size:12px; line-height:1.8">
+        No contacts yet. Import directors below or add manually.
+      </div>
+      {% endif %}
+
+      <details style="margin-top:.75rem">
+        <summary style="font-size:12px; color:#111827; cursor:pointer">Add a contact</summary>
+        <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
+          <input type="hidden" name="source" value="manual">
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Name</label>
+            <input name="name" required style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+          </div>
+          <div class="grid-2">
+            <div>
+              <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Role</label>
+              <input name="role" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Email</label>
+              <input name="email" type="email" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Phone</label>
+              <input name="phone" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">LinkedIn URL</label>
+              <input name="linkedin_url" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+            </div>
+          </div>
+          <div>
+            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Notes</label>
+            <textarea name="notes" style="width:100%; min-height:70px; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px"></textarea>
+          </div>
+          <div>
+            <button type="submit" style="font-size:12px; border:none; background:#0057b8; color:#fff; border-radius:4px; padding:6px 10px; cursor:pointer;">Add contact</button>
+          </div>
+        </form>
+      </details>
+
+      {% if officers %}
+      <div style="margin-top:.9rem; border-top:1px solid #f3f4f6; padding-top:.75rem">
+        <div style="font-size:12px; color:#6b7280; margin-bottom:.4rem">Import from registry</div>
+        <div style="display:flex; flex-wrap:wrap; gap:.4rem">
+          {% for o in officers %}
+            {% set existing = namespace(found=false) %}
+            {% for c in contacts %}
+              {% if c.name|lower == o.name|lower %}
+                {% set existing.found = true %}
+              {% endif %}
+            {% endfor %}
+            {% if not existing.found %}
+            <form method="post" action="/leads/{{ lead.id }}/contacts" style="display:inline">
+              <input type="hidden" name="name" value="{{ o.name }}">
+              <input type="hidden" name="role" value="{{ o.role | replace('_', ' ') | title }}">
+              <input type="hidden" name="email" value="">
+              <input type="hidden" name="phone" value="">
+              <input type="hidden" name="linkedin_url" value="">
+              <input type="hidden" name="source" value="companies_house">
+              <input type="hidden" name="notes" value="Imported from registry">
+              <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:999px; padding:3px 10px; cursor:pointer;">{{ o.name }}</button>
+            </form>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── INTELLIGENCE: Outreach Briefing (simplified — no duplicate reason_summary) ── #}
+    <div class="ds-briefing">
+      <div class="ds-briefing-header">
+        <span>📋</span> Outreach Briefing
+      </div>
+      {% if lead.website %}
+      <div class="ds-briefing-row">
+        <span class="ds-briefing-row-label">Website</span>
+        <a href="{{ lead.website }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8; font-size:12px">{{ lead.website }}</a>
+      </div>
+      {% endif %}
+      {% if lead.jurisdiction %}
+      <div class="ds-briefing-row">
+        <span class="ds-briefing-row-label">Jurisdiction</span>
+        <span>{{ lead.jurisdiction }}</span>
+      </div>
+      {% endif %}
+      {% if lead.entity_type %}
+      <div class="ds-briefing-row">
+        <span class="ds-briefing-row-label">Entity type</span>
+        <span>{{ lead.entity_type }}</span>
+      </div>
+      {% endif %}
+      {% if lead.registered_address %}
+      <div class="ds-briefing-row">
+        <span class="ds-briefing-row-label">Address</span>
+        <span>{{ lead.registered_address }}</span>
+      </div>
+      {% endif %}
+      {% if not lead.website and not lead.jurisdiction and not lead.entity_type %}
+      <span style="color:#9ca3af; font-style:italic; font-size:12px">No enrichment data yet.</span>
+      {% endif %}
+    </div>
+
+    {# ── INTELLIGENCE: Company Timeline ── #}
+    <div class="card ds-layer-intelligence">
+      <h2>Company Timeline</h2>
+      {% if timeline %}
+      <div class="ds-timeline">
+        {% for event in timeline %}
+        <div class="ds-timeline-event">
+          <div class="ds-timeline-event-label" style="color:{{ event.color }}">
+            {{ event.icon }} {{ event.label }}
+          </div>
+          <div class="ds-timeline-event-date">
+            {% if event.date %}{{ event.date.strftime("%d %b %Y") }}{% else %}—{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">No timeline events yet.</p>
+      {% endif %}
+    </div>
+
+    {# ── INTELLIGENCE → REFERENCE: Score Breakdown (collapsed) ── #}
+    <details>
+      <summary style="display:flex; align-items:center; gap:.5rem; padding:.625rem .875rem; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; cursor:pointer; font-size:12px; font-weight:600; color:#374151; margin-bottom:.5rem; list-style:none">
+        <span>Score Breakdown</span>
+        <span class="ds-chip ds-chip-{% if score.tier == 'HIGH' %}high{% elif score.tier == 'MEDIUM' %}med{% else %}low{% endif %}" style="pointer-events:none">{{ score.score }}</span>
+        <span class="ds-meta" style="margin-left:auto">click to expand</span>
+      </summary>
+      <div class="card ds-layer-reference" style="margin-bottom:0">
+        {% if score.reason_codes %}
+        <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:.25rem">
+          <thead>
+            <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+              <th style="padding:4px 0 6px 0; font-weight:500; width:36%">Signal</th>
+              <th style="padding:4px 10px 6px 10px; font-weight:500; text-align:right; white-space:nowrap">Pts</th>
+              <th style="padding:4px 0 6px 10px; font-weight:500">Why it matters</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for code in score.reason_codes %}
+            {% set d = signal_details.get(code, {}) %}
+            {% if not d.get('hidden') %}
+            <tr style="border-bottom:1px solid #f9fafb; vertical-align:top">
+              <td style="padding:5px 0; font-weight:500; color:#111827">{{ d.get('label', code) }}</td>
+              <td style="padding:5px 10px; text-align:right; color:#16a34a; font-weight:600; white-space:nowrap">
+                {% if d.get('points') is not none %}+{{ d.get('points') }}{% else %}—{% endif %}
+              </td>
+              <td style="padding:5px 0 5px 10px; color:#6b7280; line-height:1.5">{{ d.get('why', '') }}</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr style="border-top:2px solid #e5e7eb">
+              <td style="padding:7px 0 4px 0; font-weight:600; color:#374151">Total</td>
+              <td style="padding:7px 10px 4px 10px; text-align:right; font-weight:700; color:#0B3D91">{{ score.score }}</td>
+              <td style="padding:7px 0 4px 10px; color:#9ca3af; font-size:11px">out of 100 · version {{ score.scoring_version }}</td>
+            </tr>
+          </tfoot>
+        </table>
+        {% else %}
+        <p style="color:#9ca3af; font-size:12px; font-style:italic; margin:.5rem 0 0 0">No priority signals matched.</p>
+        {% endif %}
+      </div>
+    </details>
+
+    {# ── REFERENCE: Company Details (admin) ── #}
+    <div class="card ds-layer-reference" style="margin-top:.5rem">
       <h2>Company Details</h2>
       <dl class="def-list">
-        <dt>Jurisdiction</dt><dd>{{ lead.jurisdiction }}</dd>
-        <dt>Entity Type</dt><dd>{{ lead.entity_type or "—" }}</dd>
-        <dt>Inc. Date</dt><dd>{{ lead.incorporation_date or "—" }}</dd>
-        <dt>Address</dt><dd>{{ lead.registered_address or "—" }}</dd>
-        <dt>Source</dt><dd>{{
+        <dt>Source</dt>
+        <dd>{{
           {"companies_house": "Companies House",
            "manual_upload": "Manual Upload",
            "mauritius_mns": "Mauritius MNS"
           }.get(lead.source_system, lead.source_system)
         }}</dd>
         <dt>Ref</dt><dd><code>{{ lead.source_ref }}</code></dd>
+        <dt>Jurisdiction</dt><dd>{{ lead.jurisdiction }}</dd>
+        <dt>Entity Type</dt><dd>{{ lead.entity_type or "—" }}</dd>
+        <dt>Inc. Date</dt><dd>{{ lead.incorporation_date or "—" }}</dd>
+        <dt>Address</dt><dd>{{ lead.registered_address or "—" }}</dd>
         {% if lead.website %}
         <dt>Website</dt>
         <dd><a href="{{ lead.website }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">{{ lead.website }}</a></dd>
         {% endif %}
-        {% if lead.verify_url %}
-        <dt>Registry</dt>
-        <dd>
-          {% if lead.source_system == 'mauritius_mns' %}
-            <a href="{{ lead.verify_url }}" target="_blank"
-               onclick="navigator.clipboard && navigator.clipboard.writeText('{{ lead.source_ref }}')"
-               title="Opens MNS portal. File No copied to clipboard — paste into search and select 'File No.'">
-               Open MNS ↗
-            </a>
-            <div class="text-meta" style="margin-top:4px">
-              Search by <strong>File No.</strong>: <code>{{ lead.source_ref }}</code>
-            </div>
-          {% else %}
-            <a href="{{ lead.verify_url }}" target="_blank">View ↗</a>
-          {% endif %}
-        </dd>
-        {% endif %}
       </dl>
     </div>
 
-    <div class="card">
-      <h2>Score Breakdown</h2>
-      <div class="score-hero">
-        <span class="score-number">{{ score.score }}</span>
-        <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
-      </div>
-      {% if score.reason_codes %}
-      <table style="width:100%; border-collapse:collapse; font-size:12px; margin-top:.75rem">
+    {# ── REFERENCE: Directors ── #}
+    <div class="card ds-layer-reference">
+      <h2>Directors</h2>
+      {% if officers %}
+      <table style="width:100%; border-collapse:collapse; font-size:12px">
         <thead>
           <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
-            <th style="padding:4px 0 6px 0; font-weight:500; width:36%">Signal</th>
-            <th style="padding:4px 10px 6px 10px; font-weight:500; text-align:right; white-space:nowrap">Pts</th>
-            <th style="padding:4px 0 6px 10px; font-weight:500">Why it matters</th>
+            <th style="padding:4px 8px 4px 0">Name</th>
+            <th style="padding:4px 8px 4px 0">Role</th>
+            <th style="padding:4px 8px 4px 0">Appointed</th>
+            <th style="padding:4px 0">Status</th>
           </tr>
         </thead>
         <tbody>
-          {% for code in score.reason_codes %}
-          {% set d = signal_details.get(code, {}) %}
-          {% if not d.get('hidden') %}
-          <tr style="border-bottom:1px solid #f9fafb; vertical-align:top">
-            <td style="padding:5px 0; font-weight:500; color:#111827">{{ d.get('label', code) }}</td>
-            <td style="padding:5px 10px; text-align:right; color:#16a34a; font-weight:600; white-space:nowrap">
-              {% if d.get('points') is not none %}+{{ d.get('points') }}{% else %}—{% endif %}
+          {% for o in officers %}
+          <tr style="border-bottom:1px solid #f3f4f6">
+            <td style="padding:5px 8px 5px 0; font-weight:500">{{ o.name }}</td>
+            <td style="padding:5px 8px 5px 0; color:#374151">{{ o.role | replace("_", " ") | title }}</td>
+            <td style="padding:5px 8px 5px 0; color:#6b7280">
+              {{ o.appointed_on.strftime("%d %b %Y") if o.appointed_on else "—" }}
             </td>
-            <td style="padding:5px 0 5px 10px; color:#6b7280; line-height:1.5">{{ d.get('why', '') }}</td>
+            <td style="padding:5px 0; color:{% if o.resigned_on %}#ef4444{% else %}#22c55e{% endif %}">
+              {% if o.resigned_on %}{{ o.resigned_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
+            </td>
           </tr>
-          {% endif %}
           {% endfor %}
         </tbody>
-        <tfoot>
-          <tr style="border-top:2px solid #e5e7eb">
-            <td style="padding:7px 0 4px 0; font-weight:600; color:#374151">Score</td>
-            <td style="padding:7px 10px 4px 10px; text-align:right; font-weight:700; color:#0057b8">{{ score.score }}</td>
-            <td style="padding:7px 0 4px 10px; color:#9ca3af; font-size:11px">out of 100 (max)</td>
-          </tr>
-        </tfoot>
       </table>
+      {% elif lead.source_system == 'companies_house' %}
+      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">Not yet fetched — will appear after the next nightly run.</p>
       {% else %}
-      <p style="color:#9ca3af; font-size:12px; font-style:italic; margin:.5rem 0 0 0">No priority signals matched.</p>
-      {% endif %}
-      <div class="score-version" style="font-size:11px; color:#9ca3af; margin-top:.75rem">Scoring version {{ score.scoring_version }}</div>
-    </div>
-
-    {% if lei %}
-    <div class="card">
-      <h2>Legal ID (LEI)</h2>
-      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0;
-                line-height:1.6">
-        This company has registered a Legal Entity Identifier — a unique ID
-        required to trade or bank with regulated institutions. Having one means
-        they are already set up (or setting up) for institutional activity.
-      </p>
-      <table style="width:100%; font-size:13px; border-collapse:collapse">
-        <tr>
-          <td style="color:#888; width:140px; padding:4px 0">LEI Number</td>
-          <td style="padding:4px 0">
-            <code style="font-size:11px; background:#f3f4f6;
-                         padding:2px 6px; border-radius:3px;
-                         word-break:break-all">{{ lei.lei_code }}</code>
-            {% if lei.fresh %}
-              <span class="tier tier-HIGH"
-                    style="font-size:10px; margin-left:6px;
-                           vertical-align:middle">NEW · &lt; 90 days</span>
-            {% endif %}
-          </td>
-        </tr>
-        <tr>
-          <td style="color:#888; padding:4px 0">Status</td>
-          <td style="padding:4px 0">
-            {{ lei.registration_status or lei.entity_status or "—" }}
-          </td>
-        </tr>
-        <tr>
-          <td style="color:#888; padding:4px 0">Registered</td>
-          <td style="padding:4px 0">
-            {% if lei.registered_on %}
-              {{ lei.registered_on.strftime("%d %b %Y") }}
-              {% if lei.days_ago is not none %}
-                <span style="color:#9ca3af; font-size:11px">
-                  ({{ lei.days_ago }} day{{ "s" if lei.days_ago != 1 else "" }} ago)
-                </span>
-              {% endif %}
-            {% else %}—{% endif %}
-          </td>
-        </tr>
-      </table>
-      {% if lei.gleif_url %}
-      <div style="margin-top:.75rem">
-        <a href="{{ lei.gleif_url }}" target="_blank"
-           style="font-size:12px; color:#0057b8">
-          View full record ↗
-        </a>
-      </div>
+      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">Not publicly available from this registry.</p>
       {% endif %}
     </div>
-    {% else %}
-    <div class="card"
-         style="border:1px dashed #e5e7eb; background:#fafafa">
-      <h2 style="color:#9ca3af; font-size:14px">
-        No Legal ID Yet
-      </h2>
-      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0">
-        This company hasn’t registered a Legal Entity Identifier yet.
-        Companies often do this just before opening institutional accounts —
-        so if they register one, it’s a strong sign they’re actively banking.
-        We check daily.
-      </p>
-    </div>
-    {% endif %}
 
-  <div class="card">
-    <h2>Contact Intelligence</h2>
-    <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
-      Decision-makers and key contacts for this company.
-      {% if contacts %}{{ contacts | selectattr("is_decision_maker") | list | length }} decision-maker(s) identified.{% endif %}
-    </p>
-    {% if contacts %}
-    <table style="width:100%; border-collapse:collapse; font-size:12px">
-      <thead>
-        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
-          <th style="padding:4px 8px 4px 0">Name</th>
-          <th style="padding:4px 8px 4px 0">Role</th>
-          <th style="padding:4px 8px 4px 0">Email</th>
-          <th style="padding:4px 8px 4px 0">Phone</th>
-          <th style="padding:4px 8px 4px 0">LinkedIn</th>
-          <th style="padding:4px 8px 4px 0">Status</th>
-          <th style="padding:4px 0">Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in contacts %}
-        <tr style="border-bottom:1px solid #f3f4f6; vertical-align:top; {% if c.is_decision_maker %}background:#f0fdf4{% endif %}">
-          <td style="padding:5px 8px 5px 0; font-weight:500; color:#111827">
-            {{ c.name }}
-            {% if c.is_decision_maker %}<span style="font-size:10px; background:#dcfce7; color:#15803d; border-radius:3px; padding:1px 5px; margin-left:4px; font-weight:600">DM</span>{% endif %}
-          </td>
-          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.role or "—" }}</td>
-          <td style="padding:5px 8px 5px 0; color:#111827">
-            {% if c.email %}
-              <a href="mailto:{{ c.email }}" style="color:#0057b8">{{ c.email }}</a>
-              {% if c.email_confidence %}<span style="font-size:10px; color:#6b7280"> ({{ c.email_confidence }})</span>{% endif %}
-            {% else %}—{% endif %}
-          </td>
-          <td style="padding:5px 8px 5px 0; color:#111827">
-            {% if c.phone %}<a href="tel:{{ c.phone }}" style="color:#111827">{{ c.phone }}</a>{% else %}—{% endif %}
-          </td>
-          <td style="padding:5px 8px 5px 0; color:#111827">
-            {% if c.linkedin_url %}
-            <a href="{{ c.linkedin_url }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">LinkedIn ↗</a>
-            {% else %}
-            {% if c.name %}
-            <a href="https://www.linkedin.com/search/results/people/?keywords={{ c.name | urlencode }}" target="_blank" rel="noopener noreferrer" style="color:#9ca3af; font-size:11px">Search ↗</a>
-            {% else %}—{% endif %}
-            {% endif %}
-          </td>
-          <td style="padding:5px 8px 5px 0">
-            {% if c.enrichment_status == 'completed' %}
-              <span style="font-size:10px; color:#16a34a">● enriched</span>
-            {% elif c.enrichment_status == 'pending' %}
-              <span style="font-size:10px; color:#9ca3af">○ pending</span>
-            {% elif c.enrichment_status == 'failed' %}
-              <span style="font-size:10px; color:#dc2626">✕ failed</span>
-            {% else %}
-              <span style="font-size:10px; color:#9ca3af">manual</span>
-            {% endif %}
-          </td>
-          <td style="padding:5px 0; color:#111827">
-            <form method="post" action="/leads/{{ lead.id }}/contacts/{{ c.id }}/delete" style="display:inline">
-              <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:4px; padding:2px 8px; cursor:pointer;">Remove</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div style="padding:.75rem 0; color:#9ca3af; font-size:12px; line-height:1.8">
-      No contacts yet. Import directors below or add manually.
-    </div>
-    {% endif %}
-
-    <details style="margin-top:.75rem">
-      <summary style="font-size:12px; color:#111827; cursor:pointer">Add a contact</summary>
-      <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
-        <input type="hidden" name="source" value="manual">
-        <div>
-          <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Name</label>
-          <input name="name" required style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-        </div>
-        <div class="grid-2">
-          <div>
-            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Role</label>
-            <input name="role" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-          </div>
-          <div>
-            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Email</label>
-            <input name="email" type="email" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-          </div>
-        </div>
-        <div class="grid-2">
-          <div>
-            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Phone</label>
-            <input name="phone" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-          </div>
-          <div>
-            <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">LinkedIn URL</label>
-            <input name="linkedin_url" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-          </div>
-        </div>
-        <div>
-          <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Notes</label>
-          <textarea name="notes" style="width:100%; min-height:70px; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px"></textarea>
-        </div>
-        <div>
-          <button type="submit" style="font-size:12px; border:none; background:#0057b8; color:#fff; border-radius:4px; padding:6px 10px; cursor:pointer;">Add contact</button>
-        </div>
-      </form>
-    </details>
-
-    {% if officers %}
-    <div style="margin-top:.9rem; border-top:1px solid #f3f4f6; padding-top:.75rem">
-      <div style="font-size:12px; color:#6b7280; margin-bottom:.4rem">Import from registry</div>
-      <div style="display:flex; flex-wrap:wrap; gap:.4rem">
-        {% for o in officers %}
-          {% set existing = namespace(found=false) %}
-          {% for c in contacts %}
-            {% if c.name|lower == o.name|lower %}
-              {% set existing.found = true %}
-            {% endif %}
+    {# ── REFERENCE: Owners / UBOs ── #}
+    <div class="card ds-layer-reference">
+      <h2>Owners / UBOs</h2>
+      {% if pscs %}
+      <table style="width:100%; border-collapse:collapse; font-size:12px">
+        <thead>
+          <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
+            <th style="padding:4px 8px 4px 0">Name</th>
+            <th style="padding:4px 8px 4px 0">Kind</th>
+            <th style="padding:4px 8px 4px 0">Notified</th>
+            <th style="padding:4px 0">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in pscs %}
+          <tr style="border-bottom:1px solid #f3f4f6">
+            <td style="padding:5px 8px 5px 0; font-weight:500">{{ p.name }}</td>
+            <td style="padding:5px 8px 5px 0; color:#374151">{{ p.kind | replace("-", " ") | title }}</td>
+            <td style="padding:5px 8px 5px 0; color:#6b7280">
+              {{ p.notified_on.strftime("%d %b %Y") if p.notified_on else "—" }}
+            </td>
+            <td style="padding:5px 0; color:{% if p.ceased_on %}#ef4444{% else %}#22c55e{% endif %}">
+              {% if p.ceased_on %}{{ p.ceased_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
+            </td>
+          </tr>
           {% endfor %}
-          {% if not existing.found %}
-          <form method="post" action="/leads/{{ lead.id }}/contacts" style="display:inline">
-            <input type="hidden" name="name" value="{{ o.name }}">
-            <input type="hidden" name="role" value="{{ o.role | replace("_", " ") | title }}">
-            <input type="hidden" name="email" value="">
-            <input type="hidden" name="phone" value="">
-            <input type="hidden" name="linkedin_url" value="">
-            <input type="hidden" name="source" value="companies_house">
-            <input type="hidden" name="notes" value="Imported from registry">
-            <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:999px; padding:3px 10px; cursor:pointer;">{{ o.name }}</button>
-          </form>
-          {% endif %}
-        {% endfor %}
-      </div>
+        </tbody>
+      </table>
+      {% elif lead.source_system == 'companies_house' %}
+      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">Not yet fetched — will appear after the next nightly run.</p>
+      {% else %}
+      <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">Not publicly available from this registry.</p>
+      {% endif %}
     </div>
-    {% endif %}
-  </div>
 
-  <div class="card">
-    <h2>Company Timeline</h2>
-    {% if timeline %}
-    <div style="position:relative; padding-left:1.25rem">
-      <div style="position:absolute; left:5px; top:0; bottom:0; width:2px; background:#e5e7eb; border-radius:1px"></div>
-      {% for event in timeline %}
-      <div style="position:relative; margin-bottom:.75rem; padding-left:.5rem">
-        <span style="position:absolute; left:-1.05rem; top:2px; font-size:13px; line-height:1">{{ event.icon }}</span>
-        <div style="font-size:12px; font-weight:600; color:{{ event.color }}">{{ event.label }}</div>
-        <div style="font-size:11px; color:#9ca3af; margin-top:1px">
-          {% if event.date %}{{ event.date.strftime("%d %b %Y") if event.date else "—" }}{% else %}—{% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      No timeline events yet.
-    </p>
-    {% endif %}
-  </div>
+  </div>{# end left column #}
 
-  <div class="card">
-    <h2>Directors</h2>
-    {% if officers %}
-    <table style="width:100%; border-collapse:collapse; font-size:12px">
-      <thead>
-        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
-          <th style="padding:4px 8px 4px 0">Name</th>
-          <th style="padding:4px 8px 4px 0">Role</th>
-          <th style="padding:4px 8px 4px 0">Appointed</th>
-          <th style="padding:4px 0">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for o in officers %}
-        <tr style="border-bottom:1px solid #f3f4f6">
-          <td style="padding:5px 8px 5px 0; font-weight:500">{{ o.name }}</td>
-          <td style="padding:5px 8px 5px 0; color:#374151">{{ o.role | replace("_", " ") | title }}</td>
-          <td style="padding:5px 8px 5px 0; color:#6b7280">
-            {{ o.appointed_on.strftime("%d %b %Y") if o.appointed_on else "—" }}
-          </td>
-          <td style="padding:5px 0; color:{% if o.resigned_on %}#ef4444{% else %}#22c55e{% endif %}">
-            {% if o.resigned_on %}{{ o.resigned_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% elif lead.source_system == 'companies_house' %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      Not yet fetched from Companies House — will appear after the next nightly run.
-    </p>
-    {% else %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      Director details are not publicly available from this registry.
-      Verify directly with the company or your compliance team.
-    </p>
-    {% endif %}
-  </div>
-
-  <div class="card">
-    <h2>Owners / UBOs</h2>
-    {% if pscs %}
-    <table style="width:100%; border-collapse:collapse; font-size:12px">
-      <thead>
-        <tr style="color:#6b7280; text-align:left; border-bottom:1px solid #e5e7eb">
-          <th style="padding:4px 8px 4px 0">Name</th>
-          <th style="padding:4px 8px 4px 0">Kind</th>
-          <th style="padding:4px 8px 4px 0">Notified</th>
-          <th style="padding:4px 0">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for p in pscs %}
-        <tr style="border-bottom:1px solid #f3f4f6">
-          <td style="padding:5px 8px 5px 0; font-weight:500">{{ p.name }}</td>
-          <td style="padding:5px 8px 5px 0; color:#374151">{{ p.kind | replace("-", " ") | title }}</td>
-          <td style="padding:5px 8px 5px 0; color:#6b7280">
-            {{ p.notified_on.strftime("%d %b %Y") if p.notified_on else "—" }}
-          </td>
-          <td style="padding:5px 0; color:{% if p.ceased_on %}#ef4444{% else %}#22c55e{% endif %}">
-            {% if p.ceased_on %}{{ p.ceased_on.strftime("%d %b %Y") }}{% else %}Active{% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% elif lead.source_system == 'companies_house' %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      Not yet fetched from Companies House — will appear after the next nightly run.
-    </p>
-    {% else %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      Ownership details are not publicly available from this registry.
-      Verify directly with the company or your compliance team.
-    </p>
-    {% endif %}
-  </div>
-
-  </div>
-
-  <!-- Right: RM action panel -->
+  {# ── RIGHT COLUMN: RM Actions + LEI + Audit Trail ── #}
   <div>
-    <div class="card" style="background:#f0fdf4; border:1px solid #bbf7d0">
-      <h2 style="color:#15803d">Outreach Briefing</h2>
-      <div style="font-size:12px; color:#166534; line-height:1.8">
-        {% if score.reason_summary and score.reason_summary != "No priority signals matched." %}
-        <div style="margin-bottom:.6rem">{{ score.reason_summary }}</div>
-        {% endif %}
-        {% if lead.website %}
-        <div><span style="color:#6b7280">Web:</span> <a href="{{ lead.website }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">{{ lead.website }}</a></div>
-        {% endif %}
-        {% if lead.incorporation_date %}
-        <div><span style="color:#6b7280">Incorporated:</span> {{ lead.incorporation_date }}</div>
-        {% endif %}
-        {% if lead.jurisdiction %}
-        <div><span style="color:#6b7280">Jurisdiction:</span> {{ lead.jurisdiction }}</div>
-        {% endif %}
-        {% if lead.entity_type %}
-        <div><span style="color:#6b7280">Entity type:</span> {{ lead.entity_type }}</div>
-        {% endif %}
-        {% set active_directors = officers | selectattr("resigned_on", "none") | list %}
-        {% if active_directors %}
-        <div style="margin-top:.4rem"><span style="color:#6b7280">Key contacts:</span>
-          {% for d in active_directors[:3] %}{{ d.name }}{% if d.role %} ({{ d.role | replace("_"," ") | title }}){% endif %}{% if not loop.last %}, {% endif %}{% endfor %}
-        </div>
-        {% endif %}
-        {% if not score.reason_summary and not lead.website and not active_directors %}
-        <span style="color:#9ca3af; font-style:italic">Add enrichment data to generate an outreach brief.</span>
-        {% endif %}
-      </div>
-    </div>
 
-    <div class="card" id="action-panel">
+    {# ── DECISION: RM Actions — HTMX PRESERVED EXACTLY ── #}
+    {# id="action-panel", hx-post, hx-target, hx-swap all unchanged #}
+    <div class="card ds-layer-decision" id="action-panel">
       <h2>RM Actions</h2>
       <form
         hx-post="/leads/{{ lead.id }}/action"
@@ -516,7 +487,56 @@
       </form>
     </div>
 
-    <div class="card">
+    {# ── REFERENCE: LEI ── #}
+    {% if lei %}
+    <div class="card ds-layer-reference">
+      <h2>Legal ID (LEI)</h2>
+      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
+        Legal Entity Identifier — required to trade or bank with regulated institutions.
+      </p>
+      <table style="width:100%; font-size:13px; border-collapse:collapse">
+        <tr>
+          <td style="color:#888; width:120px; padding:4px 0">LEI Number</td>
+          <td style="padding:4px 0">
+            <code style="font-size:11px; background:#f3f4f6; padding:2px 6px; border-radius:3px; word-break:break-all">{{ lei.lei_code }}</code>
+            {% if lei.fresh %}
+              <span class="ds-chip ds-chip-high" style="font-size:10px; margin-left:6px">NEW · &lt;90 days</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:#888; padding:4px 0">Status</td>
+          <td style="padding:4px 0">{{ lei.registration_status or lei.entity_status or "—" }}</td>
+        </tr>
+        <tr>
+          <td style="color:#888; padding:4px 0">Registered</td>
+          <td style="padding:4px 0">
+            {% if lei.registered_on %}
+              {{ lei.registered_on.strftime("%d %b %Y") }}
+              {% if lei.days_ago is not none %}
+                <span style="color:#9ca3af; font-size:11px">({{ lei.days_ago }} day{{ "s" if lei.days_ago != 1 else "" }} ago)</span>
+              {% endif %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      </table>
+      {% if lei.gleif_url %}
+      <div style="margin-top:.75rem">
+        <a href="{{ lei.gleif_url }}" target="_blank" style="font-size:12px; color:#0057b8">View full record ↗</a>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="card ds-layer-reference" style="border:1px dashed #e5e7eb; background:#fafafa">
+      <h2 style="color:#9ca3af; font-size:14px">No Legal ID Yet</h2>
+      <p style="font-size:12px; color:#9ca3af; line-height:1.7; margin:0">
+        No LEI registered yet. Companies often register one just before opening institutional accounts. We check daily.
+      </p>
+    </div>
+    {% endif %}
+
+    {# ── REFERENCE: Audit Trail ── #}
+    <div class="card ds-layer-reference">
       <h2>Audit Trail</h2>
       {% if audit_rows %}
         {% for entry in audit_rows %}
@@ -538,11 +558,13 @@
         {% endfor %}
       {% else %}
         <div style="color:#9ca3af; font-size:12px; font-style:italic; padding:.5rem 0">
-          No actions recorded yet. Assign this lead or update its
-          status to begin the audit trail.
+          No actions recorded yet. Assign this lead or update its status to begin the audit trail.
         </div>
       {% endif %}
     </div>
-  </div>
-</div>
+
+  </div>{# end right column #}
+
+</div>{# end grid-2 #}
+
 {% endblock %}
