@@ -6,6 +6,8 @@
 - `product-roadmap.md` — What is live now, what is planned next, what is parked and why.
 - `known-limitations.md` — What the platform intentionally does not do yet. Prevents treating deferrals as bugs.
 
+- `pilot-monitoring-spec.md` — What to observe, measure, and record in the first 7 days of live RM usage.
+
 ## Governance and operations
 
 - `system-principles.md` — Long-term product and engineering guardrails

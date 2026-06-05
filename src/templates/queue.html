@@ -253,4 +253,23 @@
 </div>
 {% endif %}
 
+<script>
+  // Queue scroll position preservation.
+  // Saves window.scrollY to sessionStorage when an RM opens a lead.
+  // Restores it on return — no backend, no HTMX, no page reload required.
+  (function () {
+    var KEY = 'queue_scroll_y';
+    var saved = sessionStorage.getItem(KEY);
+    if (saved !== null) {
+      window.scrollTo(0, parseInt(saved, 10));
+      sessionStorage.removeItem(KEY);
+    }
+    document.querySelectorAll('a[href^="/leads/"]').forEach(function (a) {
+      a.addEventListener('click', function () {
+        sessionStorage.setItem(KEY, window.scrollY);
+      });
+    });
+  })();
+</script>
+
 {% endblock %}
