@@ -198,7 +198,11 @@
     {% endif %}
 
   <div class="card">
-    <h2>Contacts</h2>
+    <h2>Contact Intelligence</h2>
+    <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
+      Decision-makers and key contacts for this company.
+      {% if contacts %}{{ contacts | selectattr("is_decision_maker") | list | length }} decision-maker(s) identified.{% endif %}
+    </p>
     {% if contacts %}
     <table style="width:100%; border-collapse:collapse; font-size:12px">
       <thead>
@@ -208,25 +212,47 @@
           <th style="padding:4px 8px 4px 0">Email</th>
           <th style="padding:4px 8px 4px 0">Phone</th>
           <th style="padding:4px 8px 4px 0">LinkedIn</th>
-          <th style="padding:4px 8px 4px 0">Source</th>
-          <th style="padding:4px 8px 4px 0">Notes</th>
+          <th style="padding:4px 8px 4px 0">Status</th>
           <th style="padding:4px 0">Action</th>
         </tr>
       </thead>
       <tbody>
         {% for c in contacts %}
-        <tr style="border-bottom:1px solid #f3f4f6; vertical-align:top">
-          <td style="padding:5px 8px 5px 0; font-weight:500; color:#111827">{{ c.name }}</td>
+        <tr style="border-bottom:1px solid #f3f4f6; vertical-align:top; {% if c.is_decision_maker %}background:#f0fdf4{% endif %}">
+          <td style="padding:5px 8px 5px 0; font-weight:500; color:#111827">
+            {{ c.name }}
+            {% if c.is_decision_maker %}<span style="font-size:10px; background:#dcfce7; color:#15803d; border-radius:3px; padding:1px 5px; margin-left:4px; font-weight:600">DM</span>{% endif %}
+          </td>
           <td style="padding:5px 8px 5px 0; color:#111827">{{ c.role or "—" }}</td>
-          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.email or "—" }}</td>
-          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.phone or "—" }}</td>
           <td style="padding:5px 8px 5px 0; color:#111827">
-            {% if c.linkedin_url %}
-            <a href="{{ c.linkedin_url }}" target="_blank">Profile ↗</a>
+            {% if c.email %}
+              <a href="mailto:{{ c.email }}" style="color:#0057b8">{{ c.email }}</a>
+              {% if c.email_confidence %}<span style="font-size:10px; color:#6b7280"> ({{ c.email_confidence }})</span>{% endif %}
             {% else %}—{% endif %}
           </td>
-          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.source or "—" }}</td>
-          <td style="padding:5px 8px 5px 0; color:#111827">{{ c.notes or "—" }}</td>
+          <td style="padding:5px 8px 5px 0; color:#111827">
+            {% if c.phone %}<a href="tel:{{ c.phone }}" style="color:#111827">{{ c.phone }}</a>{% else %}—{% endif %}
+          </td>
+          <td style="padding:5px 8px 5px 0; color:#111827">
+            {% if c.linkedin_url %}
+            <a href="{{ c.linkedin_url }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">LinkedIn ↗</a>
+            {% else %}
+            {% if c.name %}
+            <a href="https://www.linkedin.com/search/results/people/?keywords={{ c.name | urlencode }}" target="_blank" rel="noopener noreferrer" style="color:#9ca3af; font-size:11px">Search ↗</a>
+            {% else %}—{% endif %}
+            {% endif %}
+          </td>
+          <td style="padding:5px 8px 5px 0">
+            {% if c.enrichment_status == 'completed' %}
+              <span style="font-size:10px; color:#16a34a">● enriched</span>
+            {% elif c.enrichment_status == 'pending' %}
+              <span style="font-size:10px; color:#9ca3af">○ pending</span>
+            {% elif c.enrichment_status == 'failed' %}
+              <span style="font-size:10px; color:#dc2626">✕ failed</span>
+            {% else %}
+              <span style="font-size:10px; color:#9ca3af">manual</span>
+            {% endif %}
+          </td>
           <td style="padding:5px 0; color:#111827">
             <form method="post" action="/leads/{{ lead.id }}/contacts/{{ c.id }}/delete" style="display:inline">
               <button type="submit" style="font-size:11px; border:1px solid #d1d5db; background:#fff; color:#111827; border-radius:4px; padding:2px 8px; cursor:pointer;">Remove</button>
@@ -237,9 +263,9 @@
       </tbody>
     </table>
     {% else %}
-    <p style="font-size:12px; color:#9ca3af; margin:0; font-style:italic">
-      No contacts added yet.
-    </p>
+    <div style="padding:.75rem 0; color:#9ca3af; font-size:12px; line-height:1.8">
+      No contacts yet. Import directors below or add manually.
+    </div>
     {% endif %}
 
     <details style="margin-top:.75rem">

@@ -845,10 +845,12 @@ def lead_detail(request: Request, lead_id: UUID):
 
             cur.execute(
                 """
-                SELECT id, name, role, email, phone, linkedin_url, source, notes, created_at
+                SELECT id, name, role, email, phone, linkedin_url, source, notes,
+                       created_at, email_confidence, linkedin_verified,
+                       is_decision_maker, contact_priority, enrichment_status
                 FROM lead_contacts
                 WHERE company_id = %s
-                ORDER BY created_at ASC
+                ORDER BY contact_priority DESC, is_decision_maker DESC, created_at ASC
                 """,
                 (lead_id,),
             )
@@ -935,6 +937,11 @@ def lead_detail(request: Request, lead_id: UUID):
             "source": r[6] or "",
             "notes": r[7] or "",
             "created_at": r[8],
+            "email_confidence": r[9] or "",
+            "linkedin_verified": r[10] or False,
+            "is_decision_maker": r[11] or False,
+            "contact_priority": r[12] or 0,
+            "enrichment_status": r[13] or "manual",
         }
         for r in contacts_rows
     ]
