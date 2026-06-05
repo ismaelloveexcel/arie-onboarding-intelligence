@@ -79,7 +79,7 @@
 
   {# Priority signal label — makes the decision hierarchy explicit #}
   <div style="margin-top:.625rem; display:flex; align-items:center; gap:.625rem; flex-wrap:wrap">
-    <span class="ds-meta" style="font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-size:10px">Priority signal</span>
+    <span class="ds-meta" style="font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-size:10px">Primary reason</span>
     {% set top_codes = score.reason_codes %}
     {% if "FRESH_LEI" in top_codes %}
       <span class="ds-chip ds-chip-high">🔑 Fresh LEI</span>
@@ -140,10 +140,10 @@
 
     {# ── INTELLIGENCE: Contact Intelligence ── #}
     <div class="card ds-layer-intelligence">
-      <h2>Contact Intelligence</h2>
+      <h2>Key Contacts</h2>
       <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
-        Decision-makers and key contacts for this company.
-        {% if contacts %}{{ contacts | selectattr("is_decision_maker") | list | length }} decision-maker(s) identified.{% endif %}
+        Key contacts and outreach targets for this company.
+        {% if contacts %}{{ contacts | selectattr("is_decision_maker") | list | length }} decision-maker(s) added.{% endif %}
       </p>
       {% if contacts %}
       <table style="width:100%; border-collapse:collapse; font-size:12px">
@@ -184,13 +184,13 @@
             </td>
             <td style="padding:5px 8px 5px 0">
               {% if c.enrichment_status == 'completed' %}
-                <span style="font-size:10px; color:#16a34a">● enriched</span>
+                <span style="font-size:10px; color:#16a34a">● confirmed</span>
               {% elif c.enrichment_status == 'pending' %}
-                <span style="font-size:10px; color:#9ca3af">○ pending</span>
+                <span style="font-size:10px; color:#9ca3af">○ awaiting</span>
               {% elif c.enrichment_status == 'failed' %}
-                <span style="font-size:10px; color:#dc2626">✕ failed</span>
+                <span style="font-size:10px; color:#dc2626">✕ not found</span>
               {% else %}
-                <span style="font-size:10px; color:#9ca3af">manual</span>
+                <span style="font-size:10px; color:#9ca3af">manual entry</span>
               {% endif %}
             </td>
             <td style="padding:5px 0; color:#111827">
@@ -204,13 +204,13 @@
       </table>
       {% else %}
       <div style="padding:.625rem 0 .75rem 0; border-bottom:1px solid #f3f4f6; margin-bottom:.75rem">
-        <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:4px">No enriched contacts yet</div>
+        <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:4px">No key contacts yet</div>
         <div style="font-size:12px; color:#6b7280; line-height:1.6; margin-bottom:.625rem">
-          Add the first decision-maker to activate outreach workflow for this lead.
+          Add the first key contact to begin the outreach workflow for this lead.
         </div>
         <details open>
           <summary style="font-size:12px; font-weight:700; color:#0B3D91; cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:5px; padding:5px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-chip)">
-            + Add decision-maker
+            + Add key contact
           </summary>
           <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
             <input type="hidden" name="source" value="manual">
@@ -244,7 +244,7 @@
       {% endif %}
 
       <details style="margin-top:.75rem">
-        <summary style="font-size:12px; color:#111827; cursor:pointer">Add a contact</summary>
+        <summary style="font-size:12px; color:#111827; cursor:pointer">Add a key contact</summary>
         <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
           <input type="hidden" name="source" value="manual">
           <div>
@@ -346,7 +346,7 @@
 
     {# ── INTELLIGENCE: Company Timeline ── #}
     <div class="card ds-layer-intelligence">
-      <h2>Company Timeline</h2>
+      <h2>Activity Timeline</h2>
       {% if timeline %}
       <div class="ds-timeline">
         {% for event in timeline %}
@@ -363,7 +363,7 @@
       {% else %}
       <div class="ds-empty-state">
         <span class="ds-empty-state-icon">📅</span>
-        Timeline builds as events are recorded — incorporations, LEI registrations, officer changes, and RM activity will appear here.
+        Activity builds over time — incorporation events, LEI registrations, director changes, and outreach activity will appear here.
       </div>
       {% endif %}
     </div>
@@ -483,7 +483,7 @@
 
     {# ── REFERENCE: Owners / UBOs ── #}
     <div class="card ds-layer-reference">
-      <h2>Owners / UBOs</h2>
+      <h2>Beneficial Owners</h2>
       {% if pscs %}
       <table style="width:100%; border-collapse:collapse; font-size:12px">
         <thead>
