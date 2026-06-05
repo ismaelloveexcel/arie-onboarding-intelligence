@@ -77,6 +77,38 @@
   </div>
   {% endif %}
 
+  {# Priority signal label — makes the decision hierarchy explicit #}
+  <div style="margin-top:.625rem; display:flex; align-items:center; gap:.625rem; flex-wrap:wrap">
+    <span class="ds-meta" style="font-weight:600; color:#6b7280; text-transform:uppercase; letter-spacing:.06em; font-size:10px">Priority signal</span>
+    {% set top_codes = score.reason_codes %}
+    {% if "FRESH_LEI" in top_codes %}
+      <span class="ds-chip ds-chip-high">🔑 Fresh LEI</span>
+    {% elif "MAURITIUS_GBC" in top_codes %}
+      <span class="ds-chip ds-chip-high">🌍 Mauritius GBC</span>
+    {% elif "HOLDING_STRUCTURE" in top_codes %}
+      <span class="ds-chip ds-chip-high">🏛 Holding Co.</span>
+    {% elif "INVESTMENT_VEHICLE" in top_codes %}
+      <span class="ds-chip ds-chip-high">💼 Investment Vehicle</span>
+    {% elif "MAURITIUS_AC" in top_codes %}
+      <span class="ds-chip ds-chip-med">🌍 Mauritius AC</span>
+    {% elif "HAS_LEI" in top_codes %}
+      <span class="ds-chip ds-chip-blue">🔑 LEI Registered</span>
+    {% elif "FINANCIAL_SIC" in top_codes %}
+      <span class="ds-chip ds-chip-blue">📊 Financial Holding</span>
+    {% elif "FUND_MGMT_SIC" in top_codes %}
+      <span class="ds-chip ds-chip-blue">📊 Fund Management</span>
+    {% elif "RECENTLY_INCORPORATED" in top_codes %}
+      <span class="ds-chip ds-chip-brand">🆕 New Entity</span>
+    {% elif "INTERNATIONAL_PSC" in top_codes %}
+      <span class="ds-chip ds-chip-med">🌐 Intl Owner</span>
+    {% elif "INTERNATIONAL_OFFICER" in top_codes %}
+      <span class="ds-chip ds-chip-med">🌐 Intl Director</span>
+    {% else %}
+      <span class="ds-meta">No dominant signal — review score breakdown</span>
+    {% endif %}
+    <span class="ds-meta">· Score {{ score.score }} · {{ score.tier | title }}</span>
+  </div>
+
   {# Decision framing strip — Contact Now is primary (filled); others are subordinate #}
   <div class="ds-action-strip" style="margin-top:.875rem">
     {# PRIMARY — filled navy/gold, visually dominant #}
@@ -171,10 +203,43 @@
         </tbody>
       </table>
       {% else %}
-      <div class="ds-empty-state">
-        <span class="ds-empty-state-icon">👤</span>
-        <span class="ds-empty-state-title">No contacts enriched yet</span>
-        Import directors from registry below, or add contacts manually.
+      <div style="padding:.625rem 0 .75rem 0; border-bottom:1px solid #f3f4f6; margin-bottom:.75rem">
+        <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:4px">No enriched contacts yet</div>
+        <div style="font-size:12px; color:#6b7280; line-height:1.6; margin-bottom:.625rem">
+          Add the first decision-maker to activate outreach workflow for this lead.
+        </div>
+        <details open>
+          <summary style="font-size:12px; font-weight:700; color:#0B3D91; cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:5px; padding:5px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-chip)">
+            + Add decision-maker
+          </summary>
+          <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
+            <input type="hidden" name="source" value="manual">
+            <div class="grid-2">
+              <div>
+                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Name <span style="color:#dc2626">*</span></label>
+                <input name="name" required style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+              </div>
+              <div>
+                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Role</label>
+                <input name="role" placeholder="e.g. Director, CEO" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+              </div>
+            </div>
+            <div class="grid-2">
+              <div>
+                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Email</label>
+                <input name="email" type="email" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+              </div>
+              <div>
+                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">LinkedIn URL</label>
+                <input name="linkedin_url" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
+              </div>
+            </div>
+            <div style="display:flex; gap:.5rem; align-items:center">
+              <button type="submit" style="font-size:12px; border:none; background:#0B3D91; color:#fff; border-radius:4px; padding:6px 14px; cursor:pointer; font-weight:600">Add contact</button>
+              <span class="ds-meta">Phone and notes can be added after saving.</span>
+            </div>
+          </form>
+        </details>
       </div>
       {% endif %}
 
@@ -338,7 +403,10 @@
             <tr style="border-top:2px solid #e5e7eb">
               <td style="padding:7px 0 4px 0; font-weight:600; color:#374151">Total</td>
               <td style="padding:7px 10px 4px 10px; text-align:right; font-weight:700; color:#0B3D91">{{ score.score }}</td>
-              <td style="padding:7px 0 4px 10px; color:#9ca3af; font-size:11px">out of 100 · version {{ score.scoring_version }}</td>
+              <td style="padding:7px 0 4px 10px; color:#9ca3af; font-size:11px">
+                out of 100 · version {{ score.scoring_version }}
+                <span title="Combined signal points are capped at 100 for consistent display across all leads." style="cursor:help; border-bottom:1px dashed #d1d5db; margin-left:4px">ⓘ capped at 100</span>
+              </td>
             </tr>
           </tfoot>
         </table>
