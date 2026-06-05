@@ -5,6 +5,23 @@
 This document defines the **permission boundary** for AI strategy work.
 Manus must not proceed to design strategy (Phase B) until audit evidence (Phase A) passes this gate.
 
+## Governance Precedence (Conflict Resolution)
+
+If governance documents conflict, resolve using this strict order:
+
+1. `docs/minimal-compliance-contract.md`
+2. `docs/stabilization-phase.md`
+3. `docs/manus-phase-gate.md`
+4. `docs/system-principles.md`
+5. `docs/current-gate-status.yaml`
+6. `docs/current-gate-status.md` (human-readable mirror)
+
+Rules:
+
+- Higher-priority document always overrides lower-priority guidance.
+- If conflict remains ambiguous, default to the **more restrictive** interpretation.
+- `current-gate-status.yaml` is the canonical operational state artifact.
+
 ## Phase A: Audit Only
 
 ### Required output
@@ -50,3 +67,13 @@ Phase B is allowed only after PASS and should produce:
 - phased roadmap with acceptance criteria
 
 Phase B should not re-litigate Phase A findings; it should design within them.
+
+## Permission Matrix (Deterministic)
+
+- Manus Phase A is allowed only when:
+  - `stabilization_complete == true`
+  - `pilot_gates_ci_green == true`
+  - `open_incidents_p0_p1 == 0`
+- Manus Phase B is allowed only when:
+  - all Phase A conditions are true, and
+  - `phase_a_pass == true`

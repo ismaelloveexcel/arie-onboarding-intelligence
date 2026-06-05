@@ -4,6 +4,7 @@ PLAN.md, BACKLOG.md, and SYSTEM_STATE.md remain at the repo root by convention �
 
 - `architecture-overview.md` — System architecture, data sources, pipeline stages, routing rules, deployment topology
 - `current-gate-status.md` — Single source of truth for Pilot Gate implementation and validation status
+- `current-gate-status.yaml` — Canonical machine-readable gate and Manus transition state
 - `stabilization-phase.md` — Required 24-48h behavior validation window after gates
 - `manus-phase-gate.md` — Phase A/Phase B rubric and decision boundary for Manus strategy work
 - `minimal-compliance-contract.md` — MVP data/compliance handling contract for enrichment/contact intelligence

@@ -63,6 +63,20 @@ During stabilization:
 
 If any criterion fails, remain in stabilization until corrected and re-observed.
 
+## Transition Rule: Stabilization -> Manus
+
+Move to Manus review only when all required conditions are true:
+
+- `stabilization_complete == true`
+- `pilot_gates_ci_green == true`
+- `open_incidents_p0_p1 == 0`
+- `phase_a_pass == true` (required for Manus Phase B only)
+
+Interpretation:
+
+- If the first three conditions are true, Manus **Phase A (diagnose)** is allowed.
+- Manus **Phase B (design)** is blocked until all four conditions are true.
+
 ## Deliverable
 
 Create a short stabilization report with:

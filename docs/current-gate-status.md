@@ -2,6 +2,7 @@
 
 Last updated: 2026-06-05  
 Branch baseline: `cursor/pilot-readiness-gates-3f07`
+Canonical state file: `docs/current-gate-status.yaml`
 
 ## Gate Status
 
@@ -14,6 +15,19 @@ Branch baseline: `cursor/pilot-readiness-gates-3f07`
 | E | LEI Matching Safety | ✅ Complete | Deterministic matching, confidence, ambiguous review queue |
 | F | Mutation Isolation | ✅ Complete | Static isolation scanner + enforcement tests |
 | CI | Pilot Readiness Workflow | ✅ Complete | Dedicated `pilot-readiness-gates` workflow added |
+
+## Transition State Snapshot
+
+These fields are mirrored from `docs/current-gate-status.yaml` and control Manus readiness.
+
+| Field | Value |
+|---|---|
+| stabilization_complete | `false` |
+| pilot_gates_ci_green | `true` |
+| open_incidents_p0_p1 | `0` |
+| phase_a_pass | `false` |
+| manus_phase_a_allowed | `false` |
+| manus_phase_b_allowed | `false` |
 
 ## Validation Snapshot
 
@@ -37,5 +51,13 @@ Update this file whenever any of the following changes:
 - CI gate behavior
 - validation results that affect deploy confidence
 - operational phase recommendation
+
+Canonical process:
+
+1. Update `docs/current-gate-status.yaml` first.
+2. Update this markdown file as a readable mirror.
+3. Keep readiness booleans consistent with transition rules in:
+   - `docs/stabilization-phase.md`
+   - `docs/manus-phase-gate.md`
 
 Do not rely on chat memory, Slack, or ad-hoc notes for gate truth.
