@@ -1,0 +1,605 @@
+/* =============================================================================
+   ARIE PLATFORM — DESIGN SYSTEM v1.0
+   Phase 1: Design token + hierarchy foundation layer.
+
+   RULES:
+   - Additive only. No existing classes modified or removed.
+   - No template restructuring.
+   - No HTMX attributes touched.
+   - Safe to load after style.css without conflict.
+   - All new classes prefixed with ds- to prevent collision.
+   ============================================================================= */
+
+/* =============================================================================
+   EXTENDED DESIGN TOKENS
+   Extends existing :root tokens. Does not override any existing variable.
+   ============================================================================= */
+
+:root {
+  /* --- Brand (Arie Finance — extracted from live platform) --- */
+  --arie-navy:        #1a0b3d;   /* header background, primary dark */
+  --arie-navy-deep:   #0d0522;   /* deeper navy for contrast */
+  --arie-gold:        #c9a44a;   /* brand accent, active states */
+  --arie-gold-light:  #f0e0b0;   /* gold tint background */
+
+  /* --- Semantic hierarchy palette --- */
+  --layer-decision-bg:      #ffffff;
+  --layer-decision-border:  #1652C9;
+  --layer-decision-accent:  #0B3D91;
+
+  --layer-intelligence-bg:      #f8faff;
+  --layer-intelligence-border:  #dbeafe;
+  --layer-intelligence-accent:  #1d4ed8;
+
+  --layer-reference-bg:      #f9fafb;
+  --layer-reference-border:  #e5e7eb;
+  --layer-reference-accent:  #6b7280;
+
+  /* --- Signal semantic colors --- */
+  --signal-high:    #15803d;
+  --signal-high-bg: #f0fdf4;
+  --signal-med:     #d97706;
+  --signal-med-bg:  #fffbeb;
+  --signal-low:     #6b7280;
+  --signal-low-bg:  #f9fafb;
+  --signal-risk:    #b91c1c;
+  --signal-risk-bg: #fef2f2;
+
+  /* --- Elevation (cards) --- */
+  --shadow-xs:  0 1px 2px rgba(10, 14, 26, 0.06);
+  --shadow-sm:  0 2px 6px rgba(10, 14, 26, 0.08);
+  --shadow-md:  0 4px 12px rgba(10, 14, 26, 0.10);
+  --shadow-lg:  0 8px 24px rgba(10, 14, 26, 0.12);
+
+  /* --- Radius (premium scale) --- */
+  --radius-card:   10px;
+  --radius-chip:   20px;
+  --radius-input:  6px;
+  --radius-badge:  4px;
+
+  /* --- Transitions --- */
+  --transition-fast:   80ms ease;
+  --transition-base:  150ms ease;
+  --transition-slow:  200ms ease;
+
+  /* --- Typography (extended) --- */
+  --text-display-lg:  36px;
+  --text-display-sm:  24px;
+  --text-title:       18px;
+  --text-section:     13px;
+  --text-label:       11px;
+
+  /* --- Spacing (extended) --- */
+  --space-card:     1.25rem;
+  --space-section:  2rem;
+}
+
+/* =============================================================================
+   INFORMATION LAYER SYSTEM
+   Three-layer hierarchy: Decision → Intelligence → Reference
+   Apply as class on card wrappers for future progressive enhancement.
+   ============================================================================= */
+
+/* Decision Layer — highest priority, primary actions */
+.ds-layer-decision {
+  background: var(--layer-decision-bg);
+  border: 1.5px solid var(--layer-decision-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Intelligence Layer — context, explanations, signals */
+.ds-layer-intelligence {
+  background: var(--layer-intelligence-bg);
+  border: 1px solid var(--layer-intelligence-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Reference Layer — raw data, history, audit, admin */
+.ds-layer-reference {
+  background: var(--layer-reference-bg);
+  border: 1px solid var(--layer-reference-border);
+  border-radius: var(--radius-card);
+  box-shadow: none;
+  opacity: 0.92;
+}
+
+/* =============================================================================
+   PREMIUM CARD SYSTEM
+   Supplements existing .card — does not replace it.
+   ============================================================================= */
+
+.ds-card {
+  background: #ffffff;
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-card);
+  margin-bottom: .875rem;
+  border: 1px solid #eaecf0;
+  transition: box-shadow var(--transition-base);
+}
+
+.ds-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.ds-card-header {
+  font-size: var(--text-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--layer-reference-accent);
+  padding-bottom: .5rem;
+  margin-bottom: .75rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+/* Decision card variant — blue left accent bar */
+.ds-card-decision {
+  border-left: 3px solid var(--layer-decision-border);
+}
+
+/* Priority card variant — gold left accent (Arie brand) */
+.ds-card-priority {
+  border-left: 3px solid var(--arie-gold);
+}
+
+/* Reference card variant — muted, visually recessed */
+.ds-card-reference {
+  background: var(--layer-reference-bg);
+  box-shadow: none;
+  border-color: var(--layer-reference-border);
+}
+
+/* =============================================================================
+   TYPOGRAPHY HIERARCHY SYSTEM
+   Supplements existing text — does not override body or heading defaults.
+   ============================================================================= */
+
+/* Page-level entity title */
+.ds-title-entity {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--arie-navy);
+  line-height: 1.2;
+}
+
+/* Section heading */
+.ds-title-section {
+  font-size: var(--text-title);
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+/* Sub-heading / panel label */
+.ds-label-panel {
+  font-size: var(--text-label);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: #6b7280;
+}
+
+/* Body readable text */
+.ds-body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #374151;
+}
+
+/* Meta / supporting text */
+.ds-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+/* Strong value display (stat tiles) */
+.ds-value-display {
+  font-size: var(--text-display-sm);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: #0e1726;
+  line-height: 1;
+}
+
+/* =============================================================================
+   SIGNAL CHIP SYSTEM
+   Compact inline signal indicators for queue rows and lead summaries.
+   ============================================================================= */
+
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-chip);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ds-chip-high {
+  background: var(--signal-high-bg);
+  color: var(--signal-high);
+}
+
+.ds-chip-med {
+  background: var(--signal-med-bg);
+  color: var(--signal-med);
+}
+
+.ds-chip-low {
+  background: var(--signal-low-bg);
+  color: var(--signal-low);
+}
+
+.ds-chip-risk {
+  background: var(--signal-risk-bg);
+  color: var(--signal-risk);
+}
+
+.ds-chip-brand {
+  background: var(--arie-gold-light);
+  color: #7a5c00;
+}
+
+.ds-chip-blue {
+  background: var(--layer-intelligence-border);
+  color: var(--layer-intelligence-accent);
+}
+
+/* =============================================================================
+   STAT TILE SYSTEM
+   Premium metric display for dashboard and summary panels.
+   ============================================================================= */
+
+.ds-stat-tile {
+  background: #ffffff;
+  border: 1px solid #eaecf0;
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow var(--transition-base);
+}
+
+.ds-stat-tile:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.ds-stat-tile-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #0e1726;
+}
+
+.ds-stat-tile-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.ds-stat-tile-sub {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+/* Semantic tile variants */
+.ds-stat-tile-positive .ds-stat-tile-value { color: var(--signal-high); }
+.ds-stat-tile-warning  .ds-stat-tile-value { color: var(--signal-med); }
+.ds-stat-tile-risk     .ds-stat-tile-value { color: var(--signal-risk); }
+.ds-stat-tile-risk     { background: var(--signal-risk-bg); border-color: #fecaca; }
+
+/* =============================================================================
+   PRIORITY SCORE DISPLAY
+   Premium score hero for lead detail.
+   ============================================================================= */
+
+.ds-score-hero {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  background: var(--arie-navy);
+  border-radius: var(--radius-card);
+  color: #fff;
+}
+
+.ds-score-hero-value {
+  font-size: 40px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--arie-gold);
+}
+
+.ds-score-hero-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: rgba(255,255,255,.5);
+  margin-bottom: 2px;
+}
+
+.ds-score-hero-tier {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,.9);
+}
+
+.ds-score-hero-summary {
+  font-size: 12px;
+  color: rgba(255,255,255,.65);
+  line-height: 1.5;
+  margin-top: 2px;
+}
+
+/* =============================================================================
+   WHY CONTACT NOW BANNER
+   Enhanced version of the existing inline banner.
+   ============================================================================= */
+
+.ds-why-contact {
+  display: flex;
+  gap: .875rem;
+  align-items: flex-start;
+  padding: .875rem 1rem;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 1px solid #bfdbfe;
+  border-left: 4px solid var(--layer-decision-border);
+  border-radius: var(--radius-card);
+  margin-bottom: 1rem;
+}
+
+.ds-why-contact-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.ds-why-contact-label {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #1d4ed8;
+  margin-bottom: 3px;
+}
+
+.ds-why-contact-text {
+  font-size: 13px;
+  color: #1e3a5f;
+  line-height: 1.65;
+  font-weight: 500;
+}
+
+/* =============================================================================
+   OUTREACH BRIEFING CARD
+   Premium styled variant for the briefing panel.
+   ============================================================================= */
+
+.ds-briefing {
+  background: linear-gradient(135deg, #f0fdf4 0%, #f8fffe 100%);
+  border: 1px solid #86efac;
+  border-left: 4px solid #16a34a;
+  border-radius: var(--radius-card);
+  padding: var(--space-card);
+  margin-bottom: .875rem;
+}
+
+.ds-briefing-header {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: #15803d;
+  margin-bottom: .625rem;
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+
+.ds-briefing-row {
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+  font-size: 12px;
+  line-height: 1.8;
+  color: #166534;
+}
+
+.ds-briefing-row-label {
+  color: #6b7280;
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+/* =============================================================================
+   TABLE ENHANCEMENT
+   Supplements existing table — adds premium visual weight on header.
+   ============================================================================= */
+
+.ds-table-premium th {
+  background: var(--arie-navy);
+  color: rgba(255,255,255,.75);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  font-weight: 600;
+  border-bottom: none;
+  padding: 10px 12px;
+}
+
+.ds-table-premium th:first-child { border-radius: var(--radius-card) 0 0 0; }
+.ds-table-premium th:last-child  { border-radius: 0 var(--radius-card) 0 0; }
+
+.ds-table-premium tbody tr:hover td {
+  background: #f0f4ff;
+}
+
+/* =============================================================================
+   NAVIGATION ENHANCEMENT
+   Adds premium active state with gold underline already in nav.
+   No change to existing structure — purely reinforcing existing brand pattern.
+   ============================================================================= */
+
+.site-nav a {
+  position: relative;
+}
+
+/* =============================================================================
+   QUEUE ROW SIGNAL LINE
+   Sub-text under company name in queue — enhanced legibility.
+   ============================================================================= */
+
+.ds-queue-signal {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.45;
+  margin-top: 3px;
+  max-width: 300px;
+  font-weight: 400;
+}
+
+/* =============================================================================
+   DECISION ZONE HEADER
+   Full-width accent bar for top-of-page decision blocks.
+   ============================================================================= */
+
+.ds-decision-zone {
+  border-left: 4px solid var(--arie-navy);
+  padding-left: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ds-decision-zone h1 {
+  color: var(--arie-navy);
+}
+
+/* =============================================================================
+   TIMELINE ENHANCEMENT
+   Supplement for the existing timeline vertical layout.
+   ============================================================================= */
+
+.ds-timeline {
+  position: relative;
+  padding-left: 1.5rem;
+}
+
+.ds-timeline::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--arie-navy) 0%, #e5e7eb 100%);
+  border-radius: 1px;
+}
+
+.ds-timeline-event {
+  position: relative;
+  margin-bottom: .875rem;
+  padding-left: .5rem;
+}
+
+.ds-timeline-event::before {
+  content: "";
+  position: absolute;
+  left: -1.15rem;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--arie-navy);
+}
+
+.ds-timeline-event-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ds-timeline-event-date {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 1px;
+}
+
+/* =============================================================================
+   RESPONSIVE GRID UTILITIES
+   ============================================================================= */
+
+.ds-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.ds-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: .75rem;
+}
+
+.ds-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: .75rem;
+}
+
+@media (max-width: 1024px) {
+  .ds-grid-5 { grid-template-columns: repeat(3, 1fr); }
+  .ds-grid-3 { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 768px) {
+  .ds-grid-2 { grid-template-columns: 1fr; }
+  .ds-grid-3 { grid-template-columns: 1fr; }
+  .ds-grid-5 { grid-template-columns: 1fr 1fr; }
+}
+
+/* =============================================================================
+   UTILITY CLASSES
+   Generic helpers for progressive enhancement without template rewrites.
+   ============================================================================= */
+
+.ds-hidden  { display: none !important; }
+.ds-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); border: 0; }
+
+.ds-flex         { display: flex; }
+.ds-flex-col     { display: flex; flex-direction: column; }
+.ds-items-center { align-items: center; }
+.ds-gap-1        { gap: .25rem; }
+.ds-gap-2        { gap: .5rem; }
+.ds-gap-3        { gap: .75rem; }
+.ds-gap-4        { gap: 1rem; }
+.ds-mt-1         { margin-top: .25rem; }
+.ds-mt-2         { margin-top: .5rem; }
+.ds-mt-3         { margin-top: .75rem; }
+.ds-mt-4         { margin-top: 1rem; }
+.ds-mb-0         { margin-bottom: 0; }
+.ds-w-full       { width: 100%; }
+.ds-text-right   { text-align: right; }
+.ds-text-center  { text-align: center; }
+.ds-truncate     { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-nowrap       { white-space: nowrap; }
