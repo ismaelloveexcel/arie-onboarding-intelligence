@@ -472,6 +472,30 @@
 }
 
 /* =============================================================================
+   QUEUE DECISION FEED — Phase 3 + Phase 5 refinements
+   Phase 5 changes: tighter density, single-line rhythm, column compression.
+   ============================================================================= */
+
+/* Hidden columns (data preserved in inline metadata — reversible) */
+.ds-col-hidden { display: none; }
+
+/* Compact table rhythm — uniform row height for scan speed */
+.ds-table-queue td { padding: 8px 12px; vertical-align: middle; }
+.ds-table-queue th { padding: 8px 12px; }
+
+/* Inline muted metadata line (jurisdiction · type · inc-date) */
+.ds-queue-meta-line {
+  font-size: 10px;
+  color: #b0b7c3;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  letter-spacing: .01em;
+}
+
+/* =============================================================================
    QUEUE DECISION FEED — Phase 3
    Progressive enhancement on top of existing table.
    Table structure is UNCHANGED. Enhancements are class additions only.
@@ -497,14 +521,17 @@
   text-decoration: underline;
 }
 
-/* Signal / reason text under company name */
+/* Signal / reason text under company name — single line, ellipsis for row rhythm */
 .ds-queue-signal {
   font-size: 11px;
   color: #6b7280;
-  line-height: 1.45;
+  line-height: 1.4;
   margin-top: 2px;
   max-width: 320px;
   font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Signal chip row (primary signal only) */

@@ -107,13 +107,13 @@
    No columns removed. Pagination and filtering logic unchanged.
    ============================================================ #}
 <div class="table-wrap">
-  <table>
+  <table class="ds-table-queue">
     <thead>
       <tr>
-        <th>Company &amp; Priority Signal</th>
-        <th class="ds-col-secondary">Jurisdiction</th>
-        <th class="ds-col-secondary">Type</th>
-        <th class="ds-col-secondary">Incorporated</th>
+        <th>Company</th>
+        <th class="ds-col-hidden">Jurisdiction</th>
+        <th class="ds-col-hidden">Type</th>
+        <th class="ds-col-hidden">Incorporated</th>
         <th class="col-num">Score</th>
         <th>Status</th>
         <th class="ds-col-secondary">Assigned</th>
@@ -136,18 +136,24 @@
             <div class="ds-queue-chip-row">
               {{ primary_chip(row.reason_codes) }}
             </div>
+            {# Muted inline metadata — replaces 3 hidden columns #}
+            <div class="ds-queue-meta-line">
+              {{- row.jurisdiction -}}
+              {%- if row.entity_type %} · {{ row.entity_type }}{% endif -%}
+              {%- if row.incorporation_date %} · {{ row.incorporation_date }}{% endif -%}
+            </div>
           </div>
         </td>
 
-        {# ── SECONDARY COLUMNS — structurally unchanged, visually de-emphasised ── #}
-        <td class="ds-col-secondary">{{ row.jurisdiction }}</td>
-        <td class="ds-col-secondary">{{ row.entity_type or "—" }}</td>
-        <td class="ds-col-secondary nowrap">{{ row.incorporation_date or "—" }}</td>
+        {# ── COLUMNS NOW HIDDEN — data preserved, moved to inline metadata above ── #}
+        <td class="ds-col-hidden">{{ row.jurisdiction }}</td>
+        <td class="ds-col-hidden">{{ row.entity_type or "—" }}</td>
+        <td class="ds-col-hidden">{{ row.incorporation_date or "—" }}</td>
 
-        {# ── SCORE CELL — popover shows reason summary on hover ── #}
+        {# ── SCORE CELL — bar is primary; number is background metric ── #}
         <td class="col-num">
           <div class="ds-score-cell" tabindex="0">
-            <span class="score">{{ row.priority_score }}</span>
+            <span class="score" style="font-weight:400; font-size:12px; color:#6b7280">{{ row.priority_score }}</span>
             <div class="score-bar">
               <div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div>
             </div>
