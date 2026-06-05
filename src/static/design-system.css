@@ -472,17 +472,140 @@
 }
 
 /* =============================================================================
-   QUEUE ROW SIGNAL LINE
-   Sub-text under company name in queue — enhanced legibility.
+   QUEUE DECISION FEED — Phase 3
+   Progressive enhancement on top of existing table.
+   Table structure is UNCHANGED. Enhancements are class additions only.
    ============================================================================= */
 
+/* Decision block wrapper inside Company td */
+.ds-queue-decision-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Company name link — stronger weight */
+.ds-company-link {
+  font-weight: 600;
+  font-size: 13px;
+  color: #0B3D91;
+  text-decoration: none;
+  line-height: 1.3;
+}
+.ds-company-link:hover {
+  color: #1652C9;
+  text-decoration: underline;
+}
+
+/* Signal / reason text under company name */
 .ds-queue-signal {
   font-size: 11px;
   color: #6b7280;
   line-height: 1.45;
-  margin-top: 3px;
-  max-width: 300px;
+  margin-top: 2px;
+  max-width: 320px;
   font-weight: 400;
+}
+
+/* Signal chip row (primary signal only) */
+.ds-queue-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  flex-wrap: nowrap;
+}
+
+/* Row-level decision emphasis — high priority rows */
+tr.ds-row-high td {
+  background: #fafffe;
+}
+tr.ds-row-high:hover td {
+  background: #f0fdf8;
+}
+tr.ds-row-high td:first-child {
+  border-left: 3px solid var(--signal-high);
+  padding-left: 9px;
+}
+
+/* Row-level de-emphasis — low priority rows */
+tr.ds-row-low td {
+  opacity: 0.62;
+}
+tr.ds-row-low:hover td {
+  opacity: 1;
+  transition: opacity var(--transition-base);
+}
+
+/* Secondary column de-emphasis (applied directly in template) */
+.ds-col-secondary {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+/* Score cell + tooltip trigger */
+.ds-score-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 48px;
+  position: relative;
+}
+
+/* Popover tooltip for score signals */
+.ds-score-popover {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--arie-navy);
+  color: #fff;
+  border-radius: 8px;
+  padding: .625rem .875rem;
+  min-width: 200px;
+  max-width: 280px;
+  box-shadow: var(--shadow-lg);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: normal;
+  pointer-events: none;
+}
+.ds-score-popover::before {
+  content: "";
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top: none;
+  border-bottom-color: var(--arie-navy);
+}
+.ds-score-cell:hover .ds-score-popover,
+.ds-score-cell:focus-within .ds-score-popover {
+  display: block;
+}
+
+/* Quick action hint (appears on row hover, right of status) */
+.ds-action-hint {
+  display: none;
+  font-size: 11px;
+  color: #0B3D91;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: .01em;
+}
+tr:hover .ds-action-hint {
+  display: inline;
+}
+
+/* Row focus band on hover */
+tr:hover td.ds-td-company {
+  background: inherit;
+}
+tr:hover .ds-company-link {
+  color: #1652C9;
 }
 
 /* =============================================================================

@@ -715,7 +715,8 @@ def queue(request: Request):
             ra.assigned_to,
             ra.status,
             qs.refreshed_at,
-            c.website
+            c.website,
+            qs.reason_codes
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -749,6 +750,7 @@ def queue(request: Request):
             "status_label": status_label(row[10]),
             "refreshed_at": row[11],
             "website": sanitize_external_url(row[12]),
+            "reason_codes": row[13] or [],
         }
         for row in rows
     ]

@@ -9,17 +9,23 @@
 
 <!-- =========================================================================
      DECISION ZONE — RM Productivity (answers: "what needs attention today?")
+     Executive Signal Strip: always visible.
+     Per-RM drill-down: collapsed by default.
      ========================================================================= -->
 <div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
   <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
     <span>RM Productivity</span>
-    <span class="ds-meta">Team pipeline velocity &amp; follow-up compliance</span>
+    <span class="ds-meta">Team pipeline · today's signals</span>
   </div>
 
-  <div class="ds-grid-5" style="margin-bottom:1.25rem">
-    <div class="ds-stat-tile">
-      <div class="ds-stat-tile-value">{{ rm_summary.total_with_actions }}</div>
-      <div class="ds-stat-tile-label">Leads with actions</div>
+  {# ── EXECUTIVE SIGNAL STRIP — always visible ── #}
+  <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:.875rem; margin-bottom:1rem">
+    <div class="ds-stat-tile {% if rm_summary.total_overdue > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ rm_summary.total_overdue }}</div>
+      <div class="ds-stat-tile-label">Overdue follow-ups</div>
+      {% if rm_summary.total_overdue > 0 %}
+      <div class="ds-stat-tile-sub">Action required</div>
+      {% endif %}
     </div>
     <div class="ds-stat-tile">
       <div class="ds-stat-tile-value">{{ rm_summary.contact_rate }}%</div>
@@ -29,68 +35,70 @@
       <div class="ds-stat-tile-value">{{ rm_summary.conversion_rate }}%</div>
       <div class="ds-stat-tile-label">Conversion rate</div>
     </div>
-    <div class="ds-stat-tile {% if rm_summary.total_overdue > 0 %}ds-stat-tile-risk{% endif %}">
-      <div class="ds-stat-tile-value">{{ rm_summary.total_overdue }}</div>
-      <div class="ds-stat-tile-label">Overdue follow-ups</div>
-    </div>
-    <div class="ds-stat-tile">
-      <div class="ds-stat-tile-value">
-        {% if rm_summary.avg_days_to_contact is not none %}{{ rm_summary.avg_days_to_contact }}d{% else %}—{% endif %}
-      </div>
-      <div class="ds-stat-tile-label">Avg days to contact</div>
-    </div>
   </div>
 
-  {% if rm_productivity %}
-  <div class="table-wrap">
-    <table class="ds-table-premium">
-      <thead>
-        <tr>
-          <th>RM</th>
-          <th style="text-align:right">Assigned</th>
-          <th style="text-align:right">Contacted</th>
-          <th style="text-align:right">Contact rate</th>
-          <th style="text-align:right">Converted</th>
-          <th style="text-align:right">Conv. rate</th>
-          <th style="text-align:right">Pending follow-ups</th>
-          <th style="text-align:right">Overdue</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for rm in rm_productivity %}
-        <tr>
-          <td style="font-weight:600">{{ rm.name }}</td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.total_assigned }}</td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.contacted }}</td>
-          <td style="text-align:right">
-            <span class="ds-chip {% if rm.contact_rate >= 50 %}ds-chip-high{% elif rm.contact_rate >= 25 %}ds-chip-med{% else %}ds-chip-risk{% endif %}">
-              {{ rm.contact_rate }}%
-            </span>
-          </td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.converted }}</td>
-          <td style="text-align:right">
-            <span class="ds-chip {% if rm.conversion_rate >= 20 %}ds-chip-high{% elif rm.conversion_rate >= 10 %}ds-chip-med{% else %}ds-chip-low{% endif %}">
-              {{ rm.conversion_rate }}%
-            </span>
-          </td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.pending_followups }}</td>
-          <td style="text-align:right; font-variant-numeric:tabular-nums">
-            {% if rm.overdue_followups > 0 %}
-            <span class="ds-chip ds-chip-risk">{{ rm.overdue_followups }}</span>
-            {% else %}
-            <span style="color:var(--ink-4)">0</span>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="ds-meta" style="padding:.5rem 0; font-style:italic">
-    No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
-  </div>
-  {% endif %}
+  {# ── PER-RM DRILL-DOWN — collapsed by default ── #}
+  <details>
+    <summary style="font-size:12px; font-weight:600; color:#0B3D91; cursor:pointer; padding:.25rem 0; user-select:none">
+      View per-RM breakdown
+      <span class="ds-meta" style="font-weight:400; margin-left:.5rem">
+        {{ rm_summary.total_with_actions }} leads with actions ·
+        avg {{ rm_summary.avg_days_to_contact }}d to contact
+      </span>
+    </summary>
+    <div style="margin-top:.875rem">
+    {% if rm_productivity %}
+    <div class="table-wrap">
+      <table class="ds-table-premium">
+        <thead>
+          <tr>
+            <th>RM</th>
+            <th style="text-align:right">Assigned</th>
+            <th style="text-align:right">Contacted</th>
+            <th style="text-align:right">Contact rate</th>
+            <th style="text-align:right">Converted</th>
+            <th style="text-align:right">Conv. rate</th>
+            <th style="text-align:right">Pending</th>
+            <th style="text-align:right">Overdue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rm in rm_productivity %}
+          <tr>
+            <td style="font-weight:600">{{ rm.name }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.total_assigned }}</td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.contacted }}</td>
+            <td style="text-align:right">
+              <span class="ds-chip {% if rm.contact_rate >= 50 %}ds-chip-high{% elif rm.contact_rate >= 25 %}ds-chip-med{% else %}ds-chip-risk{% endif %}">
+                {{ rm.contact_rate }}%
+              </span>
+            </td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.converted }}</td>
+            <td style="text-align:right">
+              <span class="ds-chip {% if rm.conversion_rate >= 20 %}ds-chip-high{% elif rm.conversion_rate >= 10 %}ds-chip-med{% else %}ds-chip-low{% endif %}">
+                {{ rm.conversion_rate }}%
+              </span>
+            </td>
+            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ rm.pending_followups }}</td>
+            <td style="text-align:right">
+              {% if rm.overdue_followups > 0 %}
+              <span class="ds-chip ds-chip-risk">{{ rm.overdue_followups }}</span>
+              {% else %}
+              <span style="color:var(--ink-4)">0</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="ds-meta" style="padding:.5rem 0; font-style:italic">
+      No RM actions recorded yet. Assign leads to RMs to begin tracking productivity.
+    </div>
+    {% endif %}
+    </div>
+  </details>
 </div>
 
 <!-- =========================================================================
