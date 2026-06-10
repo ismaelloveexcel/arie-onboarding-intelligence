@@ -27,6 +27,14 @@ jobs:
       - name: Install Playwright browsers
         run: playwright install chromium --with-deps
 
+      - name: Apply pending migrations
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          COMPANIES_HOUSE_API_KEY: ${{ secrets.COMPANIES_HOUSE_API_KEY }}
+          APP_ENV: production
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+        run: alembic upgrade head
+
       - name: Run nightly pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
