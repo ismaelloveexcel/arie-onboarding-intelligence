@@ -193,6 +193,23 @@ def test_all_ui_statuses_accepted_by_db():
 
 
 @_DB_TESTS
+def test_person_email_columns_exist():
+    """Regression: lead detail selects company_officers.email / company_pscs.email;
+    these must exist (migration f6a4b5c6d7e8 re-ensures them)."""
+    from src.db import get_conn
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            for table in ("company_officers", "company_pscs"):
+                cur.execute(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = %s AND column_name = 'email'",
+                    (table,),
+                )
+                assert cur.fetchone() is not None, f"{table}.email missing"
+
+
+@_DB_TESTS
 def test_queue_priority_score_matches_lead_fit_score():
     """queue_snapshot.priority_score must equal lead_scores.score (canonical)."""
     from src.db import get_conn
