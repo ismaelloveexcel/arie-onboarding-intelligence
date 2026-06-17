@@ -167,6 +167,8 @@ def _upsert_item(conn, item: dict) -> None:
 
 _ENRICHMENT_BACKOFF = [2, 4, 8]  # seconds; all ≤ 30s cap per spec
 
+MAX_ENRICHMENT_ATTEMPTS = 5
+
 
 def _enrichment_get(client: httpx.Client, url: str) -> tuple[int, dict | None]:
     """
@@ -326,6 +328,14 @@ def _set_last_enriched_at(conn, company_id) -> None:
         )
 
 
+def _increment_enrichment_attempts(conn, company_id) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            "UPDATE companies SET enrichment_attempts = enrichment_attempts + 1 WHERE id = %s",
+            (str(company_id),),
+        )
+
+
 def fetch_officers(company_number: str) -> list[dict]:
     """Fetch officer list for *company_number* from Companies House.
     Returns empty list on 404 or rate-limit exhaustion.
@@ -387,7 +397,7 @@ def enrich_company(conn, company_id, company_number: str) -> dict:
                     "ch_enrich_rate_limit_exhausted",
                     extra={"company_number": company_number, "endpoint": "officers"},
                 )
-                _set_last_enriched_at(conn, company_id)
+                _increment_enrichment_attempts(conn, company_id)
                 conn.commit()
                 return {"officers": 0, "pscs": 0, "status": "failed"}
 
@@ -407,7 +417,7 @@ def enrich_company(conn, company_id, company_number: str) -> dict:
                     "ch_enrich_rate_limit_exhausted",
                     extra={"company_number": company_number, "endpoint": "pscs"},
                 )
-                _set_last_enriched_at(conn, company_id)
+                _increment_enrichment_attempts(conn, company_id)
                 conn.commit()
                 return {"officers": 0, "pscs": 0, "status": "failed"}
 
@@ -426,7 +436,7 @@ def enrich_company(conn, company_id, company_number: str) -> dict:
             "ch_enrich_failed",
             extra={"company_number": company_number, "error": str(exc)},
         )
-        _set_last_enriched_at(conn, company_id)
+        _increment_enrichment_attempts(conn, company_id)
         conn.commit()
         return {"officers": 0, "pscs": 0, "status": "failed"}
 
@@ -446,7 +456,7 @@ def enrich_company(conn, company_id, company_number: str) -> dict:
         )
         conn.rollback()
         try:
-            _set_last_enriched_at(conn, company_id)
+            _increment_enrichment_attempts(conn, company_id)
             conn.commit()
         except Exception:
             conn.rollback()
@@ -484,10 +494,11 @@ def run_ch_enrichment_batch(conn, limit: int) -> dict:
             FROM companies
             WHERE source_system = 'companies_house'
               AND last_enriched_at IS NULL
+              AND enrichment_attempts < %s
             ORDER BY created_at DESC
             LIMIT %s
             """,
-            (limit,),
+            (MAX_ENRICHMENT_ATTEMPTS, limit),
         )
         rows = cur.fetchall()
 

@@ -32,6 +32,18 @@ _STATUSES = [
     "Deferred", "Contacted", "Onboarding", "Not Fit",
 ]
 
+_CATEGORIES = ["Management Company", "CSP", "Fiduciary", "Referral Partner", "Other"]
+
+
+def _contact_completeness(contact_email: str | None, phone_number: str | None, contact_name: str | None) -> str:
+    """Return 'Missing', 'Partial', or 'Ready' based on how many contact fields are non-empty."""
+    count = sum(1 for v in (contact_email, phone_number, contact_name) if v)
+    if count == 0:
+        return "Missing"
+    if count < 3:
+        return "Partial"
+    return "Ready"
+
 _UPLOAD_REQUIRED_COLUMNS = ["company_name", "jurisdiction"]
 _UPLOAD_MAX_ROWS = 20000
 _UPLOAD_MAX_BYTES = 15 * 1024 * 1024
@@ -130,7 +142,8 @@ def introducers_list(request: Request):
     list_sql = f"""
         SELECT i.id, i.company_name, i.jurisdiction, i.entity_type,
                i.contact_name, i.contact_email, i.phone_number, i.verify_url,
-               ia.assigned_to, ia.status
+               ia.assigned_to, ia.status,
+               i.category, ia.updated_at
         FROM introducers i
         LEFT JOIN introducer_actions ia ON ia.introducer_id = i.id
         WHERE {' AND '.join(where)}
@@ -151,6 +164,9 @@ def introducers_list(request: Request):
             "contact_name": r[4], "contact_email": r[5],
             "phone_number": r[6], "verify_url": r[7],
             "assigned_to": r[8], "status": r[9],
+            "category": r[10] or "—",
+            "last_action": r[11].strftime("%d %b %Y") if r[11] else "—",
+            "contact_badge": _contact_completeness(r[5], r[6], r[4]),
         }
         for r in rows
     ]
@@ -165,6 +181,7 @@ def introducers_list(request: Request):
             "filters": filters,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
+            "categories": _CATEGORIES,
             "page": page,
             "total_pages": total_pages,
             "query_string": _build_qs({k: v for k, v in filters.items() if v}),
@@ -185,7 +202,8 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
                        i.incorporation_date, i.source, i.company_number, i.file_no,
                        i.sic_codes, i.verify_url, i.contact_email, i.phone_number,
                        i.contact_name, i.address, i.notes,
-                       ia.assigned_to, ia.status, ia.notes, ia.contacted_at, ia.follow_up_at
+                       ia.assigned_to, ia.status, ia.notes, ia.contacted_at, ia.follow_up_at,
+                       i.category, ia.updated_at
                 FROM introducers i
                 LEFT JOIN introducer_actions ia ON ia.introducer_id = i.id
                 WHERE i.id = %s
@@ -217,6 +235,7 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
         "sic_codes": row[8], "verify_url": row[9],
         "contact_email": row[10], "phone_number": row[11],
         "contact_name": row[12], "address": row[13], "notes": row[14],
+        "category": row[20],
     }
     action = {
         "assigned_to": row[15],
@@ -224,7 +243,9 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
         "notes": row[17],
         "contacted_at": row[18],
         "follow_up_at": row[19],
+        "last_action": row[21].strftime("%d %b %Y") if row[21] else None,
     }
+    contact_badge = _contact_completeness(row[10], row[11], row[12])
     return templates.TemplateResponse(
         request=request,
         name="introducer_detail.html",
@@ -234,6 +255,8 @@ def introducer_detail(request: Request, introducer_id: UUID, saved: int = 0):
             "audit_rows": audit_rows,
             "rm_names": RM_NAMES,
             "statuses": _STATUSES,
+            "categories": _CATEGORIES,
+            "contact_badge": contact_badge,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "saved": False,
@@ -365,6 +388,7 @@ def introducer_edit(
     phone_number: str = Form(""),
     address: str = Form(""),
     notes: str = Form(""),
+    category: str = Form(""),
 ):
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -372,7 +396,7 @@ def introducer_edit(
                 """
                 SELECT company_name, jurisdiction, entity_type, incorporation_date,
                        company_number, file_no, sic_codes, verify_url,
-                       contact_name, contact_email, phone_number, address, notes
+                       contact_name, contact_email, phone_number, address, notes, category
                 FROM introducers WHERE id = %s
                 """,
                 (introducer_id,),
@@ -383,6 +407,7 @@ def introducer_edit(
 
             new_company = (company_name or "").strip() or existing[0]
             new_jx = (jurisdiction or "").strip() or existing[1]
+            new_category = category.strip() if category.strip() in _CATEGORIES else None
             cur.execute(
                 """
                 UPDATE introducers SET
@@ -400,6 +425,7 @@ def introducer_edit(
                     phone_number = NULLIF(%s, ''),
                     address = NULLIF(%s, ''),
                     notes = NULLIF(%s, ''),
+                    category = %s,
                     updated_at = NOW()
                 WHERE id = %s
                 """,
@@ -409,6 +435,7 @@ def introducer_edit(
                     company_number.strip(), file_no.strip(), sic_codes.strip(),
                     verify_url.strip(), contact_name.strip(), contact_email.strip(),
                     phone_number.strip(), address.strip(), notes.strip(),
+                    new_category,
                     introducer_id,
                 ),
             )
@@ -420,6 +447,7 @@ def introducer_edit(
                 "sic_codes": existing[6], "verify_url": existing[7],
                 "contact_name": existing[8], "contact_email": existing[9],
                 "phone_number": existing[10], "address": existing[11], "notes": existing[12],
+                "category": existing[13],
             }
             new_value = {
                 "company_name": new_company, "jurisdiction": new_jx,
@@ -434,6 +462,7 @@ def introducer_edit(
                 "phone_number": phone_number.strip() or None,
                 "address": address.strip() or None,
                 "notes": notes.strip() or None,
+                "category": new_category,
             }
             cur.execute(
                 """
@@ -631,18 +660,20 @@ def introducer_upload_confirm(upload_id: UUID):
                     continue
                 normalised = _normalise(company_name)
                 inc_date = (row.get("incorporation_date") or "").strip() or None
+                csv_category_raw = (row.get("category") or "").strip()
+                csv_category = csv_category_raw if csv_category_raw in _CATEGORIES else None
                 cur.execute(
                     """
                     INSERT INTO introducers (
                         company_name, normalised_name, jurisdiction, entity_type,
                         incorporation_date, source, company_number, file_no,
                         sic_codes, verify_url, contact_email, phone_number,
-                        contact_name, address, notes, raw_data
+                        contact_name, address, notes, raw_data, category
                     ) VALUES (
                         %s, %s, %s, %s,
                         NULLIF(%s,'')::date, %s, %s, %s,
                         %s, %s, %s, %s,
-                        %s, %s, %s, %s
+                        %s, %s, %s, %s, %s
                     )
                     ON CONFLICT (normalised_name, jurisdiction) DO UPDATE SET
                         company_name = EXCLUDED.company_name,
@@ -659,6 +690,7 @@ def introducer_upload_confirm(upload_id: UUID):
                         address = EXCLUDED.address,
                         notes = EXCLUDED.notes,
                         raw_data = EXCLUDED.raw_data,
+                        category = COALESCE(EXCLUDED.category, introducers.category),
                         updated_at = NOW()
                     RETURNING (xmax = 0) AS inserted
                     """,
@@ -677,6 +709,7 @@ def introducer_upload_confirm(upload_id: UUID):
                         (row.get("address") or "").strip() or None,
                         (row.get("notes") or "").strip() or None,
                         Jsonb(row),
+                        csv_category,
                     ),
                 )
                 result = cur.fetchone()

@@ -5,119 +5,50 @@ Leads{% endblock %} {% block content %}
   <a href="/" class="back-link">← Back to queue</a>
 </div>
 
-{# --- PR 1: priority chips strip (non-invasive; sits above the existing layout)
---- #} {% set priority = score.priority_score or 0 %} {% if priority >= 70 %} {%
-set priority_label = 'HIGH' %}{% set priority_color = '#16a34a' %} {% elif
-priority >= 40 %} {% set priority_label = 'MEDIUM' %}{% set priority_color =
-'#d97706' %} {% else %} {% set priority_label = 'LOW' %}{% set priority_color =
-'#6b7280' %} {% endif %} {% set fit = score.arie_fit_score or 0 %} {% if fit >=
-70 %} {% set fit_label = 'HIGH' %}{% set fit_color = '#16a34a' %} {% elif fit >=
-40 %} {% set fit_label = 'MEDIUM' %}{% set fit_color = '#d97706' %} {% else %}
-{% set fit_label = 'LOW' %}{% set fit_color = '#6b7280' %} {% endif %} {% set
-reach = score.reachability_status or 'research_required' %} {% if reach ==
-'ready_outreach' %} {% set reach_dot = '🟢' %}{% set reach_label = 'Ready for
-Outreach' %}{% set reach_color = '#16a34a' %} {% elif reach ==
-'research_required' %} {% set reach_dot = '🟡' %}{% set reach_label = 'Research
-Required' %}{% set reach_color = '#d97706' %} {% else %} {% set reach_dot = '🔴'
-%}{% set reach_label = 'No Contact Path Found' %}{% set reach_color = '#dc2626'
-%} {% endif %}
+{# --- Decision panel: one canonical Lead Fit Score + the 5 RM questions --- #}
+{% set lf_color = '#16a34a' if score.tier == 'HIGH' else ('#d97706' if score.tier == 'MEDIUM' else '#6b7280') %}
+{% set reach = score.reachability_status or 'research_required' %}
+{% set cp_color = '#16a34a' if contact_path == 'Ready' else ('#d97706' if contact_path == 'Partial' else '#dc2626') %}
 
-<div
-  class="chips-strip"
-  style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0 0 1rem 0"
->
-  <span
-    class="chip"
-    title="Priority score {{ priority }}/100"
-    style="
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
-      border-radius: 999px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
-    "
-  >
-    <span style="color: #6b7280; font-weight: 500">PRIORITY</span>
-    <strong style="color:{{ priority_color }};">{{ priority_label }}</strong>
-    <span style="color: #9ca3af">· {{ priority }}</span>
-  </span>
-  <span
-    class="chip"
-    title="Arie Fit {{ fit }}/100"
-    style="
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
-      border-radius: 999px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
-    "
-  >
-    <span style="color: #6b7280; font-weight: 500">ARIE FIT</span>
-    <strong style="color:{{ fit_color }};">{{ fit_label }}</strong>
-    <span style="color: #9ca3af">· {{ fit }}</span>
-  </span>
-  <span
-    class="chip"
-    title="Reachability status"
-    style="
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
-      border-radius: 999px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
-    "
-  >
-    <span>{{ reach_dot }}</span>
-    <span style="color: #6b7280; font-weight: 500">REACHABILITY</span>
-    <strong style="color:{{ reach_color }};">{{ reach_label }}</strong>
-  </span>
-  <span
-    class="chip"
-    title="Enrichment tier (A=top 5%, B=top 20%, C=other)"
-    style="
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
-      border-radius: 999px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
-      color: #6b7280;
-    "
-  >
-    Tier
-    <strong style="color: #111827">{{ score.enrichment_tier or 'C' }}</strong>
-  </span>
-  <span
-    class="chip"
-    title="Lead readiness stage"
-    style="
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      padding: 0.35rem 0.7rem;
-      border-radius: 999px;
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      font-size: 12px;
-      color: #6b7280;
-    "
-  >
-    Stage
-    <strong style="color: #111827; text-transform: capitalize"
-      >{{ score.lead_readiness or 'discovered' }}</strong
-    >
-  </span>
+<div class="card decision-panel" style="margin-bottom: 1rem; border-left: 4px solid {{ lf_color }}">
+  <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start">
+    <div style="text-align: center; min-width: 96px">
+      <div style="font-size: 34px; font-weight: 800; color: {{ lf_color }}; line-height: 1">{{ score.score }}</div>
+      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px">Lead Fit Score</div>
+      <span class="tier tier-{{ score.tier }}" style="margin-top: 6px; display: inline-block">{{ score.tier|title }}</span>
+    </div>
+    <div style="flex: 2; min-width: 240px; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem .9rem; font-size: 13px">
+      <div><div style="color: #6b7280; font-size: 11px">RECOMMENDED NEXT STEP</div><strong>{{ next_action }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">CONTACT PATH</div><strong style="color: {{ cp_color }}">{{ contact_path }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">ASSIGNED TO</div><strong>{{ action.assigned_to or "Unassigned" }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">STATUS</div><strong>{{ action.status }}</strong></div>
+      <div style="grid-column: 1 / -1"><div style="color: #6b7280; font-size: 11px">LAST ACTIVITY</div><strong>{% if last_activity %}{{ last_activity.strftime("%d %b %Y %H:%M") }}{% else %}No activity yet{% endif %}</strong></div>
+    </div>
+    <div style="flex: 1; min-width: 200px">
+      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem">Top reasons</div>
+      <ul style="margin: 0; padding-left: 1.1rem; font-size: 12px; line-height: 1.6; color: #111827">
+        {% set shown = namespace(n=0) %}
+        {% for code in score.reason_codes %}
+          {% set d = signal_details.get(code, {}) %}
+          {% if not d.get('hidden') and shown.n < 3 %}
+          <li>{{ d.get('label', code) }}</li>
+          {% set shown.n = shown.n + 1 %}
+          {% endif %}
+        {% endfor %}
+        {% if shown.n == 0 %}<li style="color: #9ca3af">No signals matched</li>{% endif %}
+      </ul>
+    </div>
+  </div>
+  <details style="margin-top: .75rem">
+    <summary style="font-size: 11px; color: #9ca3af; cursor: pointer">Internal scoring signals (debug)</summary>
+    <div style="display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; font-size: 12px; color: #6b7280">
+      <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Arie Fit · {{ score.arie_fit_score or 0 }}</span>
+      <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Priority composite · {{ score.priority_score or 0 }}</span>
+      <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Reachability · {{ reach|replace('_', ' ')|title }}</span>
+      <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Enrichment tier · {{ score.enrichment_tier or 'C' }}</span>
+      <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Stage · {{ score.lead_readiness or 'discovered' }}</span>
+    </div>
+  </details>
 </div>
 
 {% if score.why_reasons %}
@@ -181,6 +112,11 @@ Required' %}{% set reach_color = '#d97706' %} {% else %} {% set reach_dot = '�
           Upload", "mauritius_mns": "Mauritius MNS" }.get(lead.source_system,
           lead.source_system) }}
         </dd>
+        <dt>Data freshness</dt>
+        <dd style="font-size: 12px; color: #6b7280">
+          {% if lead.source_updated_at %}Updated {{ lead.source_updated_at.strftime("%d %b %Y") }}{% else %}—{% endif %}
+          {% if lead.last_enriched_at %} · enriched {{ lead.last_enriched_at.strftime("%d %b %Y") }}{% endif %}
+        </dd>
         <dt>Ref</dt>
         <dd><code>{{ lead.source_ref }}</code></dd>
         {% if lead.verify_url %}
@@ -213,91 +149,52 @@ Required' %}{% set reach_color = '#d97706' %} {% else %} {% set reach_dot = '�
         <span class="score-number">{{ score.score }}</span>
         <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
       </div>
+      {% set palette = ['#145DA0', '#2E8BC0', '#0C2D48', '#2F5233', '#DF7F22', '#8E44AD', '#E94F37', '#4A6FA5', '#1B998B', '#A23B72'] %}
+      {% set pie = namespace(at=0.0, gradient='') %}
+      {% for code in score.reason_codes %}
+        {% set d = signal_details.get(code, {}) %}
+        {% if not d.get('hidden') and d.get('points') is not none and score.score > 0 %}
+          {% set points = d.get('points') %}
+          {% if points > 0 %}
+            {% set start = pie.at %}
+            {% set end = start + ((points / score.score) * 100) %}
+            {% set color = palette[loop.index0 % (palette|length)] %}
+            {% if pie.gradient %}
+              {% set pie.gradient = pie.gradient ~ ', ' %}
+            {% endif %}
+            {% set pie.gradient = pie.gradient ~ color ~ ' ' ~ ('%.2f'|format(start)) ~ '% ' ~ ('%.2f'|format(end)) ~ '%' %}
+            {% set pie.at = end %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+
       {% if score.reason_codes %}
-      <table
-        style="
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 12px;
-          margin-top: 0.75rem;
-        "
-      >
-        <thead>
-          <tr
-            style="
-              color: #6b7280;
-              text-align: left;
-              border-bottom: 1px solid #e5e7eb;
-            "
-          >
-            <th style="padding: 4px 0 6px 0; font-weight: 500; width: 36%">
-              Signal
-            </th>
-            <th
-              style="
-                padding: 4px 10px 6px 10px;
-                font-weight: 500;
-                text-align: right;
-                white-space: nowrap;
-              "
-            >
-              Pts
-            </th>
-            <th style="padding: 4px 0 6px 10px; font-weight: 500">
-              Why it matters
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for code in score.reason_codes %} {% set d =
-          signal_details.get(code, {}) %} {% if not d.get('hidden') %}
-          <tr style="border-bottom: 1px solid #f9fafb; vertical-align: top">
-            <td style="padding: 5px 0; font-weight: 500; color: #111827">
-              {{ d.get('label', code) }}
-            </td>
-            <td
-              style="
-                padding: 5px 10px;
-                text-align: right;
-                color: #16a34a;
-                font-weight: 600;
-                white-space: nowrap;
-              "
-            >
-              {% if d.get('points') is not none %}+{{ d.get('points') }}{% else
-              %}—{% endif %}
-            </td>
-            <td
-              style="padding: 5px 0 5px 10px; color: #6b7280; line-height: 1.5"
-            >
-              {{ d.get('why', '') }}
-            </td>
-          </tr>
-          {% endif %} {% endfor %}
-        </tbody>
-        <tfoot>
-          <tr style="border-top: 2px solid #e5e7eb">
-            <td style="padding: 7px 0 4px 0; font-weight: 600; color: #374151">
-              Score
-            </td>
-            <td
-              style="
-                padding: 7px 10px 4px 10px;
-                text-align: right;
-                font-weight: 700;
-                color: #0057b8;
-              "
-            >
-              {{ score.score }}
-            </td>
-            <td
-              style="padding: 7px 0 4px 10px; color: #9ca3af; font-size: 11px"
-            >
-              out of 100 (max)
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+      <div class="signal-viz-wrap">
+        <div class="signal-pie-wrap">
+          <div
+            class="signal-pie"
+            style="background: conic-gradient({{ pie.gradient if pie.gradient else '#e5e7eb 0% 100%' }});"
+            title="Signal composition of the current score"
+          ></div>
+          <div class="signal-pie-center">
+            <span class="signal-pie-score">{{ score.score }}</span>
+            <span class="signal-pie-total">/100</span>
+          </div>
+        </div>
+        <div class="signal-pill-grid">
+          {% for code in score.reason_codes %}
+            {% set d = signal_details.get(code, {}) %}
+            {% if not d.get('hidden') %}
+              <span class="signal-pill" title="{{ d.get('why', 'No rationale available yet.') }}">
+                <span class="signal-pill-label">{{ d.get('label', code) }}</span>
+                {% if d.get('points') is not none %}
+                <span class="signal-pill-points">+{{ d.get('points') }}</span>
+                {% endif %}
+              </span>
+            {% endif %}
+          {% endfor %}
+        </div>
+      </div>
       {% else %}
       <p style="font-size: 12px; color: #9ca3af; margin: 0; font-style: italic">
         No priority signals matched.

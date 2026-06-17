@@ -1,3 +1,4 @@
+import base64
 import csv
 import hmac
 import io
@@ -20,6 +21,8 @@ from src.config import (
     ACTOR_NAMES,
     ADMIN_TOKEN,
     APP_ENV,
+    BASIC_AUTH_PASS,
+    BASIC_AUTH_USER,
     CH_ENRICHMENT_SAFE_LIMIT,
     LOG_LEVEL,
     RM_NAMES,
@@ -28,7 +31,12 @@ from src.config import (
 from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
-from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
+from src.scoring import (
+    SCORING_VERSION,
+    SIGNAL_DETAILS,
+    contact_path_label,
+    derive_next_action,
+)
 
 # --- Logging setup ---
 handler = logging.StreamHandler()
@@ -103,6 +111,47 @@ from src.introducers import router as introducers_router  # noqa: E402
 
 app.include_router(introducers_router)
 
+
+def _auth_exempt(path: str) -> bool:
+    """Paths that must stay open: health/liveness probes, static assets, and
+    machine endpoints that carry their own auth (admin bearer, internal secret)."""
+    return (
+        path in ("/live", "/health", "/openapi.json")
+        or path.startswith("/static")
+        or path.startswith("/admin")
+        or path.startswith("/internal")
+        or path.startswith("/docs")
+    )
+
+
+@app.middleware("http")
+async def _basic_auth_middleware(request: Request, call_next):
+    """Minimal pilot access protection. Active only when BASIC_AUTH_USER and
+    BASIC_AUTH_PASS are both configured (read live so tests can toggle it).
+    Not a substitute for SSO/RBAC — sized for a 2-user internal pilot."""
+    user = BASIC_AUTH_USER
+    pw = BASIC_AUTH_PASS
+    if user and pw and not _auth_exempt(request.url.path):
+        ok = False
+        header = request.headers.get("authorization", "")
+        scheme, _, encoded = header.partition(" ")
+        if scheme.lower() == "basic" and encoded:
+            try:
+                decoded = base64.b64decode(encoded).decode("utf-8")
+                presented_user, _, presented_pw = decoded.partition(":")
+                ok = hmac.compare_digest(presented_user, user) and hmac.compare_digest(
+                    presented_pw, pw
+                )
+            except Exception:
+                ok = False
+        if not ok:
+            return Response(
+                status_code=401,
+                content="Authentication required",
+                headers={"WWW-Authenticate": 'Basic realm="Arie Leads"'},
+            )
+    return await call_next(request)
+
 _STATUSES = [
     "New",
     "Researching",
@@ -143,32 +192,6 @@ _UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 def _build_query_string(params: dict) -> str:
     cleaned = {key: value for key, value in params.items() if value not in (None, "")}
     return urlencode(cleaned)
-
-
-def _ensure_person_email_columns(conn) -> None:
-    with conn.cursor() as cur:
-        cur.execute("ALTER TABLE company_officers ADD COLUMN IF NOT EXISTS email TEXT")
-        cur.execute("ALTER TABLE company_pscs ADD COLUMN IF NOT EXISTS email TEXT")
-
-
-def _ensure_priority_columns(conn) -> None:
-    """Runtime safety guard: ensure PR 1 priority-scoring columns exist on
-    lead_scores even if the migration didn't run yet. Idempotent."""
-    with conn.cursor() as cur:
-        cur.execute("""
-            ALTER TABLE lead_scores
-                ADD COLUMN IF NOT EXISTS arie_fit_score        INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS keyword_score         INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS freshness_score       INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS founder_quality_score INTEGER NOT NULL DEFAULT 50,
-                ADD COLUMN IF NOT EXISTS cross_border_score    INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS risk_score            INTEGER NOT NULL DEFAULT 50,
-                ADD COLUMN IF NOT EXISTS priority_score        INTEGER NOT NULL DEFAULT 0,
-                ADD COLUMN IF NOT EXISTS reachability_status   TEXT    NOT NULL DEFAULT 'research_required',
-                ADD COLUMN IF NOT EXISTS lead_readiness        TEXT    NOT NULL DEFAULT 'discovered',
-                ADD COLUMN IF NOT EXISTS enrichment_tier       TEXT    NOT NULL DEFAULT 'C',
-                ADD COLUMN IF NOT EXISTS why_reasons           JSONB   NOT NULL DEFAULT '[]'::jsonb
-        """)
 
 
 def _render_action_panel(
@@ -353,6 +376,18 @@ def health(response: Response):
     }
 
 
+@app.get("/live")
+def live(response: Response):
+    db_ok = check_connection()
+    if not db_ok:
+        response.status_code = 503
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "db": "connected" if db_ok else "unreachable",
+        "scoring_version": SCORING_VERSION,
+    }
+
+
 @app.post("/admin/lei-backfill")
 def admin_lei_backfill(request: Request):
     _require_admin_token(request)
@@ -474,14 +509,30 @@ def dashboard(request: Request):
             )
             status_counts = cur.fetchall()
 
+            # introducer_actions is UNIQUE(introducer_id), so a per-introducer
+            # action COUNT is always 0/1 and meaningless. Surface operational
+            # metrics instead: total, contactable, qualified, recently actioned.
             cur.execute("""
-                SELECT i.company_name, COUNT(ia.id) AS lead_count
-                FROM introducers i
-                JOIN introducer_actions ia ON ia.introducer_id = i.id
-                GROUP BY i.id, i.company_name
-                ORDER BY lead_count DESC LIMIT 5
+                SELECT
+                    (SELECT COUNT(*) FROM introducers) AS total,
+                    (SELECT COUNT(*) FROM introducers
+                       WHERE TRIM(COALESCE(contact_email, '')) <> ''
+                          OR TRIM(COALESCE(phone_number, '')) <> ''
+                          OR TRIM(COALESCE(contact_name, '')) <> '') AS with_contact,
+                    (SELECT COUNT(*) FROM introducer_actions WHERE status = 'Qualified') AS qualified,
+                    (SELECT COUNT(*) FROM introducer_actions
+                       WHERE updated_at >= NOW() - INTERVAL '30 days') AS recent
             """)
-            top_introducers = cur.fetchall()
+            intro_stats_row = cur.fetchone()
+
+            cur.execute("""
+                SELECT i.company_name, i.category, ia.status, ia.assigned_to, ia.updated_at
+                FROM introducers i
+                LEFT JOIN introducer_actions ia ON ia.introducer_id = i.id
+                ORDER BY ia.updated_at DESC NULLS LAST, i.company_name ASC
+                LIMIT 5
+            """)
+            recent_introducers = cur.fetchall()
 
     def _ts(ts: datetime | None) -> datetime | None:
         if ts is None:
@@ -567,7 +618,24 @@ def dashboard(request: Request):
             "total_mu": total_mu,
             # Panel 4
             "status_counts": status_counts,
-            "top_introducers": top_introducers,
+            "introducer_stats": {
+                "total": intro_stats_row[0] if intro_stats_row else 0,
+                "with_contact": intro_stats_row[1] if intro_stats_row else 0,
+                "qualified": intro_stats_row[2] if intro_stats_row else 0,
+                "recent": intro_stats_row[3] if intro_stats_row else 0,
+            },
+            "recent_introducers": [
+                {
+                    "company_name": r[0],
+                    "category": r[1],
+                    "status": r[2],
+                    "assigned_to": r[3],
+                    "updated_at": r[4],
+                }
+                for r in recent_introducers
+            ],
+            "actor_names": ACTOR_NAMES,
+            "current_actor": (_read_actor(request) or ""),
         },
     )
 
@@ -704,8 +772,6 @@ def queue(request: Request):
 @app.get("/leads/{lead_id}", response_class=HTMLResponse)
 def lead_detail(request: Request, lead_id: UUID):
     with get_conn() as conn:
-        _ensure_person_email_columns(conn)
-        _ensure_priority_columns(conn)
         with conn.cursor() as cur:
             cur.execute(
                 """
@@ -716,7 +782,8 @@ def lead_detail(request: Request, lead_id: UUID):
                       ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at,
                       ls.arie_fit_score, ls.priority_score, ls.reachability_status,
                       ls.lead_readiness, ls.enrichment_tier, ls.why_reasons,
-                      ls.freshness_score, ls.keyword_score
+                      ls.freshness_score, ls.keyword_score,
+                      c.updated_at, c.last_enriched_at
                 FROM companies c
                 LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
                 LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -809,6 +876,11 @@ def lead_detail(request: Request, lead_id: UUID):
         "freshness_score": row[26] if row[26] is not None else 0,
         "keyword_score": row[27] if row[27] is not None else 0,
     }
+    score["priority_pending"] = (
+        score["scoring_version"] != SCORING_VERSION
+        and score["priority_score"] == 0
+        and score["arie_fit_score"] == 0
+    )
     action = {
         "assigned_to": row[15],
         "status": row[16] or "New",
@@ -816,6 +888,11 @@ def lead_detail(request: Request, lead_id: UUID):
         "contacted_at": row[18],
         "follow_up_at": row[19],
     }
+    next_action = derive_next_action(
+        rm_status=action["status"],
+        reachability_status=score["reachability_status"],
+    )
+    contact_path = contact_path_label(score["reachability_status"])
     audit_rendered = [
         {
             "entity_type": item[0],
@@ -903,9 +980,13 @@ def lead_detail(request: Request, lead_id: UUID):
                 "source_ref": row[7],
                 "verify_url": row[8],
                 "website": row[9],
+                "source_updated_at": row[28],
+                "last_enriched_at": row[29],
             },
             "score": score,
             "action": action,
+            "next_action": next_action,
+            "contact_path": contact_path,
             "audit_rows": audit_rendered,
             "last_activity": last_activity,
             "lei": lei,
@@ -932,6 +1013,10 @@ def lead_action(
     contacted_at: str = Form(""),
     follow_up_at: str = Form(""),
 ):
+    if status not in _STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if assigned_to and assigned_to not in RM_NAMES:
+        raise HTTPException(status_code=400, detail="Unknown assignee")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1028,7 +1113,6 @@ def lead_person_email_update(
         raise HTTPException(status_code=400, detail="Unsupported person kind")
 
     with get_conn() as conn:
-        _ensure_person_email_columns(conn)
         with conn.cursor() as cur:
             cur.execute(
                 f"UPDATE {table_name} SET email = %s WHERE {id_column} = %s AND company_id = %s",
@@ -1113,6 +1197,10 @@ def lead_assign(
     assigned_to: str = Form(""),
     status: str = Form("New"),
 ):
+    if status not in _STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    if assigned_to and assigned_to not in RM_NAMES:
+        raise HTTPException(status_code=400, detail="Unknown assignee")
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1229,11 +1317,27 @@ def lead_assign(
 
 @app.get("/upload", response_class=HTMLResponse)
 def upload_form(request: Request):
+    result = None
+    qp = request.query_params
+    if "inserted" in qp:
+
+        def _safe_int(value: str) -> int:
+            try:
+                return max(int(value), 0)
+            except (TypeError, ValueError):
+                return 0
+
+        result = {
+            "inserted": _safe_int(qp.get("inserted", "0")),
+            "skipped": _safe_int(qp.get("skipped", "0")),
+            "scored": _safe_int(qp.get("scored", "0")),
+        }
     return templates.TemplateResponse(
         request=request,
         name="upload.html",
         context={
             "preview": None,
+            "result": result,
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
         },
@@ -1411,7 +1515,20 @@ def upload_confirm(upload_id: UUID):
             )
             conn.commit()
 
-    return RedirectResponse(url="/", status_code=303)
+        # Score the freshly-inserted companies and rebuild the queue snapshot so
+        # uploaded leads are visible/actionable immediately (not only after the
+        # nightly run). Deterministic scoring only — same code path as the pipeline.
+        scored = 0
+        if inserted:
+            from src.pipeline import _refresh_queue, _score_new_companies
+
+            scored = _score_new_companies(conn)
+            _refresh_queue(conn)
+
+    return RedirectResponse(
+        url=f"/upload?inserted={inserted}&skipped={skipped_duplicates}&scored={scored}",
+        status_code=303,
+    )
 
 
 _AUDIT_ACTION_LABELS = {

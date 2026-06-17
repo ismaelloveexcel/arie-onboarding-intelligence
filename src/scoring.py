@@ -500,6 +500,39 @@ def derive_enrichment_tier(priority_score: int) -> str:
     return "C"
 
 
+def derive_next_action(
+    *,
+    rm_status: str | None,
+    reachability_status: str,
+    has_introducer: bool = False,
+) -> str:
+    """Deterministic, rule-based next-step hint for the RM. No AI, no scoring.
+    Mirrors the simple decision flow agreed for the pilot."""
+    status = (rm_status or "New").strip()
+    if status == "Client":
+        return "Won — active client"
+    if status == "Closed — Not Fit":
+        return "Deprioritise / Not fit"
+    if status in {"Contacted", "Opportunity"}:
+        return "Follow up on the conversation"
+    if has_introducer:
+        return "Review introducer route"
+    if reachability_status == "ready_outreach":
+        return "Ready for outreach"
+    if reachability_status == "no_contact_path":
+        return "Research company / find a contact first"
+    return "Research company / contact first"
+
+
+def contact_path_label(reachability_status: str) -> str:
+    """Map the deterministic reachability enum to a Ready/Partial/Missing badge."""
+    return {
+        "ready_outreach": "Ready",
+        "research_required": "Partial",
+        "no_contact_path": "Missing",
+    }.get(reachability_status, "Partial")
+
+
 def compute_priority_score(
     *,
     arie_fit_score: int,

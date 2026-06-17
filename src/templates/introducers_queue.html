@@ -55,12 +55,13 @@
       <tr>
         <th>Company</th>
         <th>Jurisdiction</th>
-        <th>Type</th>
+        <th>Category</th>
         <th>Contact</th>
         <th>Email</th>
-        <th>Phone</th>
-        <th>Assigned</th>
+        <th>Contacts</th>
+        <th>Owner</th>
         <th>Status</th>
+        <th>Last Action</th>
         <th></th>
       </tr>
     </thead>
@@ -69,12 +70,15 @@
       <tr>
         <td><a href="/introducers/{{ row.id }}">{{ row.company_name }}</a></td>
         <td>{{ row.jurisdiction }}</td>
-        <td class="cell-meta">{{ row.entity_type }}</td>
+        <td class="cell-meta">{{ row.category }}</td>
         <td>{{ row.contact_name or "—" }}</td>
         <td>{% if row.contact_email %}<a href="mailto:{{ row.contact_email }}">{{ row.contact_email }}</a>{% else %}—{% endif %}</td>
-        <td class="cell-meta nowrap">{{ row.phone_number or "—" }}</td>
+        <td class="cell-meta">
+          <span class="badge badge-contact-{{ row.contact_badge|lower }}">{{ row.contact_badge }}</span>
+        </td>
         <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
+        <td class="cell-meta nowrap">{{ row.last_action }}</td>
         <td>
           {% if row.verify_url %}
             <a href="{{ row.verify_url }}" target="_blank" class="icon-btn" title="Open website">↗</a>
@@ -82,7 +86,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="empty-row">
+      <tr><td colspan="10" class="empty-row">
         No introducers yet. <a href="/introducers/upload/new">Upload a CSV</a> to get started.
       </td></tr>
       {% endfor %}

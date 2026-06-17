@@ -1,7 +1,21 @@
 # System State — Arie Leads
 
 _Last verified: 2026-06-01_
-_Freeze status: **FROZEN** — all gates passed 2026-06-01_
+_Freeze status: **UNFROZEN for pilot hardening** (2026-06-17) — see note below_
+
+> **Pilot hardening — 2026-06-17.** Freeze was re-opened to fix observed
+> pilot-blocking failures: (1) `rm_actions.status` CHECK constraint did not
+> match the UI status list, breaking RM saves for 5 of 8 statuses (migration
+> `f3a1b2c3d4e5` + write-time validation); (2) the "Acting as" actor selector
+> was missing from the UI, so the audit log recorded `unknown` (restored in
+> `base.html`); (3) the queue and lead-detail showed different headline scores
+> (canonicalised to one **Lead Fit Score**). Also: minimal Basic-auth access
+> protection (`BASIC_AUTH_USER`/`BASIC_AUTH_PASS` — **must be set in prod**),
+> deterministic next-action + contact-path on lead detail, queue "why" line,
+> immediate scoring of manual uploads, transient-vs-permanent CH enrichment
+> retry, leaner introducer intelligence + a corrected dashboard introducer
+> metric, request-path DDL moved fully into migrations, and permanent guard
+> tests (`tests/test_pilot_guards.py`). Re-freeze once verified on staging.
 
 ---
 

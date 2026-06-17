@@ -6,6 +6,30 @@
   <a href="/introducers" class="back-link">← Back to introducers</a>
 </div>
 
+{# ── Intelligence summary strip ── #}
+<div class="card" style="margin-bottom:var(--s-4);display:flex;flex-wrap:wrap;gap:var(--s-4);align-items:center">
+  <div>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Category</span><br>
+    <strong>{{ introducer.category or "—" }}</strong>
+  </div>
+  <div>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Owner</span><br>
+    <strong>{{ action.assigned_to or "—" }}</strong>
+  </div>
+  <div>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Status</span><br>
+    <span class="status status-{{ (action.status or 'new')|lower|replace(' ', '-') }}">{{ action.status or "New" }}</span>
+  </div>
+  <div>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Contacts</span><br>
+    <span class="badge badge-contact-{{ contact_badge|lower }}">{{ contact_badge }}</span>
+  </div>
+  <div>
+    <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Last Action</span><br>
+    <strong>{{ action.last_action or "—" }}</strong>
+  </div>
+</div>
+
 <div class="grid-2">
   <div>
     <form method="post" action="/introducers/{{ introducer.id }}/edit"
@@ -41,6 +65,14 @@
 
           <label>Website</label>
           <input type="url" name="verify_url" value="{{ introducer.verify_url or '' }}" placeholder="https://...">
+
+          <label>Category</label>
+          <select name="category">
+            <option value="">— None —</option>
+            {% for cat in categories %}
+              <option value="{{ cat }}" {% if introducer.category == cat %}selected{% endif %}>{{ cat }}</option>
+            {% endfor %}
+          </select>
         </div>
       </div>
 

@@ -200,24 +200,49 @@
     </div>
 
     <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Top 5 Introducers by Lead Count
+      Introducers
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:.5rem; margin-bottom:1rem">
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
+        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.total }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Total</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
+        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.with_contact }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">With contact</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
+        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.qualified }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Qualified</div>
+      </div>
+      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
+        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.recent }}</div>
+        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Actioned 30d</div>
+      </div>
+    </div>
+    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
+      Recently Actioned Introducers
     </div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
             <th>Introducer</th>
-            <th style="text-align:right">Leads</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Owner</th>
           </tr>
         </thead>
         <tbody>
-          {% for name, cnt in top_introducers %}
+          {% for intro in recent_introducers %}
           <tr>
-            <td>{{ name }}</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
+            <td>{{ intro.company_name }}</td>
+            <td style="color:var(--ink-3)">{{ intro.category or "—" }}</td>
+            <td>{% if intro.status %}<span class="status status-{{ intro.status|lower|replace(' ', '-') }}">{{ intro.status }}</span>{% else %}—{% endif %}</td>
+            <td style="color:var(--ink-3)">{{ intro.assigned_to or "—" }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="2" style="color:var(--ink-4); text-align:center">No introducers yet</td></tr>
+          <tr><td colspan="4" style="color:var(--ink-4); text-align:center">No introducers yet</td></tr>
           {% endfor %}
         </tbody>
       </table>

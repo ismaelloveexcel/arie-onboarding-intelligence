@@ -35,6 +35,11 @@ ACTOR_NAMES: list[str] = [
 ]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
+# Minimal pilot access protection (HTTP Basic). When BOTH are set, the app
+# requires Basic auth on all human-facing routes. Left unset (e.g. local dev,
+# CI) the guard is disabled so tests and local runs need no credentials.
+BASIC_AUTH_USER: str = os.getenv("BASIC_AUTH_USER", "").strip()
+BASIC_AUTH_PASS: str = os.getenv("BASIC_AUTH_PASS", "").strip()
 CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200"))
 CH_ENRICHMENT_SAFE_LIMIT: int = int(os.getenv("CH_ENRICHMENT_SAFE_LIMIT", "5"))
 

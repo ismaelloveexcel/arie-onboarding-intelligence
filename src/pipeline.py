@@ -275,7 +275,7 @@ def _refresh_queue(conn) -> int:
             FROM companies c
             JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
             WHERE c.canonical_company_id IS NULL
-            ORDER BY GREATEST(COALESCE(ls.priority_score, 0), ls.score) DESC
+            ORDER BY ls.score DESC
             """)
         cur.execute("SELECT COUNT(*) FROM queue_snapshot")
         count = cur.fetchone()[0]

@@ -74,7 +74,7 @@
         <th>Jurisdiction</th>
         <th>Type</th>
         <th>Incorporated</th>
-        <th class="col-num">Score</th>
+        <th class="col-num">Lead Fit Score</th>
         <th>Tier</th>
         <th>Assigned</th>
         <th>Status</th>
@@ -84,7 +84,15 @@
     <tbody>
       {% for row in rows %}
       <tr>
-        <td><a href="/leads/{{ row.id }}">{{ row.company_name }}</a></td>
+        <td>
+          <a href="/leads/{{ row.id }}">{{ row.company_name }}</a>
+          {% if row.reason_summary %}
+          <div class="cell-why" title="{{ row.reason_summary }}"
+               style="font-size:11px; color:#6b7280; margin-top:2px; max-width:32rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+            {{ row.reason_summary }}
+          </div>
+          {% endif %}
+        </td>
         <td>{{ row.jurisdiction }}</td>
         <td>{{ row.entity_type or "—" }}</td>
         <td class="cell-meta nowrap">{{ row.incorporation_date or "—" }}</td>
