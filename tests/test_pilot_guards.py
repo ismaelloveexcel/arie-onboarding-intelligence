@@ -11,7 +11,9 @@ Two tiers:
 import importlib.util
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -83,6 +85,44 @@ def test_contact_path_label():
     assert contact_path_label("research_required") == "Partial"
     assert contact_path_label("no_contact_path") == "Missing"
     assert contact_path_label("anything_else") == "Partial"
+
+
+def test_queue_contact_readiness_filter_and_badge():
+    lead_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    row = (
+        lead_id,
+        "Example Company",
+        "UK",
+        "ltd",
+        None,
+        None,
+        82,
+        "HIGH",
+        "Strong fit",
+        None,
+        "New",
+        now,
+        "no_contact_path",
+    )
+
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [(1,), (now,)]
+    cursor.fetchall.return_value = [row]
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cursor
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_cm
+    connection_cm = MagicMock()
+    connection_cm.__enter__.return_value = connection
+
+    with patch("src.main.get_conn", return_value=connection_cm):
+        response = client.get("/?contact_readiness=no_contact_path")
+
+    assert response.status_code == 200
+    assert "Missing Contact Path" in response.text
+    sql_calls = [str(call.args[0]) for call in cursor.execute.call_args_list]
+    assert any("ls.reachability_status" in sql for sql in sql_calls)
 
 
 # --------------------------------------------------------------------------

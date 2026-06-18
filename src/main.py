@@ -504,6 +504,17 @@ def dashboard(request: Request):
             cov_row = cur.fetchone()
 
             # Panel 4 — queue + workflow
+            cur.execute("""
+                SELECT COUNT(*)
+                FROM queue_snapshot qs
+                JOIN lead_scores ls
+                  ON ls.company_id = qs.canonical_company_id
+                 AND ls.is_current = TRUE
+                WHERE qs.tier = 'HIGH'
+                  AND COALESCE(ls.reachability_status, 'research_required') = 'no_contact_path'
+            """)
+            high_fit_contact_missing = cur.fetchone()[0]
+
             cur.execute(
                 "SELECT status, COUNT(*) AS cnt FROM rm_actions GROUP BY status ORDER BY cnt DESC"
             )
@@ -617,6 +628,7 @@ def dashboard(request: Request):
             "pct_lei_linked": _pct(linked_lei, total_lei),
             "total_mu": total_mu,
             # Panel 4
+            "high_fit_contact_missing": high_fit_contact_missing,
             "status_counts": status_counts,
             "introducer_stats": {
                 "total": intro_stats_row[0] if intro_stats_row else 0,
@@ -647,6 +659,7 @@ def queue(request: Request):
         "jurisdiction": request.query_params.get("jurisdiction", ""),
         "assigned_to": request.query_params.get("assigned_to", ""),
         "status": request.query_params.get("status", ""),
+        "contact_readiness": request.query_params.get("contact_readiness", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
         "sort": request.query_params.get("sort", "score"),
@@ -671,6 +684,15 @@ def queue(request: Request):
     if filters["status"]:
         where_clauses.append("ra.status = %s")
         params.append(filters["status"])
+    if filters["contact_readiness"] in {
+        "ready_outreach",
+        "research_required",
+        "no_contact_path",
+    }:
+        where_clauses.append(
+            "COALESCE(ls.reachability_status, 'research_required') = %s"
+        )
+        params.append(filters["contact_readiness"])
     if filters["date_from"]:
         where_clauses.append("c.incorporation_date >= %s")
         params.append(filters["date_from"])
@@ -693,6 +715,7 @@ def queue(request: Request):
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
+        LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
         WHERE {' AND '.join(where_clauses)}
     """
     query_sql = f"""
@@ -708,10 +731,12 @@ def queue(request: Request):
             qs.reason_summary,
             ra.assigned_to,
             ra.status,
-            qs.refreshed_at
+            qs.refreshed_at,
+            COALESCE(ls.reachability_status, 'research_required')
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
+        LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
         WHERE {' AND '.join(where_clauses)}
         ORDER BY {sort_sql}
         LIMIT %s OFFSET %s
@@ -740,6 +765,12 @@ def queue(request: Request):
             "assigned_to": row[9],
             "status": row[10],
             "refreshed_at": row[11],
+            "contact_readiness": row[12],
+            "contact_readiness_label": {
+                "ready_outreach": "Ready",
+                "research_required": "Research Required",
+                "no_contact_path": "Missing Contact Path",
+            }.get(row[12], "Research Required"),
         }
         for row in rows
     ]

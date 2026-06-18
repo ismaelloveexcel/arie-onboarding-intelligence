@@ -48,6 +48,14 @@
       {% endfor %}
     </select>
   </label>
+  <label>Contact Path
+    <select name="contact_readiness">
+      <option value="">All</option>
+      <option value="ready_outreach" {% if filters.contact_readiness == "ready_outreach" %}selected{% endif %}>Ready</option>
+      <option value="research_required" {% if filters.contact_readiness == "research_required" %}selected{% endif %}>Research Required</option>
+      <option value="no_contact_path" {% if filters.contact_readiness == "no_contact_path" %}selected{% endif %}>Missing Contact Path</option>
+    </select>
+  </label>
   <label>Inc. from
     <input type="date" name="date_from" value="{{ filters.date_from }}">
   </label>
@@ -76,6 +84,7 @@
         <th>Incorporated</th>
         <th class="col-num">Lead Fit Score</th>
         <th>Tier</th>
+        <th>Contact Path</th>
         <th>Assigned</th>
         <th>Status</th>
         <th></th>
@@ -105,6 +114,11 @@
           </div>
         </td>
         <td><span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span></td>
+        <td>
+          <span class="status" style="color:{% if row.contact_readiness == 'ready_outreach' %}#047857{% elif row.contact_readiness == 'research_required' %}#b45309{% else %}#b91c1c{% endif %}; background:{% if row.contact_readiness == 'ready_outreach' %}#ecfdf5{% elif row.contact_readiness == 'research_required' %}#fffbeb{% else %}#fef2f2{% endif %}">
+            {{ row.contact_readiness_label }}
+          </span>
+        </td>
         <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
         <td>
@@ -115,7 +129,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="text-align:center; padding:3rem 2rem">
+        <td colspan="10" style="text-align:center; padding:3rem 2rem">
           <div style="color:#9ca3af; font-size:13px; line-height:1.8">
             <div style="font-size:24px; margin-bottom:.5rem">—</div>
             No leads match the current filters.<br>
