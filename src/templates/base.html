@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Arie Leads{% endblock %}</title>
+  <title>{% block title %}ARIE Prospect Action Desk{% endblock %}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -13,23 +13,21 @@
 <body>
   <header class="site-header">
     <div class="site-header-inner">
-      <a href="/" class="brand-lockup" aria-label="Arie — Leads Intelligence">
+      <a href="/" class="brand-lockup" aria-label="ARIE Prospect Action Desk">
         <span class="brand-mark">ARIE</span>
         <span class="brand-divider" aria-hidden="true"></span>
-        <span class="brand-product">Leads Intelligence</span>
+        <span class="brand-product">Prospect Action Desk</span>
       </a>
       <nav class="site-nav" aria-label="Primary">
         <a href="/dashboard" {% if request.url.path == '/dashboard' %}class="is-active"{% endif %}>Dashboard</a>
+        <a href="/" {% if request.url.path == '/' %}class="is-active"{% endif %}>Prospect Queue</a>
         <a href="/introducers" {% if request.url.path.startswith('/introducers') %}class="is-active"{% endif %}>Introducers</a>
-        <a href="/" {% if request.url.path == '/' %}class="is-active"{% endif %}>Lead Queue</a>
-        <a href="/upload" {% if request.url.path == '/upload' %}class="is-active"{% endif %}>Upload</a>
-        <a href="/audit" {% if request.url.path == '/audit' %}class="is-active"{% endif %}>Audit Log</a>
+        <a href="/upload" {% if request.url.path == '/upload' %}class="is-active"{% endif %}>Uploads</a>
+        <a href="/audit" {% if request.url.path == '/audit' %}class="is-active"{% endif %}>Audit</a>
       </nav>
-      <form method="post" action="/me" class="actor-select"
-            style="margin-left:auto; display:flex; align-items:center; gap:.4rem">
-        <label for="actor-select" style="font-size:12px; color:#6b7280; font-weight:500">Acting as</label>
+      <form method="post" action="/me" class="actor-select">
+        <label for="actor-select">Acting as</label>
         <select id="actor-select" name="actor" onchange="this.form.requestSubmit()"
-                style="font-size:12px; padding:3px 6px; border:1px solid #d1d5db; border-radius:6px; background:#fff"
                 aria-label="Acting as (sets the actor recorded in the audit log)">
           <option value="">— Select —</option>
           {% for name in actor_names|default([]) %}

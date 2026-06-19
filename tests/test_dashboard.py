@@ -29,7 +29,7 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
       fetchone[5] = score_row (s0_39, s40_59, s60_79, s80_100, total_scored)
       fetchone[6] = cov_row  (total_uk, enriched_uk, with_officers, with_pscs,
                                total_lei, linked_lei, total_mu)
-      fetchone[7] = (high_fit_contact_missing,)
+      fetchone[7] = RM action metrics (7 values)
       fetchone[8] = introducer metrics
       fetchall[0] = status_counts  [(status, cnt), ...]
       fetchall[1] = recent introducers [(name, category, status, assigned_to, updated_at), ...]
@@ -60,7 +60,7 @@ _EMPTY_FETCHONE = [
     (0, 0, 0),          # vol_row
     (0, 0, 0, 0, 0),    # score_row
     (0, 0, 0, 0, 0, 0, 0),  # cov_row
-    (0,),              # high_fit_contact_missing
+    (0, 0, 0, 0, 0, 0, 0),  # RM action metrics
     (0, 0, 0, 0),     # introducer metrics
 ]
 _EMPTY_FETCHALL = [[], []]
@@ -83,9 +83,9 @@ def test_dashboard_empty_db_no_exception():
     assert resp.status_code == 200
     assert "Dashboard" in resp.text
     # Key metric labels are rendered
-    assert "Total Leads" in resp.text
-    assert "Pipeline Freshness" in resp.text
-    assert "Enrichment Coverage" in resp.text
+    assert "Prospect Action Desk" in resp.text
+    assert "Best prospects" in resp.text
+    assert "Data health and enrichment coverage" in resp.text
 
 
 def test_dashboard_seeded_data():
@@ -101,7 +101,7 @@ def test_dashboard_seeded_data():
         (500, 12, 48),                                        # vol_row
         (80, 120, 200, 100, 500),                             # score_row
         (300, 150, 80, 70, 1200, 900, 200),                   # cov_row
-        (14,),                                                  # high_fit_contact_missing
+        (21, 14, 9, 18, 4, 11, 3),                             # RM action metrics
         (20, 12, 4, 6),                                        # introducer metrics
     ]
     fetchall_returns = [
@@ -120,7 +120,8 @@ def test_dashboard_seeded_data():
     assert "12" in resp.text    # leads_7d
     assert "New" in resp.text
     assert "Acme Partners" in resp.text
-    assert "High-fit leads missing contact path" in resp.text
+    assert "High-fit but contact route missing" in resp.text
+    assert "Ready to contact" in resp.text
     assert "14" in resp.text
 
 
@@ -136,7 +137,7 @@ def test_dashboard_stale_source_flag():
         (100, 0, 0),                                           # vol_row
         (0, 0, 0, 0, 0),                                       # score_row
         (50, 25, 10, 8, 200, 150, 30),                         # cov_row
-        (3,),                                                    # high_fit_contact_missing
+        (5, 3, 2, 4, 1, 2, 0),                                 # RM action metrics
         (0, 0, 0, 0),                                           # introducer metrics
     ]
     fetchall_returns = [[], []]

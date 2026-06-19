@@ -19,8 +19,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src import main
-from src.main import app
-from src.scoring import contact_path_label, derive_next_action
+from src.main import app, build_contact_research_links
+from src.scoring import (
+    contact_path_label,
+    derive_next_action,
+    derive_queue_next_action,
+    introducer_route_hint,
+    suggested_contact_route,
+)
 
 client = TestClient(app)
 
@@ -61,14 +67,14 @@ def test_ui_statuses_match_db_constraint():
 @pytest.mark.parametrize(
     "rm_status,reach,has_intro,expected",
     [
-        ("Client", "ready_outreach", False, "Won — active client"),
-        ("Closed — Not Fit", "ready_outreach", False, "Deprioritise / Not fit"),
-        ("Contacted", "research_required", False, "Follow up on the conversation"),
-        ("Opportunity", "no_contact_path", False, "Follow up on the conversation"),
+        ("Client", "ready_outreach", False, "Client relationship active"),
+        ("Closed — Not Fit", "ready_outreach", False, "No further action"),
+        ("Contacted", "research_required", False, "Follow up"),
+        ("Opportunity", "no_contact_path", False, "Follow up"),
         ("New", "research_required", True, "Review introducer route"),
-        ("New", "ready_outreach", False, "Ready for outreach"),
-        ("New", "no_contact_path", False, "Research company / find a contact first"),
-        ("New", "research_required", False, "Research company / contact first"),
+        ("New", "ready_outreach", False, "Ready to contact"),
+        ("New", "no_contact_path", False, "Research contact route"),
+        ("New", "research_required", False, "Verify contact details"),
     ],
 )
 def test_derive_next_action(rm_status, reach, has_intro, expected):
@@ -81,10 +87,73 @@ def test_derive_next_action(rm_status, reach, has_intro, expected):
 
 
 def test_contact_path_label():
-    assert contact_path_label("ready_outreach") == "Ready"
-    assert contact_path_label("research_required") == "Partial"
-    assert contact_path_label("no_contact_path") == "Missing"
-    assert contact_path_label("anything_else") == "Partial"
+    assert contact_path_label("ready_outreach") == "Ready to Contact"
+    assert contact_path_label("research_required") == "Research Required"
+    assert contact_path_label("no_contact_path") == "No Contact Route Yet"
+    assert contact_path_label("anything_else") == "Research Required"
+
+
+def test_queue_next_action_prioritises_ownership_and_route():
+    assert (
+        derive_queue_next_action(
+            assigned_to=None,
+            rm_status="New",
+            reachability_status="ready_outreach",
+            jurisdiction="UK",
+            entity_type="ltd",
+        )
+        == "Assign RM"
+    )
+    assert (
+        derive_queue_next_action(
+            assigned_to="RM 1",
+            rm_status="New",
+            reachability_status="no_contact_path",
+            jurisdiction="Mauritius",
+            entity_type="Global Business Company",
+        )
+        == "Review introducer route"
+    )
+
+
+def test_suggested_contact_and_introducer_routes():
+    assert (
+        introducer_route_hint("Mauritius", "GBC")
+        == "Research management company / CSP route"
+    )
+    assert introducer_route_hint("UK", "ltd") is None
+    assert (
+        suggested_contact_route(
+            jurisdiction="UK",
+            entity_type="ltd",
+            reachability_status="research_required",
+            has_officers=True,
+            has_pscs=False,
+        )
+        == "Director / officer research"
+    )
+
+
+def test_contact_research_links_are_safe_manual_shortcuts():
+    links = build_contact_research_links(
+        company_name="Acme & Partners Ltd",
+        jurisdiction="UK",
+        source_ref="12345678",
+        registered_address="1 High Street, London",
+        verify_url="https://find-and-update.company-information.service.gov.uk/company/12345678",
+        officers=[
+            {"name": "Jane Doe", "resigned_on": None},
+            {"name": "Former Director", "resigned_on": "2020-01-01"},
+        ],
+    )
+
+    assert links["company"][0]["url"].startswith("https://www.google.com/search?")
+    assert "Acme+%26+Partners+Ltd" in links["company"][0]["url"]
+    assert [item["label"] for item in links["people"]] == [
+        "Jane Doe on LinkedIn"
+    ]
+    assert links["registry"][0]["label"] == "Open official registry"
+    assert any(item["label"] == "FCA context" for item in links["registry"])
 
 
 def test_queue_contact_readiness_filter_and_badge():
@@ -120,9 +189,117 @@ def test_queue_contact_readiness_filter_and_badge():
         response = client.get("/?contact_readiness=no_contact_path")
 
     assert response.status_code == 200
-    assert "Missing Contact Path" in response.text
+    assert "No Contact Route Yet" in response.text
+    assert "Assign RM" in response.text
+    assert f'/leads/{lead_id}#find-contact-route' in response.text
     sql_calls = [str(call.args[0]) for call in cursor.execute.call_args_list]
     assert any("ls.reachability_status" in sql for sql in sql_calls)
+
+
+def test_lead_detail_renders_contact_research_shortcuts():
+    lead_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    lead_row = (
+        lead_id,
+        "Acme & Partners Ltd",
+        "UK",
+        "ltd",
+        None,
+        "1 High Street, London",
+        "companies_house",
+        "12345678",
+        "https://find-and-update.company-information.service.gov.uk/company/12345678",
+        None,
+        82,
+        "HIGH",
+        [],
+        "Strong cross-border fit",
+        main.SCORING_VERSION,
+        "RM 1",
+        "New",
+        None,
+        None,
+        None,
+        82,
+        82,
+        "research_required",
+        "discovered",
+        "B",
+        [],
+        10,
+        10,
+        now,
+        now,
+    )
+    officer_row = (
+        uuid.uuid4(),
+        "Jane Doe",
+        "director",
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [lead_row, None, None]
+    cursor.fetchall.side_effect = [[], [], [officer_row], []]
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cursor
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_cm
+    connection_cm = MagicMock()
+    connection_cm.__enter__.return_value = connection
+
+    with patch("src.main.get_conn", return_value=connection_cm):
+        response = client.get(f"/leads/{lead_id}")
+
+    assert response.status_code == 200
+    assert 'id="find-contact-route"' in response.text
+    assert "Official website" in response.text
+    assert "Jane Doe on LinkedIn" in response.text
+    assert "Registered office route" in response.text
+    assert 'target="_blank"' in response.text
+    assert "nothing is fetched, stored, or verified automatically" in response.text
+
+
+def test_contact_research_rejects_invalid_values_before_db():
+    lead_id = uuid.uuid4()
+    bad_confidence = client.post(
+        f"/leads/{lead_id}/contact-research",
+        data={"confidence": "Certain"},
+    )
+    bad_url = client.post(
+        f"/leads/{lead_id}/contact-research",
+        data={"confidence": "Low", "website": "company.example"},
+    )
+    assert bad_confidence.status_code == 400
+    assert bad_url.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    ["source", "confidence", "last_checked", "checked_by"],
+)
+def test_contact_research_requires_complete_provenance_before_db(missing_field):
+    lead_id = uuid.uuid4()
+    payload = {
+        "website": "https://company.example",
+        "source": "Company website",
+        "confidence": "High",
+        "last_checked": "2026-06-19",
+        "checked_by": "Researcher",
+    }
+    payload[missing_field] = ""
+
+    with patch("src.main.get_conn") as get_conn:
+        response = client.post(
+            f"/leads/{lead_id}/contact-research",
+            data=payload,
+        )
+
+    assert response.status_code == 400
+    get_conn.assert_not_called()
 
 
 # --------------------------------------------------------------------------

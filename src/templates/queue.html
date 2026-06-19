@@ -1,27 +1,28 @@
 {% extends "base.html" %}
-{% block title %}Lead Queue — Arie Leads{% endblock %}
+{% block title %}Prospect Action Queue — ARIE{% endblock %}
 {% block content %}
-<div class="page-head">
+<div class="page-head page-head--compact">
   <div>
-    <h1 style="font-size:28px; font-weight:800; letter-spacing:-.02em; color:#111827">
-      Lead Queue
-    </h1>
-    <div style="font-size:16px; color:#374151; margin-top:6px; font-weight:700">
-      {{ total }} leads in queue
-      <span style="color:#9ca3af; font-weight:500; margin:0 8px">·</span>
-      <span style="color:{% if refreshed_at %}#059669{% else %}#dc2626{% endif %}; font-weight:700">
-        ● refreshed {{ refreshed_at or "never" }}
-      </span>
-    </div>
+    <h1>Prospect Action Queue</h1>
+    <small>{{ total }} prospects · refreshed {{ refreshed_at or "never" }}</small>
   </div>
 </div>
+
+<nav class="quick-filters" aria-label="Prospect shortcuts">
+  <a href="/?view=best" class="{{ 'is-active' if filters.view == 'best' else '' }}">Best prospects</a>
+  <a href="/?view=ready" class="{{ 'is-active' if filters.view == 'ready' else '' }}">Ready to Contact</a>
+  <a href="/?view=high_no_contact" class="{{ 'is-active' if filters.view == 'high_no_contact' else '' }}">High Fit + No Contact Route</a>
+  {% if current_actor %}<a href="/?view=mine" class="{{ 'is-active' if filters.view == 'mine' else '' }}">Assigned to Me</a>{% endif %}
+  <a href="/?view=unassigned_high" class="{{ 'is-active' if filters.view == 'unassigned_high' else '' }}">Unassigned High Fit</a>
+  <a href="/?view=introducer" class="{{ 'is-active' if filters.view == 'introducer' else '' }}">Introducer Route Possible</a>
+</nav>
 
 <form class="filters" method="get" action="/">
   <label>Tier
     <select name="tier">
       <option value="">All</option>
       {% for t in ["HIGH","MEDIUM","LOW"] %}
-        <option value="{{ t }}" {% if filters.tier == t %}selected{% endif %}>{{ t }}</option>
+      <option value="{{ t }}" {% if filters.tier == t %}selected{% endif %}>{{ t|title }}</option>
       {% endfor %}
     </select>
   </label>
@@ -32,11 +33,11 @@
       <option value="Mauritius" {% if filters.jurisdiction == "Mauritius" %}selected{% endif %}>Mauritius</option>
     </select>
   </label>
-  <label>Assigned To
+  <label>Owner
     <select name="assigned_to">
       <option value="">All</option>
       {% for rm in rm_names %}
-        <option value="{{ rm }}" {% if filters.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
+      <option value="{{ rm }}" {% if filters.assigned_to == rm %}selected{% endif %}>{{ rm }}</option>
       {% endfor %}
     </select>
   </label>
@@ -44,101 +45,79 @@
     <select name="status">
       <option value="">All</option>
       {% for s in statuses %}
-        <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+      <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
       {% endfor %}
     </select>
   </label>
-  <label>Contact Path
+  <label>Contact Route
     <select name="contact_readiness">
       <option value="">All</option>
-      <option value="ready_outreach" {% if filters.contact_readiness == "ready_outreach" %}selected{% endif %}>Ready</option>
+      <option value="ready_outreach" {% if filters.contact_readiness == "ready_outreach" %}selected{% endif %}>Ready to Contact</option>
       <option value="research_required" {% if filters.contact_readiness == "research_required" %}selected{% endif %}>Research Required</option>
-      <option value="no_contact_path" {% if filters.contact_readiness == "no_contact_path" %}selected{% endif %}>Missing Contact Path</option>
+      <option value="no_contact_path" {% if filters.contact_readiness == "no_contact_path" %}selected{% endif %}>No Contact Route Yet</option>
     </select>
-  </label>
-  <label>Inc. from
-    <input type="date" name="date_from" value="{{ filters.date_from }}">
-  </label>
-  <label>Inc. to
-    <input type="date" name="date_to" value="{{ filters.date_to }}">
   </label>
   <label>Sort
     <select name="sort">
-      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Incorporated (newest first)</option>
-      <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Incorporated (oldest first)</option>
-      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best leads first</option>
+      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best prospects first</option>
+      <option value="date" {% if filters.sort == "date" %}selected{% endif %}>Newest first</option>
+      <option value="date_asc" {% if filters.sort == "date_asc" %}selected{% endif %}>Oldest first</option>
       <option value="name" {% if filters.sort == "name" %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
-  <button type="submit">Filter</button>
+  <button type="submit">Apply filters</button>
   <a href="/" class="btn btn-secondary">Reset</a>
 </form>
 
-<div class="table-wrap">
+<div class="table-wrap prospect-table">
   <table>
     <thead>
       <tr>
-        <th>Company</th>
-        <th>Jurisdiction</th>
-        <th>Type</th>
-        <th>Incorporated</th>
+        <th>Prospect</th>
+        <th>Market</th>
         <th class="col-num">Lead Fit Score</th>
         <th>Tier</th>
-        <th>Contact Path</th>
-        <th>Assigned</th>
+        <th>Contact Route</th>
+        <th>Next Action</th>
+        <th>Owner</th>
         <th>Status</th>
-        <th></th>
+        <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
       <tr>
-        <td>
-          <a href="/leads/{{ row.id }}">{{ row.company_name }}</a>
+        <td class="prospect-cell">
+          <a class="prospect-name" href="/leads/{{ row.id }}">{{ row.company_name }}</a>
           {% if row.reason_summary %}
-          <div class="cell-why" title="{{ row.reason_summary }}"
-               style="font-size:11px; color:#6b7280; margin-top:2px; max-width:32rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
-            {{ row.reason_summary }}
-          </div>
+          <div class="prospect-reason" title="{{ row.reason_summary }}">{{ row.reason_summary }}</div>
           {% endif %}
         </td>
-        <td>{{ row.jurisdiction }}</td>
-        <td>{{ row.entity_type or "—" }}</td>
-        <td class="cell-meta nowrap">{{ row.incorporation_date or "—" }}</td>
+        <td>
+          <strong>{{ row.jurisdiction }}</strong>
+          <div class="text-meta">{{ row.entity_type or "—" }}{% if row.incorporation_date %} · {{ row.incorporation_date }}{% endif %}</div>
+        </td>
         <td class="col-num">
           <div class="score-cell">
             <span class="score">{{ row.priority_score }}</span>
-            <div class="score-bar">
-              <div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div>
-            </div>
+            <div class="score-bar"><div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div></div>
           </div>
         </td>
         <td><span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span></td>
-        <td>
-          <span class="status" style="color:{% if row.contact_readiness == 'ready_outreach' %}#047857{% elif row.contact_readiness == 'research_required' %}#b45309{% else %}#b91c1c{% endif %}; background:{% if row.contact_readiness == 'ready_outreach' %}#ecfdf5{% elif row.contact_readiness == 'research_required' %}#fffbeb{% else %}#fef2f2{% endif %}">
-            {{ row.contact_readiness_label }}
-          </span>
-        </td>
-        <td class="cell-meta">{{ row.assigned_to or '—' }}</td>
+        <td><span class="badge badge-contact-{{ 'ready' if row.contact_readiness == 'ready_outreach' else ('partial' if row.contact_readiness == 'research_required' else 'missing') }}">{{ row.contact_readiness_label }}</span></td>
+        <td><strong class="next-action">{{ row.next_action }}</strong></td>
+        <td class="cell-meta">{{ row.assigned_to or 'Unassigned' }}</td>
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
         <td>
-          {% if row.verify_url %}
-            <a href="{{ row.verify_url }}" target="_blank" class="btn btn-sm btn-verify" title="Open registry">↗</a>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="10" style="text-align:center; padding:3rem 2rem">
-          <div style="color:#9ca3af; font-size:13px; line-height:1.8">
-            <div style="font-size:24px; margin-bottom:.5rem">—</div>
-            No leads match the current filters.<br>
-            <a href="/" style="font-size:12px; color:#6b7280">
-              Clear filters
-            </a>
+          <div class="queue-actions">
+            <a href="/leads/{{ row.id }}">Review</a>
+            <a href="/leads/{{ row.id }}#find-contact-route">Research</a>
+            {% if row.verify_url %}<a href="{{ row.verify_url }}" target="_blank" rel="noopener noreferrer" title="Open registry">Registry</a>{% endif %}
           </div>
         </td>
       </tr>
+      {% else %}
+      <tr><td colspan="9" class="empty-row">No prospects match the current filters. <a href="/">Clear filters</a></td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -146,21 +125,13 @@
 
 {% if total_pages > 1 %}
 <div class="pagination">
-  {% if page > 1 %}
-    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page-1 }}">‹ Prev</a>
-  {% endif %}
+  {% if page > 1 %}<a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page-1 }}">Prev</a>{% endif %}
   {% for p in range(1, total_pages + 1) %}
-    {% if p == page %}
-      <span class="active">{{ p }}</span>
-    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
-      <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
-    {% elif p == 4 or p == total_pages - 3 %}
-      <span>…</span>
-    {% endif %}
+    {% if p == page %}<span class="active">{{ p }}</span>
+    {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}<a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
+    {% elif p == 4 or p == total_pages - 3 %}<span>…</span>{% endif %}
   {% endfor %}
-  {% if page < total_pages %}
-    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page+1 }}">Next ›</a>
-  {% endif %}
+  {% if page < total_pages %}<a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page+1 }}">Next</a>{% endif %}
 </div>
 {% endif %}
 {% endblock %}

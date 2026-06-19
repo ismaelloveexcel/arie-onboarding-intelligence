@@ -36,6 +36,9 @@ from src.scoring import (
     SIGNAL_DETAILS,
     contact_path_label,
     derive_next_action,
+    derive_queue_next_action,
+    introducer_route_hint,
+    suggested_contact_route,
 )
 
 # --- Logging setup ---
@@ -97,6 +100,73 @@ def _time_ago(dt: datetime | None) -> str:
     if seconds < 86400:
         return f"{seconds // 3600}h ago"
     return f"{seconds // 86400}d ago"
+
+
+def build_contact_research_links(
+    *,
+    company_name: str,
+    jurisdiction: str,
+    source_ref: str | None,
+    registered_address: str | None,
+    verify_url: str | None,
+    officers: list[dict],
+) -> dict[str, list[dict[str, str]]]:
+    """Build deterministic research shortcuts without fetching external data."""
+
+    def search(label: str, query: str) -> dict[str, str]:
+        return {
+            "label": label,
+            "url": f"https://www.google.com/search?{urlencode({'q': query})}",
+        }
+
+    company = [
+        search("Official website", f'"{company_name}" {jurisdiction} official website'),
+        search("Contact page", f'"{company_name}" contact'),
+        search("Company LinkedIn", f'"{company_name}" LinkedIn company'),
+    ]
+    people = [
+        search(
+            f"{officer['name']} on LinkedIn",
+            f'"{officer["name"]}" "{company_name}" LinkedIn',
+        )
+        for officer in officers
+        if officer.get("name") and not officer.get("resigned_on")
+    ][:5]
+    introducer = [
+        search(
+            "Introducer / CSP route",
+            f'"{company_name}" management company OR fiduciary OR corporate services',
+        )
+    ]
+    if registered_address:
+        introducer.insert(
+            0,
+            search(
+                "Registered office route",
+                f'"{registered_address}" "{company_name}" '
+                "management company OR corporate service provider",
+            ),
+        )
+
+    registry: list[dict[str, str]] = []
+    if verify_url:
+        registry.append({"label": "Open official registry", "url": verify_url})
+    identity = f'"{company_name}" {source_ref or ""}'.strip()
+    if jurisdiction == "UK":
+        registry.append(search("FCA context", f"{identity} site:register.fca.org.uk"))
+    elif jurisdiction == "Mauritius":
+        registry.append(search("FSC context", f"{identity} site:fscmauritius.org"))
+    else:
+        registry.append(
+            search("Registry / regulator context", f"{identity} registry regulator")
+        )
+
+    return {
+        "company": company,
+        "people": people,
+        "introducer": introducer,
+        "registry": registry,
+    }
 
 
 app = FastAPI(
@@ -205,7 +275,7 @@ def _render_action_panel(
 ) -> HTMLResponse:
     return HTMLResponse(f"""
         <div class="card" id="action-panel">
-          <h2>RM Actions</h2>
+          <h2>RM Progress</h2>
           <form
             hx-post="/leads/{lead_id}/action"
             hx-target="#action-panel"
@@ -504,16 +574,50 @@ def dashboard(request: Request):
             cov_row = cur.fetchone()
 
             # Panel 4 — queue + workflow
-            cur.execute("""
-                SELECT COUNT(*)
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE qs.tier = 'HIGH'
+                          AND COALESCE(ra.status, 'New') IN ('New', 'Researching')
+                    ) AS prospects_for_action,
+                    COUNT(*) FILTER (
+                        WHERE qs.tier = 'HIGH'
+                          AND COALESCE(ls.reachability_status, 'research_required') = 'no_contact_path'
+                    ) AS high_fit_contact_missing,
+                    COUNT(*) FILTER (
+                        WHERE COALESCE(ls.reachability_status, 'research_required') = 'ready_outreach'
+                          AND COALESCE(ra.status, 'New') NOT IN ('Client', 'Closed — Not Fit')
+                    ) AS ready_to_contact,
+                    COUNT(*) FILTER (
+                        WHERE CASE
+                            WHEN %s <> '' THEN ra.assigned_to = %s
+                            ELSE ra.assigned_to IS NOT NULL
+                        END
+                    ) AS assigned_leads,
+                    COUNT(*) FILTER (
+                        WHERE ra.assigned_to IS NOT NULL
+                          AND COALESCE(ra.updated_at, c.updated_at) < NOW() - INTERVAL '14 days'
+                          AND COALESCE(ra.status, 'New') NOT IN ('Client', 'Closed — Not Fit')
+                    ) AS stale_assigned,
+                    COUNT(*) FILTER (
+                        WHERE c.jurisdiction = 'Mauritius'
+                          AND qs.tier IN ('HIGH', 'MEDIUM')
+                    ) AS introducer_routes,
+                    COUNT(*) FILTER (
+                        WHERE ra.status IN ('Opportunity', 'Client')
+                          AND ra.updated_at >= NOW() - INTERVAL '30 days'
+                    ) AS recent_progression
                 FROM queue_snapshot qs
+                JOIN companies c ON c.id = qs.canonical_company_id
                 JOIN lead_scores ls
                   ON ls.company_id = qs.canonical_company_id
                  AND ls.is_current = TRUE
-                WHERE qs.tier = 'HIGH'
-                  AND COALESCE(ls.reachability_status, 'research_required') = 'no_contact_path'
-            """)
-            high_fit_contact_missing = cur.fetchone()[0]
+                LEFT JOIN rm_actions ra ON ra.company_id = c.id
+                """,
+                (actor, actor),
+            )
+            action_metrics_row = cur.fetchone()
 
             cur.execute(
                 "SELECT status, COUNT(*) AS cnt FROM rm_actions GROUP BY status ORDER BY cnt DESC"
@@ -628,7 +732,16 @@ def dashboard(request: Request):
             "pct_lei_linked": _pct(linked_lei, total_lei),
             "total_mu": total_mu,
             # Panel 4
-            "high_fit_contact_missing": high_fit_contact_missing,
+            "action_metrics": {
+                "prospects_for_action": action_metrics_row[0] if action_metrics_row else 0,
+                "high_fit_contact_missing": action_metrics_row[1] if action_metrics_row else 0,
+                "ready_to_contact": action_metrics_row[2] if action_metrics_row else 0,
+                "assigned_leads": action_metrics_row[3] if action_metrics_row else 0,
+                "stale_assigned": action_metrics_row[4] if action_metrics_row else 0,
+                "introducer_routes": action_metrics_row[5] if action_metrics_row else 0,
+                "recent_progression": action_metrics_row[6] if action_metrics_row else 0,
+                "assigned_label": "Assigned to me" if actor else "Assigned leads",
+            },
             "status_counts": status_counts,
             "introducer_stats": {
                 "total": intro_stats_row[0] if intro_stats_row else 0,
@@ -660,6 +773,7 @@ def queue(request: Request):
         "assigned_to": request.query_params.get("assigned_to", ""),
         "status": request.query_params.get("status", ""),
         "contact_readiness": request.query_params.get("contact_readiness", ""),
+        "view": request.query_params.get("view", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
         "sort": request.query_params.get("sort", "score"),
@@ -693,6 +807,50 @@ def queue(request: Request):
             "COALESCE(ls.reachability_status, 'research_required') = %s"
         )
         params.append(filters["contact_readiness"])
+    if filters["view"] == "best":
+        where_clauses.extend(
+            [
+                "qs.tier = 'HIGH'",
+                "COALESCE(ra.status, 'New') IN ('New', 'Researching')",
+            ]
+        )
+    elif filters["view"] == "ready":
+        where_clauses.append(
+            "COALESCE(ls.reachability_status, 'research_required') = 'ready_outreach'"
+        )
+    elif filters["view"] == "high_no_contact":
+        where_clauses.extend(
+            [
+                "qs.tier = 'HIGH'",
+                "COALESCE(ls.reachability_status, 'research_required') = 'no_contact_path'",
+            ]
+        )
+    elif filters["view"] == "mine" and _read_actor(request):
+        where_clauses.append("ra.assigned_to = %s")
+        params.append(_read_actor(request))
+    elif filters["view"] == "assigned":
+        where_clauses.append("ra.assigned_to IS NOT NULL")
+    elif filters["view"] == "unassigned_high":
+        where_clauses.extend(["qs.tier = 'HIGH'", "ra.assigned_to IS NULL"])
+    elif filters["view"] == "stale":
+        where_clauses.extend(
+            [
+                "ra.assigned_to IS NOT NULL",
+                "COALESCE(ra.updated_at, c.updated_at) < NOW() - INTERVAL '14 days'",
+                "COALESCE(ra.status, 'New') NOT IN ('Client', 'Closed — Not Fit')",
+            ]
+        )
+    elif filters["view"] == "introducer":
+        where_clauses.extend(
+            ["c.jurisdiction = 'Mauritius'", "qs.tier IN ('HIGH', 'MEDIUM')"]
+        )
+    elif filters["view"] == "progressed":
+        where_clauses.extend(
+            [
+                "ra.status IN ('Onboarding', 'Opportunity')",
+                "ra.updated_at >= NOW() - INTERVAL '30 days'",
+            ]
+        )
     if filters["date_from"]:
         where_clauses.append("c.incorporation_date >= %s")
         params.append(filters["date_from"])
@@ -766,11 +924,14 @@ def queue(request: Request):
             "status": row[10],
             "refreshed_at": row[11],
             "contact_readiness": row[12],
-            "contact_readiness_label": {
-                "ready_outreach": "Ready",
-                "research_required": "Research Required",
-                "no_contact_path": "Missing Contact Path",
-            }.get(row[12], "Research Required"),
+            "contact_readiness_label": contact_path_label(row[12]),
+            "next_action": derive_queue_next_action(
+                assigned_to=row[9],
+                rm_status=row[10],
+                reachability_status=row[12],
+                jurisdiction=row[2],
+                entity_type=row[3],
+            ),
         }
         for row in rows
     ]
@@ -892,6 +1053,17 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             pscs_rows = cur.fetchall()
 
+            cur.execute(
+                """
+                SELECT website, generic_email, contact_form_url, linkedin_url,
+                       source, confidence, verified_at, checked_by
+                FROM company_contacts
+                WHERE company_id = %s
+                """,
+                (lead_id,),
+            )
+            company_contact_row = cur.fetchone()
+
     score = {
         "score": row[10] if row[10] is not None else 0,
         "tier": row[11] if row[11] is not None else "LOW",
@@ -919,11 +1091,44 @@ def lead_detail(request: Request, lead_id: UUID):
         "contacted_at": row[18],
         "follow_up_at": row[19],
     }
+    route_hint = introducer_route_hint(row[2], row[3])
     next_action = derive_next_action(
         rm_status=action["status"],
         reachability_status=score["reachability_status"],
+        has_introducer=bool(route_hint)
+        and score["reachability_status"] != "ready_outreach",
     )
     contact_path = contact_path_label(score["reachability_status"])
+    suggested_route = suggested_contact_route(
+        jurisdiction=row[2],
+        entity_type=row[3],
+        reachability_status=score["reachability_status"],
+        has_officers=bool(officers_rows),
+        has_pscs=bool(pscs_rows),
+    )
+    confidence_value = (
+        float(company_contact_row[5])
+        if company_contact_row and company_contact_row[5] is not None
+        else None
+    )
+    company_contact = {
+        "website": company_contact_row[0] if company_contact_row else row[9],
+        "generic_email": company_contact_row[1] if company_contact_row else None,
+        "contact_form_url": company_contact_row[2] if company_contact_row else None,
+        "linkedin_url": company_contact_row[3] if company_contact_row else None,
+        "source": company_contact_row[4] if company_contact_row else None,
+        "confidence": (
+            "High"
+            if confidence_value is not None and confidence_value >= 0.8
+            else "Medium"
+            if confidence_value is not None and confidence_value >= 0.5
+            else "Low"
+            if confidence_value is not None
+            else ""
+        ),
+        "last_checked": company_contact_row[6] if company_contact_row else None,
+        "checked_by": company_contact_row[7] if company_contact_row else None,
+    }
     audit_rendered = [
         {
             "entity_type": item[0],
@@ -981,6 +1186,14 @@ def lead_detail(request: Request, lead_id: UUID):
         }
         for r in pscs_rows
     ]
+    research_links = build_contact_research_links(
+        company_name=row[1],
+        jurisdiction=row[2],
+        source_ref=row[7],
+        registered_address=row[5],
+        verify_url=row[8],
+        officers=officers,
+    )
     lei_reverse_lookup = [
         {
             "lei_code": r[0],
@@ -1018,6 +1231,10 @@ def lead_detail(request: Request, lead_id: UUID):
             "action": action,
             "next_action": next_action,
             "contact_path": contact_path,
+            "suggested_route": suggested_route,
+            "research_links": research_links,
+            "introducer_hint": route_hint,
+            "company_contact": company_contact,
             "audit_rows": audit_rendered,
             "last_activity": last_activity,
             "lei": lei,
@@ -1167,6 +1384,144 @@ def lead_website_update(request: Request, lead_id: UUID, website: str = Form("")
         conn.commit()
 
     return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+
+
+@app.post("/leads/{lead_id}/contact-research", response_class=HTMLResponse)
+def lead_contact_research_update(
+    request: Request,
+    lead_id: UUID,
+    website: str = Form(""),
+    generic_email: str = Form(""),
+    contact_form_url: str = Form(""),
+    linkedin_url: str = Form(""),
+    source: str = Form(""),
+    confidence: str = Form(""),
+    last_checked: str = Form(""),
+    checked_by: str = Form(""),
+):
+    confidence_values = {"": None, "Low": 0.33, "Medium": 0.66, "High": 1.0}
+    if confidence not in confidence_values:
+        raise HTTPException(status_code=400, detail="Invalid confidence")
+
+    cleaned = {
+        "website": website.strip(),
+        "generic_email": generic_email.strip(),
+        "contact_form_url": contact_form_url.strip(),
+        "linkedin_url": linkedin_url.strip(),
+        "source": source.strip(),
+        "confidence": confidence,
+        "last_checked": last_checked.strip(),
+        "checked_by": (_read_actor(request) or checked_by.strip()),
+    }
+    for field in ("website", "contact_form_url", "linkedin_url"):
+        value = cleaned[field]
+        if value and not re.match(r"^https?://", value, flags=re.IGNORECASE):
+            raise HTTPException(status_code=400, detail=f"Invalid {field}")
+    if cleaned["generic_email"] and not re.match(
+        r"^[^@\s]+@[^@\s]+\.[^@\s]+$", cleaned["generic_email"]
+    ):
+        raise HTTPException(status_code=400, detail="Invalid email")
+    has_contact_value = any(
+        cleaned[field]
+        for field in ("website", "generic_email", "contact_form_url", "linkedin_url")
+    )
+    if has_contact_value:
+        missing_provenance = [
+            label
+            for field, label in (
+                ("source", "source"),
+                ("confidence", "confidence"),
+                ("last_checked", "last checked"),
+                ("checked_by", "checked by"),
+            )
+            if not cleaned[field]
+        ]
+        if missing_provenance:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Contact research requires {', '.join(missing_provenance)}",
+            )
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT website, generic_email, contact_form_url, linkedin_url,
+                       source, confidence, verified_at, checked_by
+                FROM company_contacts WHERE company_id = %s
+                """,
+                (lead_id,),
+            )
+            old_row = cur.fetchone()
+            old_value = (
+                None
+                if old_row is None
+                else {
+                    "website": old_row[0],
+                    "generic_email": old_row[1],
+                    "contact_form_url": old_row[2],
+                    "linkedin_url": old_row[3],
+                    "source": old_row[4],
+                    "confidence": float(old_row[5]) if old_row[5] is not None else None,
+                    "last_checked": old_row[6].isoformat() if old_row[6] else None,
+                    "checked_by": old_row[7],
+                }
+            )
+            cur.execute(
+                """
+                INSERT INTO company_contacts (
+                    company_id, website, generic_email, contact_form_url,
+                    linkedin_url, source, confidence, verified_at, checked_by
+                )
+                VALUES (
+                    %s, NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+                    NULLIF(%s, ''), NULLIF(%s, ''), %s,
+                    NULLIF(%s, '')::date, NULLIF(%s, '')
+                )
+                ON CONFLICT (company_id) DO UPDATE SET
+                    website = EXCLUDED.website,
+                    generic_email = EXCLUDED.generic_email,
+                    contact_form_url = EXCLUDED.contact_form_url,
+                    linkedin_url = EXCLUDED.linkedin_url,
+                    source = EXCLUDED.source,
+                    confidence = EXCLUDED.confidence,
+                    verified_at = EXCLUDED.verified_at,
+                    checked_by = EXCLUDED.checked_by,
+                    updated_at = NOW()
+                """,
+                (
+                    lead_id,
+                    cleaned["website"],
+                    cleaned["generic_email"],
+                    cleaned["contact_form_url"],
+                    cleaned["linkedin_url"],
+                    cleaned["source"],
+                    confidence_values[confidence],
+                    cleaned["last_checked"],
+                    cleaned["checked_by"],
+                ),
+            )
+            cur.execute(
+                "UPDATE companies SET website = NULLIF(%s, ''), updated_at = NOW() WHERE id = %s",
+                (cleaned["website"], lead_id),
+            )
+            cur.execute(
+                """
+                INSERT INTO audit_log (
+                    entity_type, entity_id, action, actor, old_value, new_value, ip_address
+                )
+                VALUES ('company', %s, 'contact_research_updated', %s, %s, %s, NULL)
+                """,
+                (
+                    lead_id,
+                    (_read_actor(request) or cleaned["checked_by"] or "unknown"),
+                    Jsonb(old_value),
+                    Jsonb(cleaned),
+                ),
+            )
+        conn.commit()
+
+    return RedirectResponse(url=f"/leads/{lead_id}#contact-research", status_code=303)
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -1568,6 +1923,7 @@ _AUDIT_ACTION_LABELS = {
     "lead_status_changed": "Status changed",
     "lead_assigned": "Reassigned",
     "score_recalculated": "Score recalculated",
+    "contact_research_updated": "Contact research updated",
     "introducer_updated": "Introducer updated",
 }
 

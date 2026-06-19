@@ -1,14 +1,16 @@
-{% extends "base.html" %} {% block title %}{{ lead.company_name }} — Arie
-Leads{% endblock %} {% block content %}
-<div class="page-head">
-  <h1>{{ lead.company_name }}</h1>
-  <a href="/" class="back-link">← Back to queue</a>
+{% extends "base.html" %} {% block title %}{{ lead.company_name }} — ARIE{% endblock %} {% block content %}
+<div class="page-head page-head--compact">
+  <div>
+    <h1>{{ lead.company_name }}</h1>
+    <small>{{ lead.jurisdiction }} · {{ lead.entity_type or "Entity type not recorded" }}</small>
+  </div>
+  <a href="/" class="back-link">Back to Prospect Queue</a>
 </div>
 
 {# --- Decision panel: one canonical Lead Fit Score + the 5 RM questions --- #}
 {% set lf_color = '#16a34a' if score.tier == 'HIGH' else ('#d97706' if score.tier == 'MEDIUM' else '#6b7280') %}
 {% set reach = score.reachability_status or 'research_required' %}
-{% set cp_color = '#16a34a' if contact_path == 'Ready' else ('#d97706' if contact_path == 'Partial' else '#dc2626') %}
+{% set cp_color = '#166534' if contact_path == 'Ready to Contact' else ('#92400e' if contact_path == 'Research Required' else '#991b1b') %}
 
 <div class="card decision-panel" style="margin-bottom: 1rem; border-left: 4px solid {{ lf_color }}">
   <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start">
@@ -18,25 +20,16 @@ Leads{% endblock %} {% block content %}
       <span class="tier tier-{{ score.tier }}" style="margin-top: 6px; display: inline-block">{{ score.tier|title }}</span>
     </div>
     <div style="flex: 2; min-width: 240px; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem .9rem; font-size: 13px">
-      <div><div style="color: #6b7280; font-size: 11px">RECOMMENDED NEXT STEP</div><strong>{{ next_action }}</strong></div>
-      <div><div style="color: #6b7280; font-size: 11px">CONTACT PATH</div><strong style="color: {{ cp_color }}">{{ contact_path }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">RECOMMENDED NEXT ACTION</div><strong>{{ next_action }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">CONTACT ROUTE</div><strong style="color: {{ cp_color }}">{{ contact_path }}</strong></div>
+      <div><div style="color: #6b7280; font-size: 11px">SUGGESTED ROUTE</div><strong>{{ suggested_route }}</strong></div>
       <div><div style="color: #6b7280; font-size: 11px">ASSIGNED TO</div><strong>{{ action.assigned_to or "Unassigned" }}</strong></div>
       <div><div style="color: #6b7280; font-size: 11px">STATUS</div><strong>{{ action.status }}</strong></div>
       <div style="grid-column: 1 / -1"><div style="color: #6b7280; font-size: 11px">LAST ACTIVITY</div><strong>{% if last_activity %}{{ last_activity.strftime("%d %b %Y %H:%M") }}{% else %}No activity yet{% endif %}</strong></div>
     </div>
     <div style="flex: 1; min-width: 200px">
-      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem">Top reasons</div>
-      <ul style="margin: 0; padding-left: 1.1rem; font-size: 12px; line-height: 1.6; color: #111827">
-        {% set shown = namespace(n=0) %}
-        {% for code in score.reason_codes %}
-          {% set d = signal_details.get(code, {}) %}
-          {% if not d.get('hidden') and shown.n < 3 %}
-          <li>{{ d.get('label', code) }}</li>
-          {% set shown.n = shown.n + 1 %}
-          {% endif %}
-        {% endfor %}
-        {% if shown.n == 0 %}<li style="color: #9ca3af">No signals matched</li>{% endif %}
-      </ul>
+      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem">Why this prospect matters</div>
+      <p style="font-size:12px; line-height:1.6; margin:0">{{ score.reason_summary }}</p>
     </div>
   </div>
   <details style="margin-top: .75rem">
@@ -52,8 +45,8 @@ Leads{% endblock %} {% block content %}
 </div>
 
 {% if score.why_reasons %}
-<div class="card" style="margin-bottom: 1rem">
-  <h2 style="margin-top: 0">Why This Lead?</h2>
+  <div class="card" style="margin-bottom: 1rem">
+  <h2 style="margin-top: 0">Why This Prospect Matters</h2>
   <ul
     style="
       margin: 0;
@@ -70,6 +63,47 @@ Leads{% endblock %} {% block content %}
 </div>
 {% endif %}
 
+{% if introducer_hint %}
+<div class="route-callout">
+  <strong>Introducer route to research</strong>
+  <span>{{ introducer_hint }} <small>Rule-based hint from jurisdiction and entity type · Medium confidence</small></span>
+</div>
+{% endif %}
+
+<section class="card research-card" id="find-contact-route">
+  <div class="section-head">
+    <div>
+      <h2>Find Contact Route</h2>
+      <p>Use these research links to find a website, contact page, LinkedIn profile, director route, or introducer route before saving verified contact details.</p>
+    </div>
+    <span class="badge badge-contact-partial">Manual research</span>
+  </div>
+  <p class="research-note">Research shortcuts only. Review each result yourself; nothing is fetched, stored, or verified automatically.</p>
+  <div class="research-groups">
+    {% for title, links in [('Company', research_links.company), ('People', research_links.people), ('Introducer Route', research_links.introducer), ('Registry / Regulator', research_links.registry)] %}
+    <div class="research-group">
+      <h3>{{ title }}</h3>
+      <div class="research-links">
+        {% for link in links %}
+        <a class="research-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
+        {% else %}
+        <span class="text-meta">No active director route available yet</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="research-order">
+    <strong>Suggested research order</strong>
+    <ol>
+      <li>Check official website and contact page.</li>
+      <li>Check company LinkedIn and director/officer routes.</li>
+      <li>Check registered office, introducer, and registry context.</li>
+      <li>Save verified details with source and confidence.</li>
+    </ol>
+  </div>
+</section>
+
 <div class="grid-2">
   <!-- Left: Company info + score breakdown -->
   <div>
@@ -85,27 +119,7 @@ Leads{% endblock %} {% block content %}
         <dt>Address</dt>
         <dd>{{ lead.registered_address or "—" }}</dd>
         <dt>Website</dt>
-        <dd>
-          <form
-            method="post"
-            action="/leads/{{ lead.id }}/website"
-            style="
-              display: flex;
-              gap: 0.5rem;
-              align-items: center;
-              flex-wrap: wrap;
-            "
-          >
-            <input
-              type="url"
-              name="website"
-              value="{{ lead.website or '' }}"
-              placeholder="https://example.com"
-              style="min-width: 18rem; flex: 1"
-            />
-            <button type="submit">Save</button>
-          </form>
-        </dd>
+        <dd>{% if company_contact.website %}<a href="{{ company_contact.website }}" target="_blank">{{ company_contact.website }}</a>{% else %}Not researched yet{% endif %}</dd>
         <dt>Source</dt>
         <dd>
           {{ {"companies_house": "Companies House", "manual_upload": "Manual
@@ -141,6 +155,45 @@ Leads{% endblock %} {% block content %}
         </dd>
         {% endif %}
       </dl>
+    </div>
+
+    <div class="card" id="contact-research">
+      <div class="section-head">
+        <div>
+          <h2>Contact Research</h2>
+        </div>
+        <span class="badge badge-contact-{{ 'ready' if reach == 'ready_outreach' else ('partial' if reach == 'research_required' else 'missing') }}">{{ contact_path }}</span>
+      </div>
+      <form method="post" action="/leads/{{ lead.id }}/contact-research" class="contact-research-form">
+        <fieldset>
+          <legend>Company contact</legend>
+          <div><label>Company email</label><input type="email" name="generic_email" value="{{ company_contact.generic_email or '' }}" placeholder="info@company.com"></div>
+          <div><label>Contact form URL</label><input type="url" name="contact_form_url" value="{{ company_contact.contact_form_url or '' }}" placeholder="https://company.com/contact"></div>
+        </fieldset>
+        <fieldset>
+          <legend>Online presence</legend>
+          <div><label>Website</label><input type="url" name="website" value="{{ company_contact.website or '' }}" placeholder="https://company.com"></div>
+          <div><label>Company LinkedIn</label><input type="url" name="linkedin_url" value="{{ company_contact.linkedin_url or '' }}" placeholder="https://linkedin.com/company/..."></div>
+        </fieldset>
+        <fieldset class="form-field-wide provenance-fields">
+          <legend>Research provenance</legend>
+          <div><label>Source</label><input type="text" name="source" value="{{ company_contact.source or '' }}" placeholder="Company website, registry, LinkedIn" required></div>
+          <div>
+            <label>Confidence</label>
+            <select name="confidence" required>
+              <option value="">Select confidence</option>
+              {% for level in ['Low', 'Medium', 'High'] %}<option value="{{ level }}" {% if company_contact.confidence == level %}selected{% endif %}>{{ level }}</option>{% endfor %}
+            </select>
+            <div class="confidence-key"><span class="confidence confidence-high">High</span><span class="confidence confidence-medium">Medium</span><span class="confidence confidence-low">Low</span></div>
+          </div>
+          <div><label>Last checked</label><input type="date" name="last_checked" value="{{ company_contact.last_checked.strftime('%Y-%m-%d') if company_contact.last_checked else '' }}" required></div>
+          <div><label>Checked by</label><input type="text" name="checked_by" value="{{ company_contact.checked_by or current_actor or '' }}" placeholder="Select Acting as above" required></div>
+        </fieldset>
+        <p class="form-field-wide provenance-note">Source, confidence, last checked, and checked by apply to every contact value saved above.</p>
+        <div class="form-field-wide contact-research-actions">
+          <button type="submit" class="btn btn-primary">Save contact research</button>
+        </div>
+      </form>
     </div>
 
     <div class="card">
@@ -370,7 +423,7 @@ Leads{% endblock %} {% block content %}
   <!-- Right: RM action panel -->
   <div>
     <div class="card" id="action-panel">
-      <h2>RM Actions</h2>
+      <h2>RM Progress</h2>
       <form
         hx-post="/leads/{{ lead.id }}/action"
         hx-target="#action-panel"
@@ -433,7 +486,7 @@ Leads{% endblock %} {% block content %}
     </div>
 
     <div class="card">
-      <h2>Audit Trail</h2>
+      <h2>Recent Activity</h2>
       {% if audit_rows %} {% for entry in audit_rows %}
       <div class="audit-row">
         <div class="audit-row-head">

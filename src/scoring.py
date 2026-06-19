@@ -510,27 +510,85 @@ def derive_next_action(
     Mirrors the simple decision flow agreed for the pilot."""
     status = (rm_status or "New").strip()
     if status == "Client":
-        return "Won — active client"
+        return "Client relationship active"
     if status == "Closed — Not Fit":
-        return "Deprioritise / Not fit"
+        return "No further action"
     if status in {"Contacted", "Opportunity"}:
-        return "Follow up on the conversation"
+        return "Follow up"
     if has_introducer:
         return "Review introducer route"
     if reachability_status == "ready_outreach":
-        return "Ready for outreach"
+        return "Ready to contact"
     if reachability_status == "no_contact_path":
-        return "Research company / find a contact first"
-    return "Research company / contact first"
+        return "Research contact route"
+    return "Verify contact details"
 
 
 def contact_path_label(reachability_status: str) -> str:
-    """Map the deterministic reachability enum to a Ready/Partial/Missing badge."""
+    """Map deterministic reachability to RM-friendly contact-route wording."""
     return {
-        "ready_outreach": "Ready",
-        "research_required": "Partial",
-        "no_contact_path": "Missing",
-    }.get(reachability_status, "Partial")
+        "ready_outreach": "Ready to Contact",
+        "research_required": "Research Required",
+        "no_contact_path": "No Contact Route Yet",
+    }.get(reachability_status, "Research Required")
+
+
+def introducer_route_hint(jurisdiction: str | None, entity_type: str | None) -> str | None:
+    """Return a deterministic Mauritius introducer-research prompt."""
+    if (jurisdiction or "").strip().lower() != "mauritius":
+        return None
+    entity = (entity_type or "").strip().lower()
+    if any(term in entity for term in ("gbc", "global business", "authorised company")):
+        return "Research management company / CSP route"
+    return "Possible introducer route: check registered office / management company"
+
+
+def suggested_contact_route(
+    *,
+    jurisdiction: str | None,
+    entity_type: str | None,
+    reachability_status: str,
+    has_officers: bool,
+    has_pscs: bool,
+) -> str:
+    """Suggest a research route without automating contact discovery."""
+    introducer_hint = introducer_route_hint(jurisdiction, entity_type)
+    if introducer_hint and reachability_status != "ready_outreach":
+        return introducer_hint
+    if reachability_status == "ready_outreach":
+        return "Direct company contact"
+    if has_officers:
+        return "Director / officer research"
+    if has_pscs:
+        return "PSC / UBO research"
+    return "Contact route missing"
+
+
+def derive_queue_next_action(
+    *,
+    assigned_to: str | None,
+    rm_status: str | None,
+    reachability_status: str,
+    jurisdiction: str | None,
+    entity_type: str | None,
+) -> str:
+    """Prioritise the next practical RM action for a queue row."""
+    status = (rm_status or "New").strip()
+    if status in {"Contacted", "Opportunity"}:
+        return "Follow up"
+    if status in {"Client", "Closed — Not Fit"}:
+        return derive_next_action(
+            rm_status=status,
+            reachability_status=reachability_status,
+        )
+    if not (assigned_to or "").strip():
+        return "Assign RM"
+    if introducer_route_hint(jurisdiction, entity_type) and reachability_status != "ready_outreach":
+        return "Review introducer route"
+    return derive_next_action(
+        rm_status=status,
+        reachability_status=reachability_status,
+    )
 
 
 def compute_priority_score(

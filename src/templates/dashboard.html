@@ -1,257 +1,176 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Arie Leads{% endblock %}
+{% block title %}Prospect Action Desk — ARIE{% endblock %}
 {% block content %}
-<div class="page-head" style="margin-bottom:1.25rem">
-  <h1>Dashboard</h1>
-  <small>Read-only · auto-queries on load</small>
+<div class="page-head page-head--compact">
+  <div>
+    <h1>Prospect Action Desk</h1>
+    <small>Prioritise, research, and progress high-fit prospects.</small>
+  </div>
+  <a class="btn btn-primary" href="/?view=best">Open today's prospects</a>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; align-items:start">
-
-  <!-- ===== PANEL 1: Pipeline Freshness ===== -->
-  <div class="card">
-    <h2>Pipeline Freshness</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Source</th>
-            <th>Last Run</th>
-            <th>Status</th>
-            <th>Counts</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for src in sources %}
-          <tr>
-            <td>
-              <span style="font-weight:600">{{ src.name }}</span>
-              <br><span style="color:var(--ink-4); font-size:11px">{{ src.detail }}</span>
-            </td>
-            <td
-              {% if src.stale %}style="color:var(--danger); font-weight:600"{% endif %}>
-              {{ src.last_run }}
-            </td>
-            <td><span class="status status-{{ src.status|lower }}">{{ src.status }}</span></td>
-            <td style="color:var(--ink-3); font-size:12px">{{ src.counts }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4" style="color:var(--ink-4); text-align:center">No pipeline runs yet</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+<section class="action-groups" aria-label="RM action overview">
+  <div class="action-group action-group--work">
+    <span class="action-group-label">Work Today</span>
+    <a class="metric-card metric-card--primary" href="/?view=best">
+      <span class="metric-value">{{ action_metrics.prospects_for_action }}</span>
+      <span class="metric-label">Best prospects</span>
+      <span class="metric-action">Review highest-fit prospects</span>
+    </a>
   </div>
-
-  <!-- ===== PANEL 2: Lead Volume + Scoring ===== -->
-  <div class="card">
-    <h2>Lead Volume &amp; Scoring</h2>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:.5rem; margin-bottom:1rem">
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ total_leads }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Total Leads</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ leads_7d }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Last 7 days</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.75rem; text-align:center">
-        <div style="font-size:22px; font-weight:700; font-variant-numeric:tabular-nums">{{ leads_30d }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Last 30 days</div>
-      </div>
-      <a href="/?tier=HIGH&amp;contact_readiness=no_contact_path" style="display:block; background:#fef2f2; border-radius:var(--r-md); padding:.75rem; text-align:center; text-decoration:none; color:inherit">
-        <div style="font-size:22px; font-weight:700; color:#b91c1c; font-variant-numeric:tabular-nums">{{ high_fit_contact_missing }}</div>
-        <div style="font-size:11px; color:#7f1d1d; margin-top:2px">High-fit leads missing contact path</div>
+  <div class="action-group action-group--contact">
+    <span class="action-group-label">Contactability</span>
+    <div class="action-group-cards">
+      <a class="metric-card metric-card--success" href="/?view=ready">
+        <span class="metric-value">{{ action_metrics.ready_to_contact }}</span>
+        <span class="metric-label">Ready to contact</span>
+        <span class="metric-action">Start an RM conversation</span>
+      </a>
+      <a class="metric-card metric-card--warning" href="/?view=high_no_contact">
+        <span class="metric-value">{{ action_metrics.high_fit_contact_missing }}</span>
+        <span class="metric-label">High-fit but contact route missing</span>
+        <span class="metric-action">Research a contact route</span>
       </a>
     </div>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Score Distribution (current, {{ total_scored }} scored)
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Bucket</th>
-            <th style="text-align:right">Count</th>
-            <th style="text-align:right">Share</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="tier tier-LOW">0 – 39</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ s0_39 }}</td>
-            <td style="text-align:right; color:var(--ink-3)">
-              {% if total_scored %}{{ "%.1f"|format(s0_39 * 100 / total_scored) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td><span class="tier">40 – 59</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ s40_59 }}</td>
-            <td style="text-align:right; color:var(--ink-3)">
-              {% if total_scored %}{{ "%.1f"|format(s40_59 * 100 / total_scored) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td><span class="tier tier-MEDIUM">60 – 79</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ s60_79 }}</td>
-            <td style="text-align:right; color:var(--ink-3)">
-              {% if total_scored %}{{ "%.1f"|format(s60_79 * 100 / total_scored) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td><span class="tier tier-HIGH">80 – 100</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ s80_100 }}</td>
-            <td style="text-align:right; color:var(--ink-3)">
-              {% if total_scored %}{{ "%.1f"|format(s80_100 * 100 / total_scored) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+  </div>
+  <div class="action-group">
+    <span class="action-group-label">Ownership</span>
+    <div class="action-group-cards">
+      <a class="metric-card" href="/?view={{ 'mine' if current_actor else 'assigned' }}">
+        <span class="metric-value">{{ action_metrics.assigned_leads }}</span>
+        <span class="metric-label">{{ action_metrics.assigned_label }}</span>
+        <span class="metric-action">Review owned prospects</span>
+      </a>
+      <a class="metric-card metric-card--danger" href="/?view=stale">
+        <span class="metric-value">{{ action_metrics.stale_assigned }}</span>
+        <span class="metric-label">Needs attention</span>
+        <span class="metric-action">Re-engage or reassign</span>
+      </a>
     </div>
   </div>
-
-  <!-- ===== PANEL 3: Enrichment Coverage ===== -->
-  <div class="card">
-    <h2>Enrichment Coverage</h2>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Metric</th>
-            <th style="text-align:right">Count</th>
-            <th style="text-align:right">Coverage</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">UK (Companies House)</td>
-          </tr>
-          <tr>
-            <td>Total companies</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ total_uk }}</td>
-            <td style="text-align:right; color:var(--ink-4)">—</td>
-          </tr>
-          <tr>
-            <td>CH-enriched</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ "%.1f"|format(pct_enriched_uk) }}%</td>
-            <td style="text-align:right; color:var(--ink-4)">of UK total</td>
-          </tr>
-          <tr>
-            <td>With ≥1 officer</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ with_officers }}</td>
-            <td style="text-align:right; color:var(--ink-4)">
-              {% if total_uk %}{{ "%.1f"|format(with_officers * 100 / total_uk) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td>With ≥1 PSC</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ with_pscs }}</td>
-            <td style="text-align:right; color:var(--ink-4)">
-              {% if total_uk %}{{ "%.1f"|format(with_pscs * 100 / total_uk) }}%{% else %}—{% endif %}
-            </td>
-          </tr>
-          <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">LEI (GLEIF)</td>
-          </tr>
-          <tr>
-            <td>Total LEI records</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ total_lei }}</td>
-            <td style="text-align:right; color:var(--ink-4)">—</td>
-          </tr>
-          <tr>
-            <td>Linked to company</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ "%.1f"|format(pct_lei_linked) }}%</td>
-            <td style="text-align:right; color:var(--ink-4)">of LEI total</td>
-          </tr>
-          <tr>
-            <td style="color:var(--ink-3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600" colspan="3">Mauritius (MNS)</td>
-          </tr>
-          <tr>
-            <td>Total companies</td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ total_mu }}</td>
-            <td style="text-align:right; color:var(--ink-4)">—</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+  <div class="action-group">
+    <span class="action-group-label">Introducer Routes</span>
+    <a class="metric-card" href="/?view=introducer">
+      <span class="metric-value">{{ action_metrics.introducer_routes }}</span>
+      <span class="metric-label">Routes to research</span>
+      <span class="metric-action">Check management company / CSP</span>
+    </a>
   </div>
+</section>
 
-  <!-- ===== PANEL 4: Queue + Workflow ===== -->
-  <div class="card">
-    <h2>Queue &amp; Workflow</h2>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      By Status
+<div class="dashboard-grid">
+  <section class="card dashboard-panel">
+    <div class="section-head">
+      <div>
+        <h2>Prospect Pipeline</h2>
+        <p>Current distribution of scored prospects</p>
+      </div>
+      <a href="/?view=best">View queue</a>
     </div>
-    <div class="table-wrap" style="margin-bottom:1rem">
+    <div class="compact-stats">
+      <div><strong>{{ total_leads }}</strong><span>Total prospects</span></div>
+      <div><strong>{{ leads_7d }}</strong><span>Added in 7 days</span></div>
+      <div><strong>{{ leads_30d }}</strong><span>Added in 30 days</span></div>
+      <div><strong>{{ action_metrics.recent_progression }}</strong><span>Opportunity / client, 30d</span></div>
+    </div>
+    <div class="score-distribution">
+      <div><span>High priority</span><strong>{{ s80_100 }}</strong></div>
+      <div><span>Promising</span><strong>{{ s60_79 }}</strong></div>
+      <div><span>Developing</span><strong>{{ s40_59 }}</strong></div>
+      <div><span>Low priority</span><strong>{{ s0_39 }}</strong></div>
+    </div>
+  </section>
+
+  <section class="card dashboard-panel">
+    <div class="section-head">
+      <div>
+        <h2>Workflow Movement</h2>
+        <p>Where RM-owned prospects currently sit</p>
+      </div>
+      <a href="/audit">View activity</a>
+    </div>
+    <div class="table-wrap table-wrap--flat">
       <table>
-        <thead>
-          <tr>
-            <th>Status</th>
-            <th style="text-align:right">Leads</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Status</th><th class="col-num">Prospects</th></tr></thead>
         <tbody>
           {% for status, cnt in status_counts %}
           <tr>
             <td><span class="status status-{{ status|lower|replace(' ', '-') }}">{{ status }}</span></td>
-            <td style="text-align:right; font-variant-numeric:tabular-nums">{{ cnt }}</td>
+            <td class="col-num">{{ cnt }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="2" style="color:var(--ink-4); text-align:center">No actions yet</td></tr>
+          <tr><td colspan="2" class="empty-row">No RM actions yet</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+  </section>
 
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Introducers
+  <section class="card dashboard-panel dashboard-panel--wide">
+    <div class="section-head">
+      <div>
+        <h2>Introducer Network</h2>
+        <p>Referral relationships that may support prospect conversations</p>
+      </div>
+      <a href="/introducers">Open introducers</a>
     </div>
-    <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:.5rem; margin-bottom:1rem">
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
-        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.total }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Total</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
-        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.with_contact }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">With contact</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
-        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.qualified }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Qualified</div>
-      </div>
-      <div style="background:var(--surface-2); border-radius:var(--r-md); padding:.6rem; text-align:center">
-        <div style="font-size:20px; font-weight:700; font-variant-numeric:tabular-nums">{{ introducer_stats.recent }}</div>
-        <div style="font-size:11px; color:var(--ink-3); margin-top:2px">Actioned 30d</div>
-      </div>
+    <div class="compact-stats compact-stats--four">
+      <div><strong>{{ introducer_stats.total }}</strong><span>Total</span></div>
+      <div><strong>{{ introducer_stats.with_contact }}</strong><span>With contact</span></div>
+      <div><strong>{{ introducer_stats.qualified }}</strong><span>Qualified</span></div>
+      <div><strong>{{ introducer_stats.recent }}</strong><span>Actioned in 30 days</span></div>
     </div>
-    <div style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-3); margin-bottom:.5rem">
-      Recently Actioned Introducers
-    </div>
-    <div class="table-wrap">
+    <div class="table-wrap table-wrap--flat">
       <table>
-        <thead>
-          <tr>
-            <th>Introducer</th>
-            <th>Category</th>
-            <th>Status</th>
-            <th>Owner</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Recently actioned introducer</th><th>Category</th><th>Status</th><th>Owner</th></tr></thead>
         <tbody>
           {% for intro in recent_introducers %}
           <tr>
             <td>{{ intro.company_name }}</td>
-            <td style="color:var(--ink-3)">{{ intro.category or "—" }}</td>
+            <td class="cell-meta">{{ intro.category or "—" }}</td>
             <td>{% if intro.status %}<span class="status status-{{ intro.status|lower|replace(' ', '-') }}">{{ intro.status }}</span>{% else %}—{% endif %}</td>
-            <td style="color:var(--ink-3)">{{ intro.assigned_to or "—" }}</td>
+            <td class="cell-meta">{{ intro.assigned_to or "—" }}</td>
           </tr>
           {% else %}
-          <tr><td colspan="4" style="color:var(--ink-4); text-align:center">No introducers yet</td></tr>
+          <tr><td colspan="4" class="empty-row">No introducers recorded yet</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-  </div>
-
+  </section>
 </div>
+
+<details class="health-panel">
+  <summary>Data health and enrichment coverage</summary>
+  <div class="health-grid">
+    <div class="card">
+      <h2>Data Sources</h2>
+      <div class="table-wrap table-wrap--flat">
+        <table>
+          <thead><tr><th>Source</th><th>Last run</th><th>Status</th><th>Counts</th></tr></thead>
+          <tbody>
+            {% for src in sources %}
+            <tr>
+              <td><strong>{{ src.name }}</strong><br><span class="text-meta">{{ src.detail }}</span></td>
+              <td {% if src.stale %}style="color:var(--danger); font-weight:600"{% endif %}>{{ src.last_run }}</td>
+              <td>{{ src.status }}</td>
+              <td class="cell-meta">{{ src.counts }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Coverage</h2>
+      <dl class="coverage-list">
+        <div><dt>UK prospects enriched</dt><dd>{{ "%.1f"|format(pct_enriched_uk) }}%</dd></div>
+        <div><dt>With officers</dt><dd>{{ with_officers }}</dd></div>
+        <div><dt>With PSCs / UBOs</dt><dd>{{ with_pscs }}</dd></div>
+        <div><dt>LEI records linked</dt><dd>{{ "%.1f"|format(pct_lei_linked) }}%</dd></div>
+        <div><dt>Mauritius prospects</dt><dd>{{ total_mu }}</dd></div>
+      </dl>
+    </div>
+  </div>
+</details>
 {% endblock %}
