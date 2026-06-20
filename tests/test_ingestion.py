@@ -129,6 +129,12 @@ def test_ch_failure_does_not_block_mauritius():
 # Test: Mauritius failure does not raise
 # ---------------------------------------------------------------------------
 
+def test_mauritius_uses_current_registry_url():
+    from src.ingestion.mauritius import _BASE_URL
+
+    assert _BASE_URL == "https://onlinesearch.mns.global/"
+
+
 def test_mauritius_failure_does_not_raise():
     """Mauritius scraper failure returns 0, never raises."""
     with patch("src.ingestion.mauritius._scrape_mns", side_effect=Exception("playwright error")):

@@ -1,7 +1,7 @@
 """
 Mauritius CBRD online search scraper.
 
-Source: https://onlinesearch.mns.mu/  (the official MNS portal — the old
+Source: https://onlinesearch.mns.global/  (the official MNS portal — the old
 mns.govmu.org/Pages/Business-Registration-Database.aspx URL is dead).
 
 Filters by incorporation/registration date range and keeps only GBC and
@@ -20,7 +20,7 @@ from src.db import upsert_company
 
 logger = logging.getLogger(__name__)
 
-_BASE_URL = "https://onlinesearch.mns.mu/"
+_BASE_URL = "https://onlinesearch.mns.global/"
 _RETRIES = 3
 _RETRY_DELAY_SECONDS = 10
 _ATTEMPT_TIMEOUT_MS = 90_000
