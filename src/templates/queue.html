@@ -12,6 +12,8 @@
   <a href="/?view=best" class="{{ 'is-active' if filters.view == 'best' else '' }}">Best prospects</a>
   <a href="/?view=ready" class="{{ 'is-active' if filters.view == 'ready' else '' }}">Ready to Contact</a>
   <a href="/?view=high_no_contact" class="{{ 'is-active' if filters.view == 'high_no_contact' else '' }}">High Fit + No Contact Route</a>
+  <a href="/?view=suggestions" class="{{ 'is-active' if filters.view == 'suggestions' else '' }}">Has Contact Suggestions</a>
+  <a href="/?view=suggestion_review" class="{{ 'is-active' if filters.view == 'suggestion_review' else '' }}">Needs Suggestion Review</a>
   {% if current_actor %}<a href="/?view=mine" class="{{ 'is-active' if filters.view == 'mine' else '' }}">Assigned to Me</a>{% endif %}
   <a href="/?view=unassigned_high" class="{{ 'is-active' if filters.view == 'unassigned_high' else '' }}">Unassigned High Fit</a>
   <a href="/?view=introducer" class="{{ 'is-active' if filters.view == 'introducer' else '' }}">Introducer Route Possible</a>
@@ -57,6 +59,13 @@
       <option value="no_contact_path" {% if filters.contact_readiness == "no_contact_path" %}selected{% endif %}>No Contact Route Yet</option>
     </select>
   </label>
+  <label>Contact Suggestions
+    <select name="contact_suggestions">
+      <option value="">All</option>
+      <option value="has" {% if filters.contact_suggestions == "has" %}selected{% endif %}>Has Suggestions</option>
+      <option value="needs_review" {% if filters.contact_suggestions == "needs_review" %}selected{% endif %}>Needs Review</option>
+    </select>
+  </label>
   <label>Sort
     <select name="sort">
       <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Best prospects first</option>
@@ -92,6 +101,12 @@
           {% if row.reason_summary %}
           <div class="prospect-reason" title="{{ row.reason_summary }}">{{ row.reason_summary }}</div>
           {% endif %}
+          {% if row.suggestion_count %}
+          <div class="suggestion-summary">
+            {{ row.suggestion_count }} suggestion{{ '' if row.suggestion_count == 1 else 's' }}
+            {% if row.suggestions_needing_review %} · {{ row.suggestions_needing_review }} awaiting review{% endif %}
+          </div>
+          {% endif %}
         </td>
         <td>
           <strong>{{ row.jurisdiction }}</strong>
@@ -112,6 +127,7 @@
           <div class="queue-actions">
             <a href="/leads/{{ row.id }}">Review</a>
             <a href="/leads/{{ row.id }}#find-contact-route">Research</a>
+            {% if row.suggestion_count %}<a href="/leads/{{ row.id }}#contact-discovery-suggestions">Suggestions</a>{% endif %}
             {% if row.verify_url %}<a href="{{ row.verify_url }}" target="_blank" rel="noopener noreferrer" title="Open registry">Registry</a>{% endif %}
           </div>
         </td>

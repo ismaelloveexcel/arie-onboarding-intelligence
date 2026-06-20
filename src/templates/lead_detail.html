@@ -104,6 +104,50 @@
   </div>
 </section>
 
+<section class="card discovery-section" id="contact-discovery-suggestions">
+  <div class="section-head">
+    <div>
+      <h2>Contact Discovery Suggestions</h2>
+      <p>Candidate contact routes found from public sources. Review before accepting.</p>
+    </div>
+    {% set pending_count = contact_suggestions|selectattr('status', 'equalto', 'Needs Review')|list|length %}
+    <span class="badge badge-contact-{{ 'partial' if pending_count else 'ready' }}">{{ pending_count }} awaiting review</span>
+  </div>
+  {% if contact_suggestions %}
+  <div class="discovery-list">
+    {% for suggestion in contact_suggestions %}
+    <article class="discovery-row">
+      <div class="discovery-row-head">
+        <div>
+          <span class="suggestion-type">{{ suggestion.type_label }}</span>
+          <span class="confidence confidence-{{ suggestion.confidence|lower }}">{{ suggestion.confidence }}</span>
+          <span class="status status-{{ suggestion.status|lower|replace(' ', '-') }}">{{ suggestion.status }}</span>
+        </div>
+        <span class="text-meta">{{ suggestion.discovered_at.strftime('%d %b %Y') if suggestion.discovered_at else '' }}</span>
+      </div>
+      <a class="suggestion-value" href="{{ suggestion.source_url }}" target="_blank" rel="noopener noreferrer">{{ suggestion.value }}</a>
+      <div class="suggestion-source"><strong>{{ suggestion.source_name }}</strong>{% if suggestion.search_query %} · Query: <code>{{ suggestion.search_query }}</code>{% endif %}</div>
+      <p>{{ suggestion.confidence_reason }}</p>
+      {% if suggestion.reviewed_by %}<div class="text-meta">Reviewed by {{ suggestion.reviewed_by }}{% if suggestion.reviewed_at %} on {{ suggestion.reviewed_at.strftime('%d %b %Y') }}{% endif %}</div>{% endif %}
+      <div class="suggestion-actions">
+        <a class="btn btn-secondary" href="{{ suggestion.source_url }}" target="_blank" rel="noopener noreferrer">Open source</a>
+        {% if suggestion.status == 'Needs Review' %}
+        <form method="post" action="/leads/{{ lead.id }}/contact-suggestions/{{ suggestion.id }}/accept">
+          <button type="submit" class="btn btn-primary">{{ 'Accept into Contact Research' if suggestion.can_populate_contact else 'Accept as research route' }}</button>
+        </form>
+        <form method="post" action="/leads/{{ lead.id }}/contact-suggestions/{{ suggestion.id }}/reject">
+          <button type="submit" class="btn btn-secondary">Reject</button>
+        </form>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-row">No discovery suggestions have been generated for this prospect yet.</p>
+  {% endif %}
+</section>
+
 <div class="grid-2">
   <!-- Left: Company info + score breakdown -->
   <div>

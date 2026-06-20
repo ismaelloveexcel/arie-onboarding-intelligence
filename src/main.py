@@ -17,6 +17,11 @@ from itsdangerous import BadSignature, SignatureExpired, TimestampSigner
 from psycopg.types.json import Jsonb
 from pythonjsonlogger import jsonlogger
 
+from src.contact_discovery import (
+    acceptance_target,
+    prepare_contact_acceptance,
+    review_status,
+)
 from src.config import (
     ACTOR_NAMES,
     ADMIN_TOKEN,
@@ -619,6 +624,19 @@ def dashboard(request: Request):
             )
             action_metrics_row = cur.fetchone()
 
+            cur.execute("""
+                SELECT
+                    COUNT(DISTINCT cds.company_id) FILTER (WHERE ls.tier = 'HIGH'),
+                    COUNT(*) FILTER (WHERE cds.status = 'Needs Review'),
+                    COUNT(*) FILTER (WHERE cds.status = 'Accepted'),
+                    COUNT(*) FILTER (WHERE cds.status = 'Rejected')
+                FROM contact_discovery_suggestions cds
+                JOIN lead_scores ls
+                  ON ls.company_id = cds.company_id
+                 AND ls.is_current = TRUE
+            """)
+            suggestion_metrics_row = cur.fetchone()
+
             cur.execute(
                 "SELECT status, COUNT(*) AS cnt FROM rm_actions GROUP BY status ORDER BY cnt DESC"
             )
@@ -743,6 +761,14 @@ def dashboard(request: Request):
                 "assigned_label": "Assigned to me" if actor else "Assigned leads",
             },
             "status_counts": status_counts,
+            "suggestion_metrics": {
+                "high_fit_with_suggestions": (
+                    suggestion_metrics_row[0] if suggestion_metrics_row else 0
+                ),
+                "awaiting_review": suggestion_metrics_row[1] if suggestion_metrics_row else 0,
+                "accepted": suggestion_metrics_row[2] if suggestion_metrics_row else 0,
+                "rejected": suggestion_metrics_row[3] if suggestion_metrics_row else 0,
+            },
             "introducer_stats": {
                 "total": intro_stats_row[0] if intro_stats_row else 0,
                 "with_contact": intro_stats_row[1] if intro_stats_row else 0,
@@ -773,6 +799,7 @@ def queue(request: Request):
         "assigned_to": request.query_params.get("assigned_to", ""),
         "status": request.query_params.get("status", ""),
         "contact_readiness": request.query_params.get("contact_readiness", ""),
+        "contact_suggestions": request.query_params.get("contact_suggestions", ""),
         "view": request.query_params.get("view", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
@@ -807,6 +834,16 @@ def queue(request: Request):
             "COALESCE(ls.reachability_status, 'research_required') = %s"
         )
         params.append(filters["contact_readiness"])
+    if filters["contact_suggestions"] == "has":
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
+            "WHERE cds.company_id = c.id)"
+        )
+    elif filters["contact_suggestions"] == "needs_review":
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
+            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review')"
+        )
     if filters["view"] == "best":
         where_clauses.extend(
             [
@@ -851,6 +888,16 @@ def queue(request: Request):
                 "ra.updated_at >= NOW() - INTERVAL '30 days'",
             ]
         )
+    elif filters["view"] == "suggestions":
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
+            "WHERE cds.company_id = c.id)"
+        )
+    elif filters["view"] == "suggestion_review":
+        where_clauses.append(
+            "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
+            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review')"
+        )
     if filters["date_from"]:
         where_clauses.append("c.incorporation_date >= %s")
         params.append(filters["date_from"])
@@ -890,7 +937,11 @@ def queue(request: Request):
             ra.assigned_to,
             ra.status,
             qs.refreshed_at,
-            COALESCE(ls.reachability_status, 'research_required')
+            COALESCE(ls.reachability_status, 'research_required'),
+            (SELECT COUNT(*) FROM contact_discovery_suggestions cds
+             WHERE cds.company_id = c.id),
+            (SELECT COUNT(*) FROM contact_discovery_suggestions cds
+             WHERE cds.company_id = c.id AND cds.status = 'Needs Review')
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -925,6 +976,8 @@ def queue(request: Request):
             "refreshed_at": row[11],
             "contact_readiness": row[12],
             "contact_readiness_label": contact_path_label(row[12]),
+            "suggestion_count": row[13] if len(row) > 13 else 0,
+            "suggestions_needing_review": row[14] if len(row) > 14 else 0,
             "next_action": derive_queue_next_action(
                 assigned_to=row[9],
                 rm_status=row[10],
@@ -1064,6 +1117,21 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             company_contact_row = cur.fetchone()
 
+            cur.execute(
+                """
+                SELECT id, suggestion_type, suggested_value, source_name,
+                       source_url, search_query, confidence, confidence_reason,
+                       status, discovered_at, reviewed_by, reviewed_at, notes
+                FROM contact_discovery_suggestions
+                WHERE company_id = %s
+                ORDER BY
+                    CASE status WHEN 'Needs Review' THEN 0 WHEN 'Accepted' THEN 1 ELSE 2 END,
+                    discovered_at DESC
+                """,
+                (lead_id,),
+            )
+            suggestion_rows = cur.fetchall()
+
     score = {
         "score": row[10] if row[10] is not None else 0,
         "tier": row[11] if row[11] is not None else "LOW",
@@ -1129,6 +1197,36 @@ def lead_detail(request: Request, lead_id: UUID):
         "last_checked": company_contact_row[6] if company_contact_row else None,
         "checked_by": company_contact_row[7] if company_contact_row else None,
     }
+    suggestion_labels = {
+        "website": "Website",
+        "contact_page": "Contact page",
+        "generic_email": "Generic email",
+        "company_linkedin": "Company LinkedIn",
+        "registry": "Registry",
+        "regulator": "Regulator",
+        "csp_route": "CSP route",
+        "introducer_route": "Introducer route",
+    }
+    contact_suggestions = [
+        {
+            "id": item[0],
+            "type": item[1],
+            "type_label": suggestion_labels.get(item[1], item[1].replace("_", " ").title()),
+            "value": item[2],
+            "source_name": item[3],
+            "source_url": item[4],
+            "search_query": item[5],
+            "confidence": item[6],
+            "confidence_reason": item[7],
+            "status": item[8],
+            "discovered_at": item[9],
+            "reviewed_by": item[10],
+            "reviewed_at": item[11],
+            "notes": item[12],
+            "can_populate_contact": acceptance_target(item[1], item[2]) is not None,
+        }
+        for item in suggestion_rows
+    ]
     audit_rendered = [
         {
             "entity_type": item[0],
@@ -1235,6 +1333,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "research_links": research_links,
             "introducer_hint": route_hint,
             "company_contact": company_contact,
+            "contact_suggestions": contact_suggestions,
             "audit_rows": audit_rendered,
             "last_activity": last_activity,
             "lei": lei,
@@ -1522,6 +1621,174 @@ def lead_contact_research_update(
         conn.commit()
 
     return RedirectResponse(url=f"/leads/{lead_id}#contact-research", status_code=303)
+
+
+def _review_contact_suggestion(
+    request: Request,
+    lead_id: UUID,
+    suggestion_id: UUID,
+    decision: str,
+) -> RedirectResponse:
+    actor = _read_actor(request)
+    if not actor:
+        raise HTTPException(status_code=400, detail="Select Acting as before review")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT suggestion_type, suggested_value, source_name, source_url,
+                       search_query, confidence, confidence_reason, status
+                FROM contact_discovery_suggestions
+                WHERE id = %s AND company_id = %s
+                FOR UPDATE
+                """,
+                (suggestion_id, lead_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="Suggestion not found")
+            suggestion = {
+                "suggestion_type": row[0],
+                "suggested_value": row[1],
+                "source_name": row[2],
+                "source_url": row[3],
+                "search_query": row[4],
+                "confidence": row[5],
+                "confidence_reason": row[6],
+                "status": row[7],
+            }
+            try:
+                new_status = review_status(suggestion["status"], decision)
+            except ValueError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+            target = None
+            if decision == "Accepted":
+                cur.execute(
+                    """
+                    SELECT website, generic_email, contact_form_url, linkedin_url,
+                           source, confidence, verified_at, checked_by
+                    FROM company_contacts WHERE company_id = %s
+                    """,
+                    (lead_id,),
+                )
+                contact_row = cur.fetchone()
+                existing = {
+                    "website": contact_row[0] if contact_row else None,
+                    "generic_email": contact_row[1] if contact_row else None,
+                    "contact_form_url": contact_row[2] if contact_row else None,
+                    "linkedin_url": contact_row[3] if contact_row else None,
+                    "source": contact_row[4] if contact_row else None,
+                    "confidence": str(contact_row[5]) if contact_row and contact_row[5] is not None else None,
+                    "verified_at": contact_row[6].isoformat() if contact_row and contact_row[6] else None,
+                    "checked_by": contact_row[7] if contact_row else None,
+                }
+                merged, target = prepare_contact_acceptance(
+                    existing=existing,
+                    suggestion=suggestion,
+                    reviewer=actor,
+                )
+                if target:
+                    cur.execute(
+                        """
+                        INSERT INTO company_contacts (
+                            company_id, website, generic_email, contact_form_url,
+                            linkedin_url, source, confidence, verified_at, checked_by
+                        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s::date, %s)
+                        ON CONFLICT (company_id) DO UPDATE SET
+                            website = EXCLUDED.website,
+                            generic_email = EXCLUDED.generic_email,
+                            contact_form_url = EXCLUDED.contact_form_url,
+                            linkedin_url = EXCLUDED.linkedin_url,
+                            source = EXCLUDED.source,
+                            confidence = EXCLUDED.confidence,
+                            verified_at = EXCLUDED.verified_at,
+                            checked_by = EXCLUDED.checked_by,
+                            updated_at = NOW()
+                        """,
+                        (
+                            lead_id,
+                            merged.get("website"),
+                            merged.get("generic_email"),
+                            merged.get("contact_form_url"),
+                            merged.get("linkedin_url"),
+                            merged.get("source"),
+                            merged.get("confidence"),
+                            merged.get("verified_at"),
+                            merged.get("checked_by"),
+                        ),
+                    )
+                    if target == "website":
+                        cur.execute(
+                            "UPDATE companies SET website = %s, updated_at = NOW() WHERE id = %s",
+                            (merged["website"], lead_id),
+                        )
+
+            cur.execute(
+                """
+                UPDATE contact_discovery_suggestions
+                SET status = %s, reviewed_by = %s, reviewed_at = NOW(),
+                    notes = %s
+                WHERE id = %s
+                """,
+                (
+                    new_status,
+                    actor,
+                    (
+                        f"Accepted into Contact Research field: {target}"
+                        if target
+                        else "Accepted as a research route; no contact field populated"
+                        if decision == "Accepted"
+                        else "Rejected during RM review"
+                    ),
+                    suggestion_id,
+                ),
+            )
+            cur.execute(
+                """
+                INSERT INTO audit_log (
+                    entity_type, entity_id, action, actor, old_value, new_value, ip_address
+                ) VALUES ('company', %s, %s, %s, %s, %s, NULL)
+                """,
+                (
+                    lead_id,
+                    "contact_suggestion_accepted" if decision == "Accepted" else "contact_suggestion_rejected",
+                    actor,
+                    Jsonb({"suggestion_id": str(suggestion_id), "status": suggestion["status"]}),
+                    Jsonb(
+                        {
+                            "suggestion_id": str(suggestion_id),
+                            "status": new_status,
+                            "suggestion_type": suggestion["suggestion_type"],
+                            "suggested_value": suggestion["suggested_value"],
+                            "contact_field": target,
+                        }
+                    ),
+                ),
+            )
+        conn.commit()
+    return RedirectResponse(
+        url=f"/leads/{lead_id}#contact-discovery-suggestions", status_code=303
+    )
+
+
+@app.post("/leads/{lead_id}/contact-suggestions/{suggestion_id}/accept")
+def accept_contact_suggestion(
+    request: Request, lead_id: UUID, suggestion_id: UUID
+):
+    return _review_contact_suggestion(
+        request, lead_id, suggestion_id, decision="Accepted"
+    )
+
+
+@app.post("/leads/{lead_id}/contact-suggestions/{suggestion_id}/reject")
+def reject_contact_suggestion(
+    request: Request, lead_id: UUID, suggestion_id: UUID
+):
+    return _review_contact_suggestion(
+        request, lead_id, suggestion_id, decision="Rejected"
+    )
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -1924,6 +2191,8 @@ _AUDIT_ACTION_LABELS = {
     "lead_assigned": "Reassigned",
     "score_recalculated": "Score recalculated",
     "contact_research_updated": "Contact research updated",
+    "contact_suggestion_accepted": "Contact suggestion accepted",
+    "contact_suggestion_rejected": "Contact suggestion rejected",
     "introducer_updated": "Introducer updated",
 }
 

@@ -84,6 +84,23 @@
   <section class="card dashboard-panel">
     <div class="section-head">
       <div>
+        <h2>Contact Discovery</h2>
+        <p>Public-source candidates awaiting RM verification</p>
+      </div>
+      <a href="/?view=suggestion_review">Review suggestions</a>
+    </div>
+    <div class="compact-stats compact-stats--four">
+      <div><strong>{{ suggestion_metrics.high_fit_with_suggestions }}</strong><span>High fit with suggestions</span></div>
+      <div><strong>{{ suggestion_metrics.awaiting_review }}</strong><span>Awaiting review</span></div>
+      <div><strong>{{ suggestion_metrics.accepted }}</strong><span>Accepted</span></div>
+      <div><strong>{{ suggestion_metrics.rejected }}</strong><span>Rejected</span></div>
+    </div>
+    <p class="text-meta">Suggestions never trigger outreach or change Lead Fit Score.</p>
+  </section>
+
+  <section class="card dashboard-panel">
+    <div class="section-head">
+      <div>
         <h2>Workflow Movement</h2>
         <p>Where RM-owned prospects currently sit</p>
       </div>

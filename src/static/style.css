@@ -120,12 +120,11 @@ a:hover { color: var(--brand-600); text-decoration: underline; }
   color: inherit;
 }
 .brand-lockup:hover { text-decoration: none; }
-.brand-mark {
-  font-size: 28px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  color: #ffffff;
-  line-height: 1;
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 34px;
+  object-fit: contain;
 }
 .brand-divider {
   width: 1px;
@@ -1069,6 +1068,7 @@ tr:hover .btn-verify { opacity: 1; }
   line-height: 1.35;
   white-space: normal;
 }
+.suggestion-summary { margin-top: 5px; color: var(--brand-600); font-size: var(--text-xs); font-weight: 600; }
 .next-action { display: block; max-width: 150px; color: var(--ink-2); font-size: var(--text-sm); line-height: 1.35; }
 .queue-actions { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; white-space: nowrap; }
 .queue-actions a { font-size: var(--text-xs); font-weight: 600; }
@@ -1152,6 +1152,19 @@ tr:hover .btn-verify { opacity: 1; }
 .research-link:hover { border-color: var(--gold-600); background: var(--gold-50); text-decoration: none; }
 .research-order { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }
 .research-order ol { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); margin: var(--s-2) 0 0; padding-left: 20px; color: var(--ink-2); font-size: var(--text-xs); }
+
+.discovery-section { margin-bottom: var(--s-4); }
+.discovery-list { display: grid; }
+.discovery-row { padding: var(--s-4) 0; border-bottom: 1px solid var(--line); }
+.discovery-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.discovery-row-head { display: flex; justify-content: space-between; align-items: center; gap: var(--s-3); }
+.discovery-row-head > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); }
+.suggestion-type { font-weight: 700; color: var(--brand-900); }
+.suggestion-value { display: block; margin-top: var(--s-2); font-weight: 600; overflow-wrap: anywhere; }
+.suggestion-source { margin-top: var(--s-2); color: var(--ink-3); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.discovery-row p { margin: var(--s-2) 0 0; color: var(--ink-2); font-size: var(--text-sm); }
+.suggestion-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin-top: var(--s-3); }
+.suggestion-actions form { margin: 0; }
 
 @media (max-width: 1100px) {
   .site-header-inner { padding: 0 var(--s-4); gap: var(--s-4); }

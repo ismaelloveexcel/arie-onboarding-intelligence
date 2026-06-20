@@ -196,6 +196,46 @@ def test_queue_contact_readiness_filter_and_badge():
     assert any("ls.reachability_status" in sql for sql in sql_calls)
 
 
+def test_queue_contact_suggestion_filter_and_summary():
+    lead_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    row = (
+        lead_id,
+        "Suggestion Test Company",
+        "UK",
+        "ltd",
+        None,
+        None,
+        82,
+        "HIGH",
+        "Strong fit",
+        None,
+        "New",
+        now,
+        "no_contact_path",
+        7,
+        5,
+    )
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [(1,), (now,)]
+    cursor.fetchall.return_value = [row]
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cursor
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_cm
+    connection_cm = MagicMock()
+    connection_cm.__enter__.return_value = connection
+
+    with patch("src.main.get_conn", return_value=connection_cm):
+        response = client.get("/?contact_suggestions=needs_review")
+
+    assert response.status_code == 200
+    assert "7 suggestions" in response.text
+    assert "5 awaiting review" in response.text
+    sql_calls = [str(call.args[0]) for call in cursor.execute.call_args_list]
+    assert any("contact_discovery_suggestions" in sql for sql in sql_calls)
+
+
 def test_lead_detail_renders_contact_research_shortcuts():
     lead_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
@@ -243,7 +283,7 @@ def test_lead_detail_renders_contact_research_shortcuts():
     )
     cursor = MagicMock()
     cursor.fetchone.side_effect = [lead_row, None, None]
-    cursor.fetchall.side_effect = [[], [], [officer_row], []]
+    cursor.fetchall.side_effect = [[], [], [officer_row], [], []]
     cursor_cm = MagicMock()
     cursor_cm.__enter__.return_value = cursor
     connection = MagicMock()
@@ -296,6 +336,22 @@ def test_contact_research_requires_complete_provenance_before_db(missing_field):
         response = client.post(
             f"/leads/{lead_id}/contact-research",
             data=payload,
+        )
+
+    assert response.status_code == 400
+    get_conn.assert_not_called()
+
+
+@pytest.mark.parametrize("decision", ["accept", "reject"])
+def test_contact_suggestion_review_requires_selected_actor_before_db(decision):
+    lead_id = uuid.uuid4()
+    suggestion_id = uuid.uuid4()
+    with (
+        patch("src.main._read_actor", return_value=""),
+        patch("src.main.get_conn") as get_conn,
+    ):
+        response = client.post(
+            f"/leads/{lead_id}/contact-suggestions/{suggestion_id}/{decision}"
         )
 
     assert response.status_code == 400
