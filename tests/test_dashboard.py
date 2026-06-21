@@ -30,7 +30,7 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
       fetchone[6] = cov_row  (total_uk, enriched_uk, with_officers, with_pscs,
                                total_lei, linked_lei, total_mu)
       fetchone[7] = RM action metrics (7 values)
-      fetchone[8] = contact discovery metrics
+      fetchone[8] = route intelligence metrics (8 values)
       fetchone[9] = introducer metrics
       fetchall[0] = status_counts  [(status, cnt), ...]
       fetchall[1] = recent introducers [(name, category, status, assigned_to, updated_at), ...]
@@ -62,7 +62,7 @@ _EMPTY_FETCHONE = [
     (0, 0, 0, 0, 0),    # score_row
     (0, 0, 0, 0, 0, 0, 0),  # cov_row
     (0, 0, 0, 0, 0, 0, 0),  # RM action metrics
-    (0, 0, 0, 0),     # contact discovery metrics
+    (0, 0, 0, 0, 0, 0, 0, 0),  # route intelligence metrics
     (0, 0, 0, 0),     # introducer metrics
 ]
 _EMPTY_FETCHALL = [[], []]
@@ -104,7 +104,7 @@ def test_dashboard_seeded_data():
         (80, 120, 200, 100, 500),                             # score_row
         (300, 150, 80, 70, 1200, 900, 200),                   # cov_row
         (21, 14, 9, 18, 4, 11, 3),                             # RM action metrics
-        (8, 32, 4, 2),                                          # contact discovery metrics
+        (8, 5, 4, 32, 2, 6, 3, 1),                              # route metrics
         (20, 12, 4, 6),                                        # introducer metrics
     ]
     fetchall_returns = [
@@ -126,8 +126,9 @@ def test_dashboard_seeded_data():
     assert "High-fit but contact route missing" in resp.text
     assert "Ready to contact" in resp.text
     assert "14" in resp.text
-    assert "Contact Discovery" in resp.text
-    assert "Awaiting review" in resp.text
+    assert "Route Intelligence" in resp.text
+    assert "Candidate Suggestions to Review" in resp.text
+    assert "Needs Route Research" in resp.text
 
 
 def test_dashboard_stale_source_flag():
@@ -143,7 +144,7 @@ def test_dashboard_stale_source_flag():
         (0, 0, 0, 0, 0),                                       # score_row
         (50, 25, 10, 8, 200, 150, 30),                         # cov_row
         (5, 3, 2, 4, 1, 2, 0),                                 # RM action metrics
-        (0, 0, 0, 0),                                           # contact discovery metrics
+        (0, 0, 0, 0, 0, 0, 0, 0),                              # route metrics
         (0, 0, 0, 0),                                           # introducer metrics
     ]
     fetchall_returns = [[], []]

@@ -12,8 +12,11 @@
   <a href="/?view=best" class="{{ 'is-active' if filters.view == 'best' else '' }}">Best prospects</a>
   <a href="/?view=ready" class="{{ 'is-active' if filters.view == 'ready' else '' }}">Ready to Contact</a>
   <a href="/?view=high_no_contact" class="{{ 'is-active' if filters.view == 'high_no_contact' else '' }}">High Fit + No Contact Route</a>
-  <a href="/?view=suggestions" class="{{ 'is-active' if filters.view == 'suggestions' else '' }}">Has Contact Suggestions</a>
-  <a href="/?view=suggestion_review" class="{{ 'is-active' if filters.view == 'suggestion_review' else '' }}">Needs Suggestion Review</a>
+  <a href="/?route_bucket=route_via_introducer_csp" class="{{ 'is-active' if filters.route_bucket == 'route_via_introducer_csp' else '' }}">Route via Introducer / CSP</a>
+  <a href="/?route_bucket=direct_candidate_found" class="{{ 'is-active' if filters.route_bucket == 'direct_candidate_found' else '' }}">Direct Candidate Found</a>
+  <a href="/?route_bucket=needs_route_research" class="{{ 'is-active' if filters.route_bucket == 'needs_route_research' else '' }}">Needs Route Research</a>
+  <a href="/?view=suggestions" class="{{ 'is-active' if filters.view == 'suggestions' else '' }}">Candidate Contact Routes</a>
+  <a href="/?view=suggestion_review" class="{{ 'is-active' if filters.view == 'suggestion_review' else '' }}">Needs Candidate Review</a>
   {% if current_actor %}<a href="/?view=mine" class="{{ 'is-active' if filters.view == 'mine' else '' }}">Assigned to Me</a>{% endif %}
   <a href="/?view=unassigned_high" class="{{ 'is-active' if filters.view == 'unassigned_high' else '' }}">Unassigned High Fit</a>
   <a href="/?view=introducer" class="{{ 'is-active' if filters.view == 'introducer' else '' }}">Introducer Route Possible</a>
@@ -59,11 +62,45 @@
       <option value="no_contact_path" {% if filters.contact_readiness == "no_contact_path" %}selected{% endif %}>No Contact Route Yet</option>
     </select>
   </label>
-  <label>Contact Suggestions
+  <label>Contact Research
     <select name="contact_suggestions">
       <option value="">All</option>
-      <option value="has" {% if filters.contact_suggestions == "has" %}selected{% endif %}>Has Suggestions</option>
-      <option value="needs_review" {% if filters.contact_suggestions == "needs_review" %}selected{% endif %}>Needs Review</option>
+      <option value="has" {% if filters.contact_suggestions == "has" %}selected{% endif %}>Candidate routes found</option>
+      <option value="needs_review" {% if filters.contact_suggestions == "needs_review" %}selected{% endif %}>Candidate review needed</option>
+    </select>
+  </label>
+  <label>Route Intelligence
+    <select name="route_bucket">
+      <option value="">All buckets</option>
+      {% for value, label in [
+        ('ready_to_contact', 'Ready to Contact'),
+        ('route_via_introducer_csp', 'Route via Introducer / CSP'),
+        ('direct_candidate_found', 'Direct Candidate Found'),
+        ('management_company_route_likely', 'Management Company Route Likely'),
+        ('registry_evidence_only', 'Registry Evidence Only'),
+        ('needs_route_research', 'Needs Route Research'),
+        ('no_usable_route', 'No Usable Route')
+      ] %}
+      <option value="{{ value }}" {% if filters.route_bucket == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Named Route
+    <select name="named_route">
+      <option value="">All</option>
+      <option value="yes" {% if filters.named_route == 'yes' %}selected{% endif %}>Has named candidate</option>
+    </select>
+  </label>
+  <label>Introducer Match
+    <select name="introducer_match">
+      <option value="">All</option>
+      <option value="yes" {% if filters.introducer_match == 'yes' %}selected{% endif %}>Existing match</option>
+    </select>
+  </label>
+  <label>Office Cluster
+    <select name="office_cluster">
+      <option value="">All</option>
+      <option value="yes" {% if filters.office_cluster == 'yes' %}selected{% endif %}>Shared registered office</option>
     </select>
   </label>
   <label>Sort
@@ -85,8 +122,10 @@
         <th>Prospect</th>
         <th>Market</th>
         <th class="col-num">Lead Fit Score</th>
-        <th>Tier</th>
-        <th>Contact Route</th>
+        <th>Contactability</th>
+        <th>Best Route</th>
+        <th>Route Candidate</th>
+        <th>Confidence</th>
         <th>Next Action</th>
         <th>Owner</th>
         <th>Status</th>
@@ -101,16 +140,19 @@
           {% if row.reason_summary %}
           <div class="prospect-reason" title="{{ row.reason_summary }}">{{ row.reason_summary }}</div>
           {% endif %}
-          {% if row.suggestion_count %}
+          {% if row.candidate_route_count %}
           <div class="suggestion-summary">
-            {{ row.suggestion_count }} suggestion{{ '' if row.suggestion_count == 1 else 's' }}
-            {% if row.suggestions_needing_review %} · {{ row.suggestions_needing_review }} awaiting review{% endif %}
+            {{ row.candidate_route_count }} candidate route{{ '' if row.candidate_route_count == 1 else 's' }}
+            {% if row.candidates_needing_review %} · {{ row.candidates_needing_review }} to review{% endif %}
           </div>
+          {% elif row.contact_readiness != 'ready_outreach' %}
+          <div class="suggestion-summary">Needs contact-route research · shortcuts available</div>
           {% endif %}
         </td>
         <td>
           <strong>{{ row.jurisdiction }}</strong>
           <div class="text-meta">{{ row.entity_type or "—" }}{% if row.incorporation_date %} · {{ row.incorporation_date }}{% endif %}</div>
+          <span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span>
         </td>
         <td class="col-num">
           <div class="score-cell">
@@ -118,22 +160,24 @@
             <div class="score-bar"><div class="score-bar-fill {% if row.priority_score >= 70 %}score-bar-fill--high{% elif row.priority_score >= 40 %}score-bar-fill--med{% else %}score-bar-fill--low{% endif %}" style="width:{{ row.priority_score }}%"></div></div>
           </div>
         </td>
-        <td><span class="tier tier-{{ row.tier }}">{{ row.tier|title }}</span></td>
-        <td><span class="badge badge-contact-{{ 'ready' if row.contact_readiness == 'ready_outreach' else ('partial' if row.contact_readiness == 'research_required' else 'missing') }}">{{ row.contact_readiness_label }}</span></td>
+        <td><span class="badge badge-contact-{{ 'ready' if row.route_bucket == 'ready_to_contact' else ('partial' if row.route_bucket in ['route_via_introducer_csp', 'direct_candidate_found', 'management_company_route_likely'] else 'missing') }}">{{ row.contactability_label }}</span></td>
+        <td><strong>{{ row.best_route }}</strong></td>
+        <td>{% if row.route_candidate %}<strong>{{ row.route_candidate }}</strong>{% else %}<span class="text-meta">No named candidate</span>{% endif %}</td>
+        <td><span class="confidence confidence-{{ row.route_confidence|lower|replace(' ', '-') }}">{{ row.route_confidence }}</span></td>
         <td><strong class="next-action">{{ row.next_action }}</strong></td>
         <td class="cell-meta">{{ row.assigned_to or 'Unassigned' }}</td>
         <td><span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status or 'New' }}</span></td>
         <td>
           <div class="queue-actions">
             <a href="/leads/{{ row.id }}">Review</a>
-            <a href="/leads/{{ row.id }}#find-contact-route">Research</a>
-            {% if row.suggestion_count %}<a href="/leads/{{ row.id }}#contact-discovery-suggestions">Suggestions</a>{% endif %}
+            <a href="/leads/{{ row.id }}#find-contact-route">Research shortcuts</a>
+            {% if row.candidate_route_count %}<a href="/leads/{{ row.id }}#candidate-contact-routes">Candidate routes</a>{% endif %}
             {% if row.verify_url %}<a href="{{ row.verify_url }}" target="_blank" rel="noopener noreferrer" title="Open registry">Registry</a>{% endif %}
           </div>
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" class="empty-row">No prospects match the current filters. <a href="/">Clear filters</a></td></tr>
+      <tr><td colspan="11" class="empty-row">No prospects match the current filters. <a href="/">Clear filters</a></td></tr>
       {% endfor %}
     </tbody>
   </table>

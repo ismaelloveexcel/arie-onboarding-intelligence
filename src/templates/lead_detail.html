@@ -7,32 +7,52 @@
   <a href="/" class="back-link">Back to Prospect Queue</a>
 </div>
 
-{# --- Decision panel: one canonical Lead Fit Score + the 5 RM questions --- #}
-{% set lf_color = '#16a34a' if score.tier == 'HIGH' else ('#d97706' if score.tier == 'MEDIUM' else '#6b7280') %}
 {% set reach = score.reachability_status or 'research_required' %}
-{% set cp_color = '#166534' if contact_path == 'Ready to Contact' else ('#92400e' if contact_path == 'Research Required' else '#991b1b') %}
-
-<div class="card decision-panel" style="margin-bottom: 1rem; border-left: 4px solid {{ lf_color }}">
-  <div style="display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start">
-    <div style="text-align: center; min-width: 96px">
-      <div style="font-size: 34px; font-weight: 800; color: {{ lf_color }}; line-height: 1">{{ score.score }}</div>
-      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-top: 4px">Lead Fit Score</div>
-      <span class="tier tier-{{ score.tier }}" style="margin-top: 6px; display: inline-block">{{ score.tier|title }}</span>
+<section class="card rm-action-summary">
+  <div class="section-head">
+    <div>
+      <h2>RM Action Summary</h2>
+      <p>The shortest evidence-based path toward a client conversation.</p>
     </div>
-    <div style="flex: 2; min-width: 240px; display: grid; grid-template-columns: 1fr 1fr; gap: .6rem .9rem; font-size: 13px">
-      <div><div style="color: #6b7280; font-size: 11px">RECOMMENDED NEXT ACTION</div><strong>{{ next_action }}</strong></div>
-      <div><div style="color: #6b7280; font-size: 11px">CONTACT ROUTE</div><strong style="color: {{ cp_color }}">{{ contact_path }}</strong></div>
-      <div><div style="color: #6b7280; font-size: 11px">SUGGESTED ROUTE</div><strong>{{ suggested_route }}</strong></div>
-      <div><div style="color: #6b7280; font-size: 11px">ASSIGNED TO</div><strong>{{ action.assigned_to or "Unassigned" }}</strong></div>
-      <div><div style="color: #6b7280; font-size: 11px">STATUS</div><strong>{{ action.status }}</strong></div>
-      <div style="grid-column: 1 / -1"><div style="color: #6b7280; font-size: 11px">LAST ACTIVITY</div><strong>{% if last_activity %}{{ last_activity.strftime("%d %b %Y %H:%M") }}{% else %}No activity yet{% endif %}</strong></div>
-    </div>
-    <div style="flex: 1; min-width: 200px">
-      <div style="font-size: 11px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem">Why this prospect matters</div>
-      <p style="font-size:12px; line-height:1.6; margin:0">{{ score.reason_summary }}</p>
+    <div class="summary-score">
+      <strong>{{ score.score }}</strong>
+      <span>Lead Fit Score</span>
+      <span class="tier tier-{{ score.tier }}">{{ score.tier|title }}</span>
     </div>
   </div>
-  <details style="margin-top: .75rem">
+  <div class="rm-summary-grid">
+    <div class="rm-summary-primary">
+      <span class="field-label">Best next action</span>
+      <strong>{{ route_intelligence.next_action }}</strong>
+      <p>{{ route_intelligence.rationale }}</p>
+    </div>
+    <dl class="rm-summary-facts">
+      <div><dt>Contactability</dt><dd>{{ route_intelligence.contactability_label }}</dd></div>
+      <div><dt>Best route</dt><dd>{{ route_intelligence.best_route_label }}</dd></div>
+      <div><dt>Route candidate</dt><dd>{{ route_intelligence.best_route_value or 'No named route candidate' }}</dd></div>
+      <div><dt>Confidence</dt><dd>{{ route_intelligence.confidence|replace('_', ' ')|title }}</dd></div>
+      <div><dt>Owner</dt><dd>{{ action.assigned_to or 'Unassigned' }}</dd></div>
+      <div><dt>Last checked</dt><dd>{% if route_intelligence.generated_at %}{{ route_intelligence.generated_at.strftime('%d %b %Y') }}{% else %}Not evaluated yet{% endif %}</dd></div>
+    </dl>
+  </div>
+  <div class="route-evidence">
+    <span class="field-label">Evidence</span>
+    <ul>{% for item in route_intelligence.evidence_summary %}<li>{{ item }}</li>{% else %}<li>No evidence-bearing route candidate found.</li>{% endfor %}</ul>
+  </div>
+  <div class="missing-data">
+    <span class="field-label">Still missing</span>
+    <div>{% for item in route_intelligence.missing_data %}<span>{{ item }}</span>{% else %}<strong>No critical contact-route gaps</strong>{% endfor %}</div>
+  </div>
+  {% if route_intelligence.persisted %}
+  <div class="route-review-bar">
+    <span class="status status-{{ route_intelligence.status }}">{{ route_intelligence.status|title }}</span>
+    {% if route_intelligence.status == 'suggested' %}
+    <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/accept"><button class="btn btn-primary" type="submit">Accept route</button></form>
+    <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/reject"><button class="btn btn-secondary" type="submit">Reject route</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+  <details class="scoring-details">
     <summary style="font-size: 11px; color: #9ca3af; cursor: pointer">Internal scoring signals (debug)</summary>
     <div style="display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; font-size: 12px; color: #6b7280">
       <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Arie Fit · {{ score.arie_fit_score or 0 }}</span>
@@ -42,7 +62,23 @@
       <span style="padding: .25rem .6rem; border: 1px solid #e5e7eb; border-radius: 999px; background: #f9fafb">Stage · {{ score.lead_readiness or 'discovered' }}</span>
     </div>
   </details>
-</div>
+</section>
+
+{% if introducer_matches %}
+<section class="card route-matches">
+  <div class="section-head">
+    <div><h2>Introducer / CSP Matches</h2><p>Named matches from stored evidence, never from generic search links.</p></div>
+    <span class="badge badge-contact-partial">{{ introducer_matches|length }} match{{ '' if introducer_matches|length == 1 else 'es' }}</span>
+  </div>
+  {% for match in introducer_matches %}
+  <div class="route-match-row">
+    <div><a href="/introducers/{{ match.introducer_id }}"><strong>{{ match.company_name }}</strong></a><span>{{ match.category or 'Uncategorised route source' }}</span></div>
+    <div><span class="confidence confidence-{{ match.match_strength }}">{{ match.match_strength|title }}</span><span>{{ match.match_type|replace('_', ' ')|title }}</span></div>
+    <p>{{ match.evidence }}</p>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
 
 {% if score.why_reasons %}
   <div class="card" style="margin-bottom: 1rem">
@@ -63,59 +99,18 @@
 </div>
 {% endif %}
 
-{% if introducer_hint %}
-<div class="route-callout">
-  <strong>Introducer route to research</strong>
-  <span>{{ introducer_hint }} <small>Rule-based hint from jurisdiction and entity type · Medium confidence</small></span>
-</div>
-{% endif %}
-
-<section class="card research-card" id="find-contact-route">
+<section class="card discovery-section" id="candidate-contact-routes">
   <div class="section-head">
     <div>
-      <h2>Find Contact Route</h2>
-      <p>Use these research links to find a website, contact page, LinkedIn profile, director route, or introducer route before saving verified contact details.</p>
+      <h2>Candidate Contact Routes</h2>
+      <p>Concrete values found for RM verification. Search links are never shown here.</p>
     </div>
-    <span class="badge badge-contact-partial">Manual research</span>
+    {% set pending_count = candidate_contact_routes|selectattr('status', 'equalto', 'Needs Review')|list|length %}
+    <span class="badge badge-contact-{{ 'partial' if pending_count else ('ready' if candidate_contact_routes else 'missing') }}">{{ pending_count }} to review</span>
   </div>
-  <p class="research-note">Research shortcuts only. Review each result yourself; nothing is fetched, stored, or verified automatically.</p>
-  <div class="research-groups">
-    {% for title, links in [('Company', research_links.company), ('People', research_links.people), ('Introducer Route', research_links.introducer), ('Registry / Regulator', research_links.registry)] %}
-    <div class="research-group">
-      <h3>{{ title }}</h3>
-      <div class="research-links">
-        {% for link in links %}
-        <a class="research-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
-        {% else %}
-        <span class="text-meta">No active director route available yet</span>
-        {% endfor %}
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  <div class="research-order">
-    <strong>Suggested research order</strong>
-    <ol>
-      <li>Check official website and contact page.</li>
-      <li>Check company LinkedIn and director/officer routes.</li>
-      <li>Check registered office, introducer, and registry context.</li>
-      <li>Save verified details with source and confidence.</li>
-    </ol>
-  </div>
-</section>
-
-<section class="card discovery-section" id="contact-discovery-suggestions">
-  <div class="section-head">
-    <div>
-      <h2>Contact Discovery Suggestions</h2>
-      <p>Candidate contact routes found from public sources. Review before accepting.</p>
-    </div>
-    {% set pending_count = contact_suggestions|selectattr('status', 'equalto', 'Needs Review')|list|length %}
-    <span class="badge badge-contact-{{ 'partial' if pending_count else 'ready' }}">{{ pending_count }} awaiting review</span>
-  </div>
-  {% if contact_suggestions %}
+  {% if candidate_contact_routes %}
   <div class="discovery-list">
-    {% for suggestion in contact_suggestions %}
+    {% for suggestion in candidate_contact_routes %}
     <article class="discovery-row">
       <div class="discovery-row-head">
         <div>
@@ -126,14 +121,13 @@
         <span class="text-meta">{{ suggestion.discovered_at.strftime('%d %b %Y') if suggestion.discovered_at else '' }}</span>
       </div>
       <a class="suggestion-value" href="{{ suggestion.source_url }}" target="_blank" rel="noopener noreferrer">{{ suggestion.value }}</a>
-      <div class="suggestion-source"><strong>{{ suggestion.source_name }}</strong>{% if suggestion.search_query %} · Query: <code>{{ suggestion.search_query }}</code>{% endif %}</div>
+      <div class="suggestion-source"><strong>{{ suggestion.source_name }}</strong></div>
       <p>{{ suggestion.confidence_reason }}</p>
-      {% if suggestion.reviewed_by %}<div class="text-meta">Reviewed by {{ suggestion.reviewed_by }}{% if suggestion.reviewed_at %} on {{ suggestion.reviewed_at.strftime('%d %b %Y') }}{% endif %}</div>{% endif %}
       <div class="suggestion-actions">
         <a class="btn btn-secondary" href="{{ suggestion.source_url }}" target="_blank" rel="noopener noreferrer">Open source</a>
         {% if suggestion.status == 'Needs Review' %}
         <form method="post" action="/leads/{{ lead.id }}/contact-suggestions/{{ suggestion.id }}/accept">
-          <button type="submit" class="btn btn-primary">{{ 'Accept into Contact Research' if suggestion.can_populate_contact else 'Accept as research route' }}</button>
+          <button type="submit" class="btn btn-primary">{{ 'Accept into Contact Research' if suggestion.can_populate_contact else 'Accept candidate route' }}</button>
         </form>
         <form method="post" action="/leads/{{ lead.id }}/contact-suggestions/{{ suggestion.id }}/reject">
           <button type="submit" class="btn btn-secondary">Reject</button>
@@ -144,8 +138,48 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="empty-row">No discovery suggestions have been generated for this prospect yet.</p>
+  <div class="candidate-empty">
+    <strong>No candidate contact route found yet.</strong>
+    <span>Use the recommended research shortcuts below, then save only verified details in Contact Research.</span>
+  </div>
   {% endif %}
+
+  {% if verification_sources %}
+  <div class="verification-sources">
+    <h3>Verification sources</h3>
+    <p>Useful for confirming the legal entity, but not a contact route.</p>
+    <div class="research-links">
+      {% for source in verification_sources %}
+      <a class="research-link" href="{{ source.source_url }}" target="_blank" rel="noopener noreferrer">{{ source.type_label }} · {{ source.source_name }}</a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</section>
+
+<section class="card research-card" id="find-contact-route">
+  <div class="section-head">
+    <div>
+      <h2>Research Shortcuts</h2>
+      <p>Manual searches that support the recommended next action. They are not discovered or verified contact routes.</p>
+    </div>
+    <span class="badge badge-contact-partial">Research required</span>
+  </div>
+  <p class="research-note">Nothing is fetched or verified automatically. Open a shortcut, verify the result, then record it with provenance.</p>
+  <div class="research-groups">
+    {% for title, links in [('Company', research_links.company), ('People', research_links.people), ('Introducer / CSP', research_links.introducer), ('Registry / Regulator', research_links.registry)] %}
+    <div class="research-group">
+      <h3>{{ title }}</h3>
+      <div class="research-links">
+        {% for link in links %}
+        <a class="research-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">{{ link.label }}</a>
+        {% else %}
+        <span class="text-meta">No shortcut available</span>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
 </section>
 
 <div class="grid-2">

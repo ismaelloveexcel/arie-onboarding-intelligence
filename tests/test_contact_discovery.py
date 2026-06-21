@@ -11,8 +11,10 @@ from src import main
 from src.contact_discovery import (
     acceptance_target,
     build_contact_discovery_suggestions,
+    build_rm_action_summary,
     prepare_contact_acceptance,
     review_status,
+    suggestion_category,
 )
 
 client = TestClient(main.app)
@@ -31,7 +33,7 @@ def _suggestion(**overrides):
     return item
 
 
-def test_discovery_builds_explainable_public_source_routes():
+def test_offline_discovery_does_not_persist_searches_as_candidates():
     suggestions = build_contact_discovery_suggestions(
         company_id="00000000-0000-0000-0000-000000000001",
         company_name="Example Global Fund Ltd",
@@ -42,19 +44,40 @@ def test_discovery_builds_explainable_public_source_routes():
         officer_names=["Jane Example"],
     )
 
-    types = {item["suggestion_type"] for item in suggestions}
-    assert types == {
-        "website",
-        "contact_page",
-        "company_linkedin",
-        "registry",
-        "regulator",
-        "csp_route",
-        "introducer_route",
-    }
-    assert all(item["status"] == "Needs Review" for item in suggestions)
-    assert all(item["confidence_reason"] for item in suggestions)
-    assert len({item["fingerprint"] for item in suggestions}) == len(suggestions)
+    assert suggestions == []
+
+
+def test_stored_rows_are_classified_by_rm_usefulness():
+    assert (
+        suggestion_category(
+            "website", "https://www.google.com/search?q=Example+Company"
+        )
+        == "shortcut"
+    )
+    assert suggestion_category("registry", "https://registry.example/") == "verification"
+    assert suggestion_category("website", "https://example-company.test/") == "candidate"
+    assert (
+        suggestion_category("csp_route", "https://example-csp.test/company")
+        == "candidate"
+    )
+
+
+def test_rm_action_summary_recommends_csp_route_for_mauritius_gbc():
+    summary = build_rm_action_summary(
+        jurisdiction="Mauritius",
+        entity_type="GLOBAL BUSINESS COMPANY",
+        current_readiness="No Contact Route Yet",
+        company_contact={},
+        candidate_routes=[],
+        owner="Ismael",
+        route_hint="Research management company / CSP route",
+        has_officers=False,
+    )
+
+    assert summary["best_next_action"] == "Research management company / CSP route first."
+    assert summary["best_available_route"] == "No candidate contact route found yet"
+    assert summary["owner"] == "Ismael"
+    assert "Generic company email" in summary["missing"]
 
 
 def test_search_routes_do_not_populate_contact_research():
@@ -172,6 +195,36 @@ def test_accept_route_populates_contact_research_and_audits_without_outreach():
     assert "contact_suggestion_accepted" not in sql  # passed as a bound value
     assert "INSERT INTO audit_log" in sql
     connection.commit.assert_called_once()
+
+
+def test_accept_route_rejects_generic_search_shortcut():
+    lead_id = uuid.uuid4()
+    suggestion_id = uuid.uuid4()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (
+        "website",
+        "https://www.google.com/search?q=Example",
+        "Official website search",
+        "https://www.google.com/search?q=Example",
+        '"Example" official website',
+        "Low",
+        "Search route only.",
+        "Needs Review",
+    )
+    connection_cm, connection = _connection_with_cursor(cursor)
+
+    with (
+        patch("src.main._read_actor", return_value="Ismael"),
+        patch("src.main.get_conn", return_value=connection_cm),
+    ):
+        response = client.post(
+            f"/leads/{lead_id}/contact-suggestions/{suggestion_id}/accept"
+        )
+
+    assert response.status_code == 400
+    sql = "\n".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+    assert "UPDATE contact_discovery_suggestions" not in sql
+    connection.commit.assert_not_called()
 
 
 def test_reject_route_keeps_history_without_contact_write():

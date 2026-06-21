@@ -21,6 +21,7 @@ from src.contact_discovery import (
     acceptance_target,
     prepare_contact_acceptance,
     review_status,
+    suggestion_category,
 )
 from src.config import (
     ACTOR_NAMES,
@@ -36,6 +37,10 @@ from src.config import (
 from src.db import check_connection, get_conn
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
+from src.route_intelligence import (
+    CONTACTABILITY_LABELS,
+    build_route_recommendation,
+)
 from src.scoring import (
     SCORING_VERSION,
     SIGNAL_DETAILS,
@@ -59,6 +64,21 @@ logger = logging.getLogger(__name__)
 _ACTOR_COOKIE = "actor"
 _ACTOR_MAX_AGE = 30 * 24 * 3600
 _actor_signer = TimestampSigner(SECRET_KEY)
+
+_CANDIDATE_SUGGESTION_SQL = r"""
+    cds.suggestion_type NOT IN ('registry', 'regulator')
+    AND NOT (cds.suggested_value ~* '^https?://(www\.)?google\.com/search')
+    AND (
+        (cds.suggestion_type = 'generic_email'
+         AND cds.suggested_value ~* '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$')
+        OR (cds.suggestion_type IN ('website', 'contact_page')
+            AND cds.suggested_value ~* '^https?://')
+        OR (cds.suggestion_type = 'company_linkedin'
+            AND cds.suggested_value ~* '^https?://([^/]+\.)?linkedin\.com/(company|showcase)/')
+        OR (cds.suggestion_type IN ('csp_route', 'introducer_route')
+            AND TRIM(cds.suggested_value) <> '')
+    )
+"""
 
 
 def _read_actor(request: Request) -> str:
@@ -624,18 +644,37 @@ def dashboard(request: Request):
             )
             action_metrics_row = cur.fetchone()
 
-            cur.execute("""
+            cur.execute(f"""
+                WITH latest_routes AS (
+                    SELECT DISTINCT ON (lead_id)
+                           lead_id, contactability_bucket, status
+                    FROM route_recommendations
+                    WHERE status <> 'superseded'
+                    ORDER BY lead_id, generated_at DESC
+                )
                 SELECT
-                    COUNT(DISTINCT cds.company_id) FILTER (WHERE ls.tier = 'HIGH'),
-                    COUNT(*) FILTER (WHERE cds.status = 'Needs Review'),
-                    COUNT(*) FILTER (WHERE cds.status = 'Accepted'),
-                    COUNT(*) FILTER (WHERE cds.status = 'Rejected')
-                FROM contact_discovery_suggestions cds
-                JOIN lead_scores ls
-                  ON ls.company_id = cds.company_id
-                 AND ls.is_current = TRUE
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'ready_to_contact'),
+                    COUNT(*) FILTER (
+                        WHERE contactability_bucket = 'route_via_introducer_csp'
+                    ),
+                    COUNT(*) FILTER (
+                        WHERE contactability_bucket = 'direct_candidate_found'
+                    ),
+                    COUNT(*) FILTER (WHERE contactability_bucket IN (
+                        'management_company_route_likely', 'registry_evidence_only',
+                        'needs_route_research'
+                    )),
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'no_usable_route'),
+                    (
+                        SELECT COUNT(*) FROM contact_discovery_suggestions cds
+                        WHERE cds.status = 'Needs Review'
+                          AND ({_CANDIDATE_SUGGESTION_SQL})
+                    ),
+                    COUNT(*) FILTER (WHERE status = 'accepted'),
+                    COUNT(*) FILTER (WHERE status = 'rejected')
+                FROM latest_routes
             """)
-            suggestion_metrics_row = cur.fetchone()
+            route_metrics_row = cur.fetchone()
 
             cur.execute(
                 "SELECT status, COUNT(*) AS cnt FROM rm_actions GROUP BY status ORDER BY cnt DESC"
@@ -761,13 +800,17 @@ def dashboard(request: Request):
                 "assigned_label": "Assigned to me" if actor else "Assigned leads",
             },
             "status_counts": status_counts,
-            "suggestion_metrics": {
-                "high_fit_with_suggestions": (
-                    suggestion_metrics_row[0] if suggestion_metrics_row else 0
+            "route_metrics": {
+                "ready_to_contact": route_metrics_row[0] if route_metrics_row else 0,
+                "via_introducer_csp": route_metrics_row[1] if route_metrics_row else 0,
+                "direct_candidate": route_metrics_row[2] if route_metrics_row else 0,
+                "needs_research": route_metrics_row[3] if route_metrics_row else 0,
+                "no_usable_route": route_metrics_row[4] if route_metrics_row else 0,
+                "suggestions_awaiting_review": (
+                    route_metrics_row[5] if route_metrics_row else 0
                 ),
-                "awaiting_review": suggestion_metrics_row[1] if suggestion_metrics_row else 0,
-                "accepted": suggestion_metrics_row[2] if suggestion_metrics_row else 0,
-                "rejected": suggestion_metrics_row[3] if suggestion_metrics_row else 0,
+                "accepted_routes": route_metrics_row[6] if route_metrics_row else 0,
+                "rejected_routes": route_metrics_row[7] if route_metrics_row else 0,
             },
             "introducer_stats": {
                 "total": intro_stats_row[0] if intro_stats_row else 0,
@@ -800,6 +843,10 @@ def queue(request: Request):
         "status": request.query_params.get("status", ""),
         "contact_readiness": request.query_params.get("contact_readiness", ""),
         "contact_suggestions": request.query_params.get("contact_suggestions", ""),
+        "route_bucket": request.query_params.get("route_bucket", ""),
+        "named_route": request.query_params.get("named_route", ""),
+        "introducer_match": request.query_params.get("introducer_match", ""),
+        "office_cluster": request.query_params.get("office_cluster", ""),
         "view": request.query_params.get("view", ""),
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
@@ -837,12 +884,48 @@ def queue(request: Request):
     if filters["contact_suggestions"] == "has":
         where_clauses.append(
             "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
-            "WHERE cds.company_id = c.id)"
+            f"WHERE cds.company_id = c.id AND ({_CANDIDATE_SUGGESTION_SQL}))"
         )
     elif filters["contact_suggestions"] == "needs_review":
         where_clauses.append(
             "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
-            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review')"
+            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review' "
+            f"AND ({_CANDIDATE_SUGGESTION_SQL}))"
+        )
+    if filters["route_bucket"] in CONTACTABILITY_LABELS:
+        where_clauses.append(
+            """(
+                SELECT rr.contactability_bucket FROM route_recommendations rr
+                WHERE rr.lead_id = c.id AND rr.status <> 'superseded'
+                ORDER BY rr.generated_at DESC LIMIT 1
+            ) = %s"""
+        )
+        params.append(filters["route_bucket"])
+    if filters["named_route"] == "yes":
+        where_clauses.append(
+            """NULLIF(TRIM((
+                SELECT rr.best_route_value FROM route_recommendations rr
+                WHERE rr.lead_id = c.id AND rr.status <> 'superseded'
+                ORDER BY rr.generated_at DESC LIMIT 1
+            )), '') IS NOT NULL"""
+        )
+    if filters["introducer_match"] == "yes":
+        where_clauses.append(
+            """EXISTS (
+                SELECT 1 FROM introducer_matches im
+                WHERE im.lead_id = c.id AND im.status IN ('pending', 'accepted')
+            )"""
+        )
+    if filters["office_cluster"] == "yes":
+        where_clauses.append(
+            """NULLIF(TRIM(c.registered_address), '') IS NOT NULL
+            AND EXISTS (
+                SELECT 1 FROM companies clustered
+                WHERE clustered.id <> c.id
+                  AND NULLIF(TRIM(clustered.registered_address), '') IS NOT NULL
+                  AND regexp_replace(lower(clustered.registered_address), '[^a-z0-9]+', '', 'g')
+                    = regexp_replace(lower(c.registered_address), '[^a-z0-9]+', '', 'g')
+            )"""
         )
     if filters["view"] == "best":
         where_clauses.extend(
@@ -891,12 +974,13 @@ def queue(request: Request):
     elif filters["view"] == "suggestions":
         where_clauses.append(
             "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
-            "WHERE cds.company_id = c.id)"
+            f"WHERE cds.company_id = c.id AND ({_CANDIDATE_SUGGESTION_SQL}))"
         )
     elif filters["view"] == "suggestion_review":
         where_clauses.append(
             "EXISTS (SELECT 1 FROM contact_discovery_suggestions cds "
-            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review')"
+            "WHERE cds.company_id = c.id AND cds.status = 'Needs Review' "
+            f"AND ({_CANDIDATE_SUGGESTION_SQL}))"
         )
     if filters["date_from"]:
         where_clauses.append("c.incorporation_date >= %s")
@@ -939,13 +1023,30 @@ def queue(request: Request):
             qs.refreshed_at,
             COALESCE(ls.reachability_status, 'research_required'),
             (SELECT COUNT(*) FROM contact_discovery_suggestions cds
-             WHERE cds.company_id = c.id),
+             WHERE cds.company_id = c.id AND ({_CANDIDATE_SUGGESTION_SQL})),
             (SELECT COUNT(*) FROM contact_discovery_suggestions cds
-             WHERE cds.company_id = c.id AND cds.status = 'Needs Review')
+             WHERE cds.company_id = c.id AND cds.status = 'Needs Review'
+               AND ({_CANDIDATE_SUGGESTION_SQL})),
+            rr.contactability_bucket,
+            rr.best_route_type,
+            rr.best_route_value,
+            rr.confidence,
+            rr.next_action,
+            rr.status,
+            rr.generated_at,
+            rr.route_candidate_id
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
         LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
+        LEFT JOIN LATERAL (
+            SELECT contactability_bucket, best_route_type, best_route_value,
+                   confidence, next_action, status, generated_at, route_candidate_id
+            FROM route_recommendations
+            WHERE lead_id = c.id AND status <> 'superseded'
+            ORDER BY generated_at DESC
+            LIMIT 1
+        ) rr ON TRUE
         WHERE {' AND '.join(where_clauses)}
         ORDER BY {sort_sql}
         LIMIT %s OFFSET %s
@@ -976,15 +1077,36 @@ def queue(request: Request):
             "refreshed_at": row[11],
             "contact_readiness": row[12],
             "contact_readiness_label": contact_path_label(row[12]),
-            "suggestion_count": row[13] if len(row) > 13 else 0,
-            "suggestions_needing_review": row[14] if len(row) > 14 else 0,
-            "next_action": derive_queue_next_action(
-                assigned_to=row[9],
-                rm_status=row[10],
-                reachability_status=row[12],
-                jurisdiction=row[2],
-                entity_type=row[3],
+            "candidate_route_count": row[13] if len(row) > 13 else 0,
+            "candidates_needing_review": row[14] if len(row) > 14 else 0,
+            "route_bucket": row[15] if len(row) > 15 and row[15] else "needs_route_research",
+            "contactability_label": CONTACTABILITY_LABELS.get(
+                row[15] if len(row) > 15 and row[15] else "needs_route_research",
+                "Needs Route Research",
             ),
+            "best_route": (
+                row[16].replace("_", " ").title()
+                if len(row) > 16 and row[16]
+                else "Not evaluated"
+            ),
+            "route_candidate": row[17] if len(row) > 17 else None,
+            "route_confidence": (
+                row[18].title() if len(row) > 18 and row[18] else "Not evaluated"
+            ),
+            "next_action": (
+                row[19]
+                if len(row) > 19 and row[19]
+                else derive_queue_next_action(
+                    assigned_to=row[9],
+                    rm_status=row[10],
+                    reachability_status=row[12],
+                    jurisdiction=row[2],
+                    entity_type=row[3],
+                )
+            ),
+            "route_status": row[20] if len(row) > 20 else None,
+            "route_generated_at": row[21] if len(row) > 21 else None,
+            "route_candidate_id": row[22] if len(row) > 22 else None,
         }
         for row in rows
     ]
@@ -1132,6 +1254,37 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             suggestion_rows = cur.fetchall()
 
+            cur.execute(
+                """
+                SELECT id, contactability_bucket, best_route_type,
+                       best_route_value, route_candidate_id, rationale,
+                       evidence_summary, missing_data, next_action, confidence,
+                       generated_by, generated_at, reviewed_by, reviewed_at, status
+                FROM route_recommendations
+                WHERE lead_id = %s AND status <> 'superseded'
+                ORDER BY generated_at DESC
+                LIMIT 1
+                """,
+                (lead_id,),
+            )
+            route_recommendation_row = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT im.id, im.introducer_id, i.company_name, i.category,
+                       im.match_type, im.match_strength, im.evidence, im.source,
+                       im.status, im.created_at, im.reviewed_by, im.reviewed_at
+                FROM introducer_matches im
+                JOIN introducers i ON i.id = im.introducer_id
+                WHERE im.lead_id = %s AND im.status IN ('pending', 'accepted')
+                ORDER BY
+                    CASE im.match_strength WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                    im.created_at DESC
+                """,
+                (lead_id,),
+            )
+            introducer_match_rows = cur.fetchall()
+
     score = {
         "score": row[10] if row[10] is not None else 0,
         "tier": row[11] if row[11] is not None else "LOW",
@@ -1224,9 +1377,90 @@ def lead_detail(request: Request, lead_id: UUID):
             "reviewed_at": item[11],
             "notes": item[12],
             "can_populate_contact": acceptance_target(item[1], item[2]) is not None,
+            "category": suggestion_category(item[1], item[2]),
         }
         for item in suggestion_rows
     ]
+    candidate_contact_routes = [
+        item for item in contact_suggestions if item["category"] == "candidate"
+    ]
+    verification_sources = [
+        item for item in contact_suggestions if item["category"] == "verification"
+    ]
+    introducer_matches = [
+        {
+            "id": item[0],
+            "introducer_id": item[1],
+            "introducer": {
+                "id": item[1],
+                "company_name": item[2],
+                "category": item[3],
+            },
+            "company_name": item[2],
+            "category": item[3],
+            "match_type": item[4],
+            "match_strength": item[5],
+            "evidence": item[6],
+            "source": item[7],
+            "status": item[8],
+            "created_at": item[9],
+            "reviewed_by": item[10],
+            "reviewed_at": item[11],
+        }
+        for item in introducer_match_rows
+    ]
+    if route_recommendation_row:
+        route_intelligence = {
+            "id": route_recommendation_row[0],
+            "contactability_bucket": route_recommendation_row[1],
+            "contactability_label": CONTACTABILITY_LABELS.get(
+                route_recommendation_row[1], "Needs Route Research"
+            ),
+            "best_route_type": route_recommendation_row[2],
+            "best_route_label": route_recommendation_row[2]
+            .replace("_", " ")
+            .title(),
+            "best_route_value": route_recommendation_row[3],
+            "route_candidate_id": route_recommendation_row[4],
+            "rationale": route_recommendation_row[5],
+            "evidence_summary": route_recommendation_row[6] or [],
+            "missing_data": route_recommendation_row[7] or [],
+            "next_action": route_recommendation_row[8],
+            "confidence": route_recommendation_row[9],
+            "generated_by": route_recommendation_row[10],
+            "generated_at": route_recommendation_row[11],
+            "reviewed_by": route_recommendation_row[12],
+            "reviewed_at": route_recommendation_row[13],
+            "status": route_recommendation_row[14],
+            "persisted": True,
+        }
+    else:
+        route_intelligence = build_route_recommendation(
+            lead={
+                "company_id": str(row[0]),
+                "company_name": row[1],
+                "jurisdiction": row[2],
+                "entity_type": row[3],
+                "registered_address": row[5],
+                "verify_url": row[8],
+                "website": company_contact["website"],
+                "generic_email": company_contact["generic_email"],
+                "contact_form_url": company_contact["contact_form_url"],
+                "linkedin_url": company_contact["linkedin_url"],
+                "contact_confidence": company_contact["confidence"],
+            },
+            introducer_matches=introducer_matches,
+        )
+        route_intelligence.update(
+            {
+                "id": None,
+                "best_route_label": str(route_intelligence["best_route_type"])
+                .replace("_", " ")
+                .title(),
+                "generated_at": company_contact["last_checked"],
+                "persisted": False,
+            }
+        )
     audit_rendered = [
         {
             "entity_type": item[0],
@@ -1333,7 +1567,10 @@ def lead_detail(request: Request, lead_id: UUID):
             "research_links": research_links,
             "introducer_hint": route_hint,
             "company_contact": company_contact,
-            "contact_suggestions": contact_suggestions,
+            "candidate_contact_routes": candidate_contact_routes,
+            "verification_sources": verification_sources,
+            "route_intelligence": route_intelligence,
+            "introducer_matches": introducer_matches,
             "audit_rows": audit_rendered,
             "last_activity": last_activity,
             "lei": lei,
@@ -1663,6 +1900,18 @@ def _review_contact_suggestion(
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+            if (
+                decision == "Accepted"
+                and suggestion_category(
+                    suggestion["suggestion_type"], suggestion["suggested_value"]
+                )
+                != "candidate"
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only a concrete contact-route candidate can be accepted",
+                )
+
             target = None
             if decision == "Accepted":
                 cur.execute(
@@ -1738,7 +1987,7 @@ def _review_contact_suggestion(
                     (
                         f"Accepted into Contact Research field: {target}"
                         if target
-                        else "Accepted as a research route; no contact field populated"
+                        else "Accepted as a candidate route; no contact field populated"
                         if decision == "Accepted"
                         else "Rejected during RM review"
                     ),
@@ -1768,9 +2017,7 @@ def _review_contact_suggestion(
                 ),
             )
         conn.commit()
-    return RedirectResponse(
-        url=f"/leads/{lead_id}#contact-discovery-suggestions", status_code=303
-    )
+    return RedirectResponse(url=f"/leads/{lead_id}#candidate-contact-routes", status_code=303)
 
 
 @app.post("/leads/{lead_id}/contact-suggestions/{suggestion_id}/accept")
@@ -1789,6 +2036,93 @@ def reject_contact_suggestion(
     return _review_contact_suggestion(
         request, lead_id, suggestion_id, decision="Rejected"
     )
+
+
+def _review_route_recommendation(
+    request: Request,
+    lead_id: UUID,
+    recommendation_id: UUID,
+    decision: str,
+) -> RedirectResponse:
+    actor = _read_actor(request)
+    if not actor:
+        raise HTTPException(status_code=400, detail="Select Acting as before review")
+    if decision not in {"accepted", "rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid route decision")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, route_candidate_id, contactability_bucket,
+                       best_route_type, best_route_value, evidence_summary
+                FROM route_recommendations
+                WHERE id = %s AND lead_id = %s
+                FOR UPDATE
+                """,
+                (recommendation_id, lead_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="Route recommendation not found")
+            if row[0] != "suggested":
+                raise HTTPException(status_code=409, detail="Route has already been reviewed")
+            cur.execute(
+                """
+                UPDATE route_recommendations
+                SET status = %s, reviewed_by = %s, reviewed_at = NOW()
+                WHERE id = %s
+                """,
+                (decision, actor, recommendation_id),
+            )
+            if row[1]:
+                cur.execute(
+                    """
+                    UPDATE introducer_matches
+                    SET status = %s, reviewed_by = %s, reviewed_at = NOW()
+                    WHERE lead_id = %s AND introducer_id = %s AND status = 'pending'
+                    """,
+                    (decision, actor, lead_id, row[1]),
+                )
+            cur.execute(
+                """
+                INSERT INTO audit_log (
+                    entity_type, entity_id, action, actor,
+                    old_value, new_value, ip_address
+                ) VALUES ('company', %s, %s, %s, %s, %s, NULL)
+                """,
+                (
+                    lead_id,
+                    f"route_recommendation_{decision}",
+                    actor,
+                    Jsonb({"status": row[0]}),
+                    Jsonb(
+                        {
+                            "status": decision,
+                            "contactability_bucket": row[2],
+                            "best_route_type": row[3],
+                            "best_route_value": row[4],
+                            "evidence_summary": row[5] or [],
+                        }
+                    ),
+                ),
+            )
+        conn.commit()
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+
+
+@app.post("/leads/{lead_id}/route-recommendations/{recommendation_id}/accept")
+def accept_route_recommendation(
+    request: Request, lead_id: UUID, recommendation_id: UUID
+):
+    return _review_route_recommendation(request, lead_id, recommendation_id, "accepted")
+
+
+@app.post("/leads/{lead_id}/route-recommendations/{recommendation_id}/reject")
+def reject_route_recommendation(
+    request: Request, lead_id: UUID, recommendation_id: UUID
+):
+    return _review_route_recommendation(request, lead_id, recommendation_id, "rejected")
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -2193,6 +2527,8 @@ _AUDIT_ACTION_LABELS = {
     "contact_research_updated": "Contact research updated",
     "contact_suggestion_accepted": "Contact suggestion accepted",
     "contact_suggestion_rejected": "Contact suggestion rejected",
+    "route_recommendation_accepted": "Route recommendation accepted",
+    "route_recommendation_rejected": "Route recommendation rejected",
     "introducer_updated": "Introducer updated",
 }
 

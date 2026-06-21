@@ -230,8 +230,9 @@ def test_queue_contact_suggestion_filter_and_summary():
         response = client.get("/?contact_suggestions=needs_review")
 
     assert response.status_code == 200
-    assert "7 suggestions" in response.text
-    assert "5 awaiting review" in response.text
+    assert "7 candidate routes" in response.text
+    assert "5 to review" in response.text
+    assert "Needs Candidate Review" in response.text
     sql_calls = [str(call.args[0]) for call in cursor.execute.call_args_list]
     assert any("contact_discovery_suggestions" in sql for sql in sql_calls)
 
@@ -282,8 +283,8 @@ def test_lead_detail_renders_contact_research_shortcuts():
         None,
     )
     cursor = MagicMock()
-    cursor.fetchone.side_effect = [lead_row, None, None]
-    cursor.fetchall.side_effect = [[], [], [officer_row], [], []]
+    cursor.fetchone.side_effect = [lead_row, None, None, None]
+    cursor.fetchall.side_effect = [[], [], [officer_row], [], [], []]
     cursor_cm = MagicMock()
     cursor_cm.__enter__.return_value = cursor
     connection = MagicMock()
@@ -300,7 +301,98 @@ def test_lead_detail_renders_contact_research_shortcuts():
     assert "Jane Doe on LinkedIn" in response.text
     assert "Registered office route" in response.text
     assert 'target="_blank"' in response.text
-    assert "nothing is fetched, stored, or verified automatically" in response.text
+    assert "nothing is fetched or verified automatically" in response.text.lower()
+
+
+def test_mauritius_lead_separates_candidates_from_search_shortcuts():
+    lead_id = uuid.UUID("6d1ad165-846d-43c8-ac0f-ab4cb4c60b4e")
+    now = datetime.now(timezone.utc)
+    lead_row = (
+        lead_id,
+        "Global Trading X (CFD)",
+        "Mauritius",
+        "GLOBAL BUSINESS COMPANY",
+        None,
+        None,
+        "mauritius_mns",
+        "C235321",
+        "https://onlinesearch.mns.global/",
+        None,
+        95,
+        "HIGH",
+        [],
+        "Strong fit",
+        main.SCORING_VERSION,
+        "Ismael",
+        "Researching",
+        "Research CSP route",
+        None,
+        None,
+        95,
+        95,
+        "no_contact_path",
+        "discovered",
+        "C",
+        [],
+        10,
+        10,
+        now,
+        now,
+    )
+    suggestion_rows = [
+        (
+            uuid.uuid4(),
+            "registry",
+            "https://onlinesearch.mns.global/",
+            "Mauritius CBRD",
+            "https://onlinesearch.mns.global/",
+            '"Global Trading X (CFD)" C235321',
+            "High",
+            "Official registry route.",
+            "Needs Review",
+            now,
+            None,
+            None,
+            None,
+        ),
+        (
+            uuid.uuid4(),
+            "website",
+            "https://www.google.com/search?q=Global+Trading+X",
+            "Official website search",
+            "https://www.google.com/search?q=Global+Trading+X",
+            '"Global Trading X (CFD)" official website',
+            "Low",
+            "Search route only.",
+            "Needs Review",
+            now,
+            None,
+            None,
+            None,
+        ),
+    ]
+    cursor = MagicMock()
+    cursor.fetchone.side_effect = [lead_row, None, None, None]
+    cursor.fetchall.side_effect = [[], [], [], [], suggestion_rows, []]
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cursor
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_cm
+    connection_cm = MagicMock()
+    connection_cm.__enter__.return_value = connection
+
+    with patch("src.main.get_conn", return_value=connection_cm):
+        response = client.get(f"/leads/{lead_id}")
+
+    assert response.status_code == 200
+    assert "RM Action Summary" in response.text
+    assert "Management Company Route Likely" in response.text
+    assert "No named route candidate" in response.text
+    assert "Registered office address" in response.text
+    assert "Verification sources" in response.text
+    assert "Research Shortcuts" in response.text
+    assert "Accept as research route" not in response.text
+    assert "2 awaiting review" not in response.text
 
 
 def test_contact_research_rejects_invalid_values_before_db():

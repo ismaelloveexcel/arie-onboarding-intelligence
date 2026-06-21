@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import re
 from datetime import datetime, timezone
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlparse
 
 
 SUGGESTION_TYPES = {
@@ -32,39 +31,6 @@ _PERSONAL_EMAIL_DOMAINS = {
 }
 
 
-def _search_url(query: str) -> str:
-    return f"https://www.google.com/search?{urlencode({'q': query})}"
-
-
-def _suggestion(
-    *,
-    company_id: str,
-    suggestion_type: str,
-    suggested_value: str,
-    source_name: str,
-    source_url: str,
-    search_query: str,
-    confidence: str,
-    confidence_reason: str,
-) -> dict[str, str]:
-    fingerprint_input = "|".join(
-        [company_id, suggestion_type, suggested_value, source_url, search_query]
-    )
-    return {
-        "company_id": company_id,
-        "suggestion_type": suggestion_type,
-        "suggested_value": suggested_value,
-        "source_name": source_name,
-        "source_url": source_url,
-        "search_query": search_query,
-        "confidence": confidence,
-        "confidence_reason": confidence_reason,
-        "status": "Needs Review",
-        "discovered_at": datetime.now(timezone.utc).isoformat(),
-        "fingerprint": hashlib.sha256(fingerprint_input.encode("utf-8")).hexdigest(),
-    }
-
-
 def build_contact_discovery_suggestions(
     *,
     company_id: str,
@@ -75,128 +41,117 @@ def build_contact_discovery_suggestions(
     verify_url: str | None = None,
     officer_names: list[str] | None = None,
 ) -> list[dict[str, str]]:
-    """Build public-source review routes without fetching result pages."""
-    identity = f'"{company_name}" {source_ref or ""}'.strip()
-    suggestions: list[dict[str, str]] = []
+    """Return concrete candidates only.
 
-    if verify_url:
-        source_name = (
-            "Companies House"
-            if jurisdiction == "UK"
-            else "Mauritius CBRD"
-            if jurisdiction == "Mauritius"
-            else "Official registry"
-        )
-        suggestions.append(
-            _suggestion(
-                company_id=company_id,
-                suggestion_type="registry",
-                suggested_value=verify_url,
-                source_name=source_name,
-                source_url=verify_url,
-                search_query=identity,
-                confidence="High",
-                confidence_reason="Official registry route attached to the legal entity record.",
-            )
-        )
+    The offline operator does not fetch or verify public pages, so it cannot
+    honestly produce a contact candidate. Research shortcuts are built at
+    render time and must not be persisted as reviewable discoveries.
+    """
+    return []
 
-    searches = [
-        (
-            "website",
-            f'"{company_name}" {jurisdiction} official website',
-            "Official website search",
-        ),
-        ("contact_page", f'"{company_name}" contact', "Company contact page search"),
-        (
-            "company_linkedin",
-            f'"{company_name}" site:linkedin.com/company OR site:linkedin.com/showcase',
-            "Company LinkedIn search",
-        ),
+
+def is_search_shortcut(suggested_value: str) -> bool:
+    parsed = urlparse(suggested_value.strip())
+    host = parsed.netloc.lower().split(":", 1)[0]
+    return host in _SEARCH_HOSTS and parsed.path.rstrip("/") == "/search"
+
+
+def suggestion_category(suggestion_type: str, suggested_value: str) -> str:
+    """Classify stored rows without rewriting historical production data."""
+    if is_search_shortcut(suggested_value):
+        return "shortcut"
+    if suggestion_type in {"registry", "regulator"}:
+        return "verification"
+    if acceptance_target(suggestion_type, suggested_value) is not None:
+        return "candidate"
+    if suggestion_type in {"csp_route", "introducer_route"} and suggested_value.strip():
+        return "candidate"
+    return "shortcut"
+
+
+def build_rm_action_summary(
+    *,
+    jurisdiction: str,
+    entity_type: str | None,
+    current_readiness: str,
+    company_contact: dict[str, object],
+    candidate_routes: list[dict[str, object]],
+    owner: str | None,
+    route_hint: str | None,
+    has_officers: bool,
+) -> dict[str, object]:
+    """Summarise the most useful deterministic RM contact-route decision."""
+    route_fields = [
+        ("generic_email", "Company email"),
+        ("contact_form_url", "Contact form"),
+        ("website", "Verified website"),
+        ("linkedin_url", "Company LinkedIn"),
     ]
-    for suggestion_type, query, source_name in searches:
-        search_url = _search_url(query)
-        suggestions.append(
-            _suggestion(
-                company_id=company_id,
-                suggestion_type=suggestion_type,
-                suggested_value=search_url,
-                source_name=source_name,
-                source_url=search_url,
-                search_query=query,
-                confidence="Low",
-                confidence_reason="Search route only; the result must be opened and verified by an RM.",
-            )
-        )
+    saved_route = next(
+        (
+            (label, str(company_contact[field]))
+            for field, label in route_fields
+            if company_contact.get(field)
+        ),
+        None,
+    )
+    pending_candidates = [
+        item for item in candidate_routes if item.get("status") == "Needs Review"
+    ]
+    best_candidate = pending_candidates[0] if pending_candidates else None
+    missing = [
+        label
+        for field, label in [
+            ("website", "Verified website"),
+            ("generic_email", "Generic company email"),
+            ("contact_form_url", "Contact form"),
+            ("linkedin_url", "Verified company LinkedIn"),
+        ]
+        if not company_contact.get(field)
+    ]
+    if not any(item.get("type") in {"csp_route", "introducer_route"} for item in candidate_routes):
+        missing.append("Confirmed introducer / CSP route")
 
-    if jurisdiction == "Mauritius":
-        regulator_query = f"{identity} site:fscmauritius.org"
-        regulator_name = "Mauritius FSC search"
-    elif jurisdiction == "UK":
-        regulator_query = f"{identity} site:register.fca.org.uk"
-        regulator_name = "FCA register search"
+    if saved_route:
+        best_next_action = "Review the saved contact route and prepare the first RM conversation."
+        best_available_route = f"{saved_route[0]}: {saved_route[1]}"
+        why = "A company-level contact route has been saved with provenance. Confirm it is still current before use."
+        confidence = company_contact.get("confidence") or "Not rated"
+    elif best_candidate:
+        best_next_action = f"Review the {str(best_candidate.get('type_label', 'contact route')).lower()} candidate."
+        best_available_route = str(best_candidate.get("value") or "Candidate route")
+        why = "A concrete candidate is available, but it has not yet been verified or accepted into Contact Research."
+        confidence = best_candidate.get("confidence") or "Not rated"
+    elif route_hint or jurisdiction == "Mauritius":
+        best_next_action = "Research management company / CSP route first."
+        best_available_route = "No candidate contact route found yet"
+        why = (
+            "No verified company website or generic contact route is available. "
+            "For this Mauritius entity, the practical route may be through an "
+            "administrator, management company, CSP, fiduciary, or registered office provider."
+        )
+        confidence = "Medium - rule-based recommendation"
+    elif has_officers:
+        best_next_action = "Research the active director / officer route first."
+        best_available_route = "No candidate contact route found yet"
+        why = "No company-level route is verified, but an active officer provides the strongest available research path."
+        confidence = "Medium - rule-based recommendation"
     else:
-        regulator_query = f"{identity} regulator register"
-        regulator_name = "Regulator search"
-    regulator_url = _search_url(regulator_query)
-    suggestions.append(
-        _suggestion(
-            company_id=company_id,
-            suggestion_type="regulator",
-            suggested_value=regulator_url,
-            source_name=regulator_name,
-            source_url=regulator_url,
-            search_query=regulator_query,
-            confidence="Low",
-            confidence_reason="Restricted regulator search; entity relationship requires review.",
-        )
-    )
+        best_next_action = "Research the official website and contact page first."
+        best_available_route = "No candidate contact route found yet"
+        why = "No verified company-level or person-level contact route is currently available."
+        confidence = "Low - research required"
 
-    csp_query = (
-        f'"{registered_address}" "{company_name}" management company OR fiduciary '
-        "OR corporate services"
-        if registered_address
-        else f'"{company_name}" management company OR fiduciary OR corporate services'
-    )
-    csp_url = _search_url(csp_query)
-    suggestions.append(
-        _suggestion(
-            company_id=company_id,
-            suggestion_type="csp_route",
-            suggested_value=csp_url,
-            source_name="Registered-office / CSP search",
-            source_url=csp_url,
-            search_query=csp_query,
-            confidence="Low",
-            confidence_reason=(
-                "Registered-office search may identify a CSP, but no relationship is assumed."
-                if registered_address
-                else "CSP search route only; no relationship is assumed."
-            ),
-        )
-    )
-
-    active_names = [name.strip() for name in officer_names or [] if name.strip()][:3]
-    if active_names:
-        officer_terms = " OR ".join(f'"{name}"' for name in active_names)
-        introducer_query = (
-            f'"{company_name}" ({officer_terms}) management company OR introducer'
-        )
-    else:
-        introducer_query = f'"{company_name}" introducer OR management company'
-    introducer_url = _search_url(introducer_query)
-    suggestions.append(
-        _suggestion(
-            company_id=company_id,
-            suggestion_type="introducer_route",
-            suggested_value=introducer_url,
-            source_name="Introducer route search",
-            source_url=introducer_url,
-            search_query=introducer_query,
-            confidence="Low",
-            confidence_reason="Public search route only; introducer relationship requires evidence.",
-        )
-    )
-    return suggestions
+    return {
+        "current_readiness": current_readiness,
+        "best_next_action": best_next_action,
+        "best_available_route": best_available_route,
+        "why": why,
+        "missing": missing,
+        "confidence": confidence,
+        "owner": owner or "Unassigned",
+        "last_checked": company_contact.get("last_checked"),
+    }
 
 
 def acceptance_target(suggestion_type: str, suggested_value: str) -> str | None:

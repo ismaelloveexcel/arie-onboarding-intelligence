@@ -1,4 +1,8 @@
-"""Generate deterministic Contact Discovery Suggestions.
+"""Persist concrete Contact Discovery candidates.
+
+The current offline workflow does not fetch public pages, so it intentionally
+produces no candidates. Research shortcuts are rendered on the lead page and
+must never be inserted as reviewable suggestions.
 
 Dry run is the default and never writes. Examples:
 

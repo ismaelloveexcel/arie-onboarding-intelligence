@@ -84,18 +84,22 @@
   <section class="card dashboard-panel">
     <div class="section-head">
       <div>
-        <h2>Contact Discovery</h2>
-        <p>Public-source candidates awaiting RM verification</p>
+        <h2>Route Intelligence</h2>
+        <p>Whether high-fit prospects have a credible path to conversation</p>
       </div>
-      <a href="/?view=suggestion_review">Review suggestions</a>
+      <a href="/?route_bucket=needs_route_research">Open route queue</a>
     </div>
     <div class="compact-stats compact-stats--four">
-      <div><strong>{{ suggestion_metrics.high_fit_with_suggestions }}</strong><span>High fit with suggestions</span></div>
-      <div><strong>{{ suggestion_metrics.awaiting_review }}</strong><span>Awaiting review</span></div>
-      <div><strong>{{ suggestion_metrics.accepted }}</strong><span>Accepted</span></div>
-      <div><strong>{{ suggestion_metrics.rejected }}</strong><span>Rejected</span></div>
+      <div><strong>{{ route_metrics.ready_to_contact }}</strong><span>Ready to Contact</span></div>
+      <div><strong>{{ route_metrics.via_introducer_csp }}</strong><span>Route via Introducer / CSP</span></div>
+      <div><strong>{{ route_metrics.direct_candidate }}</strong><span>Direct Candidate Found</span></div>
+      <div><strong>{{ route_metrics.needs_research }}</strong><span>Needs Route Research</span></div>
+      <div><strong>{{ route_metrics.no_usable_route }}</strong><span>No Usable Route</span></div>
+      <div><strong>{{ route_metrics.suggestions_awaiting_review }}</strong><span>Candidate Suggestions to Review</span></div>
+      <div><strong>{{ route_metrics.accepted_routes }}</strong><span>Accepted Routes</span></div>
+      <div><strong>{{ route_metrics.rejected_routes }}</strong><span>Rejected Routes</span></div>
     </div>
-    <p class="text-meta">Suggestions never trigger outreach or change Lead Fit Score.</p>
+    <p class="text-meta">Only persisted evidence-bearing routes are counted. Research shortcuts are excluded.</p>
   </section>
 
   <section class="card dashboard-panel">
