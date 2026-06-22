@@ -261,6 +261,29 @@
 </div>
 
 <!-- =========================================================================
+     RESEARCH BATCH — the weekly enrichment loop (turns leads into routes)
+     ========================================================================= -->
+<div class="ds-layer-reference ds-card ds-card-reference" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Research Batch &amp; Enrichment</span>
+    <span class="ds-meta">Weekly loop · turns scored leads into compliant routes</span>
+  </div>
+  <p style="font-size:13px; color:#374151; margin:0 0 .75rem 0; line-height:1.6">
+    Most leads are scored but lack a contact route. Run the weekly loop to make
+    them RM-ready — export the best leads, research routes (Manus or manual),
+    then import the results.
+  </p>
+  <ol style="font-size:13px; color:#374151; margin:0; padding-left:1.25rem; line-height:1.9">
+    <li><strong>Export</strong> — <code>python -m scripts.export_research_batch --limit 50</code></li>
+    <li><strong>Research</strong> — upload <code>research_batch.csv</code> to Manus (see <code>docs/manus_contact_research_prompt.md</code>)</li>
+    <li><strong>Dry-run import</strong> — <code>python -m scripts.import_contact_routes enriched.csv</code></li>
+    <li><strong>Fix &amp; import</strong> — fix rejected rows, then <code>--write</code> on staging</li>
+    <li><strong>Review</strong> — refresh this page and work <strong>Top Opportunities</strong></li>
+  </ol>
+  <div class="ds-meta" style="margin-top:.5rem">Full guide: <code>docs/weekly_research_workflow.md</code></div>
+</div>
+
+<!-- =========================================================================
      CLIENT ACQUISITION ZONE — management-facing acquisition readiness
      (answers: "how many leads can we actually act on, and how covered are we?")
      ========================================================================= -->
