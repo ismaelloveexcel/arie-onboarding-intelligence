@@ -43,10 +43,14 @@ from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.route_intelligence import (
     CONTACTABILITY_LABELS,
     CONTACTABILITY_STATUS_LABELS,
+    best_route_label,
     contactability_decision,
     contactability_status,
     contactability_status_label,
     lead_readiness,
+    rm_status,
+    rm_status_label,
+    source_reliability_label,
     suggested_opener,
 )
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
@@ -612,11 +616,17 @@ def dashboard(request: Request):
             "priority_score": r[4],
             "tier": r[5],
             "decision": contactability_decision(r[6]),
-            "contactability_status_label": contactability_status_label(r[6]),
-            "best_route": r[8] or (r[7] or "").replace("_", " ").title(),
-            "confidence": r[9],
+            "best_route": best_route_label(r[7], r[8]),
+            "source_reliability_label": source_reliability_label(r[9]),
             "next_action": r[10],
-            "is_rm_ready": lead_readiness(
+            "is_rm_ready": _opp_gate["is_rm_ready"],
+            "rm_status_label": rm_status_label(
+                readiness=_opp_gate["readiness"], contactability_bucket=r[6]
+            ),
+        }
+        for r in top_opportunity_rows
+        for _opp_gate in [
+            lead_readiness(
                 recommendation={
                     "contactability_bucket": r[6],
                     "confidence": r[9],
@@ -624,9 +634,8 @@ def dashboard(request: Request):
                     "next_action": r[10],
                 },
                 tier=r[5],
-            )["is_rm_ready"],
-        }
-        for r in top_opportunity_rows
+            )
+        ]
     ]
 
     last_run_at = _ts(last_run_row[0]) if last_run_row else None
@@ -1469,6 +1478,21 @@ def lead_detail(request: Request, lead_id: UUID):
                 },
                 tier=score["tier"],
             )
+        )
+        # RM-facing plain-language fields (one consistent status everywhere).
+        route_intelligence["rm_status"] = rm_status(
+            readiness=route_intelligence["readiness"],
+            contactability_bucket=route_intelligence["contactability_bucket"],
+        )
+        route_intelligence["rm_status_label"] = rm_status_label(
+            readiness=route_intelligence["readiness"],
+            contactability_bucket=route_intelligence["contactability_bucket"],
+        )
+        route_intelligence["source_reliability_label"] = source_reliability_label(
+            route_intelligence["confidence"]
+        )
+        route_intelligence["best_route_label"] = best_route_label(
+            route_intelligence["best_route_type"], route_intelligence["best_route_value"]
         )
 
     introducer_matches = [

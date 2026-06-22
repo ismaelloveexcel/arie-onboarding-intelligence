@@ -214,8 +214,8 @@
      ========================================================================= -->
 <div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
   <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
-    <span>Top Opportunities</span>
-    <span class="ds-meta">Actionable routes · ranked · work these first</span>
+    <span>This Week's Best Prospects</span>
+    <span class="ds-meta">Ranked · work these first</span>
   </div>
   {% if top_opportunities %}
   <div class="table-wrap">
@@ -223,9 +223,9 @@
       <thead>
         <tr>
           <th>Company</th>
-          <th>Decision</th>
-          <th>Best route</th>
-          <th>Confidence</th>
+          <th>Action</th>
+          <th>How to reach them</th>
+          <th>Source</th>
           <th style="text-align:right">Score</th>
           <th></th>
         </tr>
@@ -239,10 +239,10 @@
           </td>
           <td>
             <span class="badge {% if opp.is_rm_ready %}badge-contact-ready{% else %}badge-contact-partial{% endif %}">{{ opp.decision }}</span>
-            {% if opp.is_rm_ready %}<div class="ds-meta" style="color:#15803d; font-weight:600; font-size:10px; margin-top:2px">✓ RM-Ready</div>{% endif %}
+            <div class="ds-meta" style="font-size:10px; margin-top:2px">{{ opp.rm_status_label }}</div>
           </td>
           <td style="font-size:12px">{{ opp.best_route or "—" }}</td>
-          <td style="font-size:12px">{{ (opp.confidence or "")|replace('_',' ')|title }}</td>
+          <td style="font-size:12px">{{ opp.source_reliability_label }}</td>
           <td style="text-align:right; font-variant-numeric:tabular-nums">{{ opp.priority_score }}</td>
           <td><a href="/leads/{{ opp.id }}" style="font-size:12px; color:#0B3D91">Open →</a></td>
         </tr>
@@ -252,10 +252,9 @@
   </div>
   {% else %}
   <div class="ds-empty-state" style="text-align:left">
-    <span class="ds-empty-state-title">No actionable routes yet</span>
-    No leads currently have a confirmed direct or introducer route. The fastest
-    fix is to import company contact routes (website / generic email / contact
-    form) and introducer/CSP records — see the route import path.
+    <span class="ds-empty-state-title">No prospects ready to work yet</span>
+    Most leads still need a contact route before an RM can act. Run this week's
+    research workflow below — export a batch and enrich contact routes through Manus.
   </div>
   {% endif %}
 </div>
@@ -265,8 +264,8 @@
      ========================================================================= -->
 <div class="ds-layer-reference ds-card ds-card-reference" style="margin-bottom:1.25rem">
   <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
-    <span>Research Batch &amp; Enrichment</span>
-    <span class="ds-meta">Weekly loop · turns scored leads into compliant routes</span>
+    <span>Weekly Research Workflow</span>
+    <span class="ds-meta">Turns scored leads into reachable prospects</span>
   </div>
   <p style="font-size:13px; color:#374151; margin:0 0 .75rem 0; line-height:1.6">
     Most leads are scored but lack a contact route. Run the weekly loop to make
@@ -278,7 +277,7 @@
     <li><strong>Research</strong> — upload <code>research_batch.csv</code> to Manus (see <code>docs/manus_contact_research_prompt.md</code>)</li>
     <li><strong>Dry-run import</strong> — <code>python -m scripts.import_contact_routes enriched.csv</code></li>
     <li><strong>Fix &amp; import</strong> — fix rejected rows, then <code>--write</code> on staging</li>
-    <li><strong>Review</strong> — refresh this page and work <strong>Top Opportunities</strong></li>
+    <li><strong>Review</strong> — refresh this page and work <strong>This Week's Best Prospects</strong></li>
   </ol>
   <div class="ds-meta" style="margin-top:.5rem">Full guide: <code>docs/weekly_research_workflow.md</code></div>
 </div>
@@ -290,29 +289,28 @@
 {% if client_acquisition %}
 <div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
   <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
-    <span>Client Acquisition</span>
-    <span class="ds-meta">Acquisition readiness · latest route per lead</span>
+    <span>Acquisition Snapshot</span>
+    <span class="ds-meta">Where this week's pipeline stands</span>
   </div>
 
   {# ── ACQUISITION KPIs ── #}
   <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:.875rem">
     <div class="ds-stat-tile {% if client_acquisition.rm_ready > 0 %}ds-stat-tile-positive{% endif %}">
       <div class="ds-stat-tile-value">{{ client_acquisition.rm_ready }}</div>
-      <div class="ds-stat-tile-label">RM-Ready Leads</div>
+      <div class="ds-stat-tile-label">Ready to work</div>
       <div class="ds-stat-tile-sub">Contact route confirmed</div>
     </div>
     <div class="ds-stat-tile">
-      <div class="ds-stat-tile-value">{{ client_acquisition.with_contact_route }}</div>
-      <div class="ds-stat-tile-label">With Contact Route</div>
-      <div class="ds-stat-tile-sub">Direct or introducer</div>
-    </div>
-    <div class="ds-stat-tile">
       <div class="ds-stat-tile-value">{{ client_acquisition.warm_introducer }}</div>
-      <div class="ds-stat-tile-label">Warm Introducer Routes</div>
+      <div class="ds-stat-tile-label">Route via introducer</div>
     </div>
     <div class="ds-stat-tile">
       <div class="ds-stat-tile-value">{{ client_acquisition.requires_research }}</div>
-      <div class="ds-stat-tile-label">Requires Research</div>
+      <div class="ds-stat-tile-label">Needs research</div>
+    </div>
+    <div class="ds-stat-tile {% if client_acquisition.no_compliant_route > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.no_compliant_route }}</div>
+      <div class="ds-stat-tile-label">Missing contact route</div>
     </div>
   </div>
 
@@ -320,7 +318,7 @@
   <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:1rem">
     <div class="ds-stat-tile">
       <div class="ds-stat-tile-value">{{ "%.1f"|format(client_acquisition.coverage_pct) }}%</div>
-      <div class="ds-stat-tile-label">Contactability Coverage</div>
+      <div class="ds-stat-tile-label">Route coverage</div>
       <div class="ds-stat-tile-sub">Leads with a route assessed</div>
     </div>
     <div class="ds-stat-tile">
@@ -329,11 +327,11 @@
     </div>
     <div class="ds-stat-tile {% if client_acquisition.overdue_followups > 0 %}ds-stat-tile-risk{% endif %}">
       <div class="ds-stat-tile-value">{{ client_acquisition.overdue_followups }}</div>
-      <div class="ds-stat-tile-label">Overdue Follow-ups</div>
+      <div class="ds-stat-tile-label">Overdue follow-ups</div>
     </div>
     <div class="ds-stat-tile">
       <div class="ds-stat-tile-value">{{ client_acquisition.accepted_routes }}</div>
-      <div class="ds-stat-tile-label">Routes Accepted</div>
+      <div class="ds-stat-tile-label">Routes confirmed</div>
     </div>
   </div>
 
@@ -355,7 +353,7 @@
         <table>
           <thead>
             <tr>
-              <th>Contactability Bucket</th>
+              <th>Contact route status</th>
               <th style="text-align:right">Leads</th>
             </tr>
           </thead>

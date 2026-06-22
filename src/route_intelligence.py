@@ -79,6 +79,67 @@ def contactability_decision(bucket: str | None) -> str:
     return CONTACTABILITY_DECISIONS[contactability_status(bucket)]
 
 
+# --- RM-facing plain-language translation (presentation only) ----------------
+# A single, consistent status an RM sees everywhere (top card, action panel,
+# dashboard). Derived from the readiness gate + route — never contradictory.
+RM_STATUS_LABELS = {
+    "ready_to_work": "Ready to work",
+    "route_via_introducer": "Route via introducer",
+    "needs_research": "Needs research",
+    "not_suitable_yet": "Not suitable yet",
+}
+
+
+def rm_status(*, readiness: str | None, contactability_bucket: str | None) -> str:
+    """One coherent RM status key from the readiness verdict + route."""
+    status = contactability_status(contactability_bucket)
+    if readiness == READINESS_RM_READY:
+        return "route_via_introducer" if status == "route_via_introducer" else "ready_to_work"
+    if readiness == READINESS_NO_ROUTE:
+        return "not_suitable_yet"
+    return "needs_research"
+
+
+def rm_status_label(*, readiness: str | None, contactability_bucket: str | None) -> str:
+    return RM_STATUS_LABELS[rm_status(readiness=readiness, contactability_bucket=contactability_bucket)]
+
+
+_SOURCE_RELIABILITY = {
+    "high": "Reliable source",
+    "medium": "Needs verification",
+    "low": "Weak",
+    "not_usable": "Weak",
+}
+
+
+def source_reliability_label(confidence: str | None) -> str:
+    """Plain reliability wording in place of high/medium/low 'confidence'."""
+    return _SOURCE_RELIABILITY.get(str(confidence or "").lower(), "Weak")
+
+
+_BEST_ROUTE_PLAIN = {
+    "direct": "Email / website",
+    "introducer": "Introducer / CSP",
+    "csp": "Introducer / CSP",
+    "management_company": "Management company / CSP",
+    "fiduciary": "Fiduciary / CSP",
+    "fund_administrator": "Fund administrator",
+    "registered_office": "Registered office",
+    "registry_only": "No contact route found yet",
+    "research_required": "No contact route found yet",
+    "no_usable_route": "No contact route found yet",
+}
+
+
+def best_route_label(
+    best_route_type: str | None, best_route_value: str | None = None
+) -> str:
+    """RM-facing best-route text: the concrete value, else a plain type label."""
+    if (best_route_value or "").strip():
+        return best_route_value.strip()
+    return _BEST_ROUTE_PLAIN.get(str(best_route_type or ""), "No contact route found yet")
+
+
 SUPPORTED_JURISDICTIONS = {"Mauritius", "UK", "United Kingdom"}
 
 READINESS_RM_READY = "rm_ready"

@@ -449,17 +449,46 @@ def test_lead_detail_renders_action_recommendation_panel():
         resp = client.get("/leads/00000000-0000-0000-0000-000000000001")
 
     assert resp.status_code == 200
-    assert "Recommended decision" in resp.text
+    # RM-facing language (no technical framing in the primary UI).
+    assert "Recommended action" in resp.text
     assert "Contact Now" in resp.text
-    assert "Suggested RM next action" in resp.text
-    # Opener is offered for a ready route, clearly flagged as a draft.
+    assert "What to do next" in resp.text
+    assert "How to reach them" in resp.text
     assert "Suggested opener" in resp.text
-    # RM feedback capture + route provenance are exposed.
     assert "RM Feedback" in resp.text
-    assert "Provenance" in resp.text
-    assert "MNS registry" in resp.text  # route_source_label
-    # Readiness gate verdict is shown (ready route + evidence + HIGH tier).
-    assert "RM-Ready" in resp.text
+    # Source details collapsed (not "Provenance"); accept/reject reworded.
+    assert "View source details" in resp.text
+    assert "Provenance" not in resp.text
+    assert "MNS registry" in resp.text  # still in the collapsed details DOM
+    assert "Mark route as usable" in resp.text
+    # Single RM status, no leftover technical panel heading.
+    assert "Ready to work" in resp.text
+    assert "Route Intelligence" not in resp.text
+
+
+def test_lead_detail_not_ready_has_consistent_status_no_contradiction():
+    route_row = (
+        uuid.uuid4(), "registry_evidence_only", "registry_only", None, None,
+        "Legal entity verifiable, no usable route yet.",
+        ["Official registry route is available."], ["Generic company email"],
+        "Use registry evidence to research a route.", "low",
+        "route-intelligence-v1", datetime(2026, 6, 1, tzinfo=timezone.utc),
+        None, None, "suggested", None, None, "MNS registry", "registry",
+        "system_detected", None,
+    )
+    with patch(
+        "src.main.get_conn",
+        return_value=_lead_detail_conn_mock(route_recommendation_row=route_row),
+    ):
+        resp = client.get("/leads/00000000-0000-0000-0000-000000000001")
+
+    assert resp.status_code == 200
+    assert "Research First" in resp.text
+    assert "Not ready because" in resp.text
+    assert "Needs research" in resp.text
+    # No contradictory "ready" wording when the action is Research First.
+    assert "Ready to work" not in resp.text
+    assert "Ready to Contact" not in resp.text
 
 
 def test_lead_detail_without_route_intelligence_shows_fallback():
@@ -470,7 +499,9 @@ def test_lead_detail_without_route_intelligence_shows_fallback():
         resp = client.get("/leads/00000000-0000-0000-0000-000000000001")
 
     assert resp.status_code == 200
-    assert "No route intelligence generated for this lead yet" in resp.text
+    assert "No contact route found for this lead yet" in resp.text
+    # Key Contacts shows the compact empty state, not an open form.
+    assert "No named contact saved yet" in resp.text
 
 
 # --- RM feedback update flow ------------------------------------------------
