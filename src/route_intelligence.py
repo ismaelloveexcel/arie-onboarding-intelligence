@@ -63,6 +63,62 @@ def contactability_status_label(bucket: str | None) -> str:
     """Human-readable label for the simplified status of an internal bucket."""
     return CONTACTABILITY_STATUS_LABELS[contactability_status(bucket)]
 
+
+# RM-facing decision verb for the lead-detail action panel. One-to-one with the
+# simplified contactability status.
+CONTACTABILITY_DECISIONS = {
+    "ready_to_contact": "Contact Now",
+    "route_via_introducer": "Route via Introducer",
+    "research_required": "Research First",
+    "no_compliant_route_found": "Do Not Contact Yet",
+}
+
+
+def contactability_decision(bucket: str | None) -> str:
+    """The headline RM decision for a recommendation's contactability bucket."""
+    return CONTACTABILITY_DECISIONS[contactability_status(bucket)]
+
+
+def suggested_opener(
+    *,
+    company_name: str | None,
+    entity_type: str | None,
+    jurisdiction: str | None,
+    contactability_bucket: str | None,
+    best_route_value: str | None = None,
+) -> str | None:
+    """Return a deterministic draft opener, or None when context is insufficient.
+
+    This is an RM aid, not outreach automation: it never invents contact details,
+    only restates stored company facts, and is always flagged for RM review. An
+    opener is offered only when there is a usable route to act on (a ready direct
+    route or a named introducer/CSP route).
+    """
+    status = contactability_status(contactability_bucket)
+    if status not in {"ready_to_contact", "route_via_introducer"}:
+        return None
+    name = (company_name or "").strip() or "the company"
+    descriptor = " ".join(
+        part
+        for part in (
+            (jurisdiction or "").strip(),
+            (entity_type or "").strip().title(),
+        )
+        if part
+    )
+    subject = f"{name} ({descriptor})" if descriptor else name
+    if status == "route_via_introducer" and (best_route_value or "").strip():
+        return (
+            f"Draft for RM review — Reach {subject} through the existing relationship "
+            f"with {best_route_value.strip()}; introduce ARIE Finance's regulated "
+            f"Mauritius payment services and request a warm introduction."
+        )
+    return (
+        f"Draft for RM review — Introduce ARIE Finance's regulated Mauritius payment "
+        f"services to {subject} using the verified company route; confirm the saved "
+        f"contact route is current before outreach."
+    )
+
 _LEGAL_SUFFIXES = {
     "co",
     "company",

@@ -2,6 +2,7 @@
 
 import inspect
 import uuid
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,10 +16,12 @@ from src.route_intelligence import (
     CONTACTABILITY_STATUS_LABELS,
     build_registered_office_clusters,
     build_route_recommendation,
+    contactability_decision,
     contactability_status,
     contactability_status_label,
     match_introducers,
     normalise_address,
+    suggested_opener,
 )
 
 client = TestClient(app)
@@ -166,6 +169,68 @@ def test_contactability_status_unknown_defaults_to_research_required():
     assert contactability_status("not_a_real_bucket") == "research_required"
 
 
+@pytest.mark.parametrize(
+    ("bucket", "expected_decision"),
+    [
+        ("ready_to_contact", "Contact Now"),
+        ("route_via_introducer_csp", "Route via Introducer"),
+        ("direct_candidate_found", "Research First"),
+        ("needs_route_research", "Research First"),
+        ("no_usable_route", "Do Not Contact Yet"),
+    ],
+)
+def test_contactability_decision(bucket, expected_decision):
+    assert contactability_decision(bucket) == expected_decision
+
+
+def test_suggested_opener_only_for_actionable_routes():
+    # No opener when there is no usable route — never invent one.
+    for bucket in (
+        "direct_candidate_found",
+        "management_company_route_likely",
+        "registry_evidence_only",
+        "needs_route_research",
+        "no_usable_route",
+        None,
+    ):
+        assert (
+            suggested_opener(
+                company_name="Example Holdings Limited",
+                entity_type="GBC",
+                jurisdiction="Mauritius",
+                contactability_bucket=bucket,
+            )
+            is None
+        )
+
+
+def test_suggested_opener_ready_route_is_draft_and_factual():
+    opener = suggested_opener(
+        company_name="Example Holdings Limited",
+        entity_type="GLOBAL BUSINESS COMPANY",
+        jurisdiction="Mauritius",
+        contactability_bucket="ready_to_contact",
+    )
+    assert opener is not None
+    assert opener.startswith("Draft for RM review")
+    assert "Example Holdings Limited" in opener
+    # Must not fabricate contact details.
+    assert "@" not in opener
+
+
+def test_suggested_opener_introducer_route_names_the_route():
+    opener = suggested_opener(
+        company_name="Acme Fund Ltd",
+        entity_type="FUND",
+        jurisdiction="Mauritius",
+        contactability_bucket="route_via_introducer_csp",
+        best_route_value="Example Corporate Services Limited",
+    )
+    assert opener is not None
+    assert opener.startswith("Draft for RM review")
+    assert "Example Corporate Services Limited" in opener
+
+
 def test_route_intelligence_has_no_fetch_outreach_or_scoring_logic():
     source = inspect.getsource(route_intelligence)
     assert "requests" not in source
@@ -239,3 +304,92 @@ def test_route_review_updates_history_and_audit_only(decision, expected_status):
         if len(call.args) > 1 and isinstance(call.args[1], tuple)
     )
     connection.commit.assert_called_once()
+
+
+# --- Lead-detail Action Recommendation panel rendering ----------------------
+
+def _lead_detail_conn_mock(*, route_recommendation_row):
+    """Mock get_conn() for the lead_detail route.
+
+    Call order: fetchone(lead) -> fetchall(audit) -> fetchone(lei) ->
+    fetchall(officers) -> fetchall(pscs) -> fetchall(contacts) ->
+    fetchall(timeline) -> fetchone(route_rec) -> fetchall(introducer_matches).
+    """
+    lead_row = (
+        "00000000-0000-0000-0000-000000000001",  # id
+        "Example Holdings Limited",               # company_name
+        "Mauritius",                              # jurisdiction
+        "GLOBAL BUSINESS COMPANY",                # entity_type
+        None,                                     # incorporation_date
+        "Cybercity, Ebene",                       # registered_address
+        "mauritius_mns",                          # source_system
+        "C12345",                                 # source_ref
+        "https://onlinesearch.mns.global/",       # verify_url
+        None,                                     # website
+        82,                                       # score
+        "HIGH",                                   # tier
+        ["FRESH_LEI"],                            # reason_codes
+        "Fresh LEI registration",                 # reason_summary
+        "v1",                                     # scoring_version
+        "Ismael",                                 # assigned_to
+        "new",                                    # status
+        "",                                       # notes
+        None,                                     # contacted_at
+        None,                                     # follow_up_at
+    )
+    cur = MagicMock()
+    cur.fetchone.side_effect = [lead_row, None, route_recommendation_row]
+    cur.fetchall.side_effect = [[], [], [], [], [], []]
+
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cur
+    cursor_cm.__exit__.return_value = False
+    conn = MagicMock()
+    conn.cursor.return_value = cursor_cm
+    conn_cm = MagicMock()
+    conn_cm.__enter__.return_value = conn
+    conn_cm.__exit__.return_value = False
+    return conn_cm
+
+
+def test_lead_detail_renders_action_recommendation_panel():
+    route_row = (
+        uuid.uuid4(),                       # id
+        "ready_to_contact",                 # contactability_bucket
+        "direct",                           # best_route_type
+        "info@example.com",                 # best_route_value
+        None,                               # route_candidate_id
+        "A company-level email is stored.", # rationale
+        ["Stored company contact route with provenance."],  # evidence_summary
+        [],                                 # missing_data
+        "RM to verify the saved route.",    # next_action
+        "high",                             # confidence
+        "route-intelligence-v1",            # generated_by
+        datetime(2026, 6, 1, tzinfo=timezone.utc),  # generated_at
+        None,                               # reviewed_by
+        None,                               # reviewed_at
+        "suggested",                        # status
+    )
+    with patch(
+        "src.main.get_conn",
+        return_value=_lead_detail_conn_mock(route_recommendation_row=route_row),
+    ):
+        resp = client.get("/leads/00000000-0000-0000-0000-000000000001")
+
+    assert resp.status_code == 200
+    assert "Recommended decision" in resp.text
+    assert "Contact Now" in resp.text
+    assert "Suggested RM next action" in resp.text
+    # Opener is offered for a ready route, clearly flagged as a draft.
+    assert "Suggested opener" in resp.text
+
+
+def test_lead_detail_without_route_intelligence_shows_fallback():
+    with patch(
+        "src.main.get_conn",
+        return_value=_lead_detail_conn_mock(route_recommendation_row=None),
+    ):
+        resp = client.get("/leads/00000000-0000-0000-0000-000000000001")
+
+    assert resp.status_code == 200
+    assert "No route intelligence generated for this lead yet" in resp.text

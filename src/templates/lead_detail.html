@@ -109,24 +109,88 @@
     <span class="ds-meta">· Score {{ score.score }} · {{ score.tier | title }}</span>
   </div>
 
-  {# Decision framing strip — Contact Now is primary (filled); others are subordinate #}
-  <div class="ds-action-strip" style="margin-top:.875rem">
-    {# PRIMARY — filled navy/gold, visually dominant #}
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:6px; padding:7px 20px; background:var(--arie-navy); border:none; border-radius:var(--radius-chip); font-size:13px; font-weight:700; color:var(--arie-gold); text-decoration:none; box-shadow:var(--shadow-sm); letter-spacing:.01em">
-      ✓ Contact Now
-    </a>
-    {# SECONDARY — outline only, no fill #}
-    <span class="ds-action-strip-divider"></span>
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:5px; padding:6px 14px; background:transparent; border:1.5px solid #fde68a; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#d97706; text-decoration:none">
-      ⏱ Review Later
-    </a>
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:5px; padding:6px 10px; background:transparent; border:none; border-radius:var(--radius-chip); font-size:12px; font-weight:500; color:#9ca3af; text-decoration:none">
-      ✕ Do Not Contact
-    </a>
+  {# ============================================================
+     ACTION RECOMMENDATION — driven by Route Intelligence v1.
+     The headline decision an RM should act on. The full Route
+     Intelligence card (accept/reject + complete evidence/missing
+     data) lives lower in the left column under #route-intelligence.
+     ============================================================ #}
+  {% if route_intelligence %}
+  {% set _status = route_intelligence.contactability_status %}
+  {% set _accent = {
+      'ready_to_contact': '#15803d',
+      'route_via_introducer': '#0B3D91',
+      'research_required': '#d97706',
+      'no_compliant_route_found': '#6b7280'
+     }[_status] %}
+  {% set _bg = {
+      'ready_to_contact': '#f0fdf4',
+      'route_via_introducer': '#eff6ff',
+      'research_required': '#fffbeb',
+      'no_compliant_route_found': '#f9fafb'
+     }[_status] %}
+  <div class="ds-action-recommendation" id="action-panel"
+       style="margin-top:.875rem; border:1.5px solid {{ _accent }}33; background:{{ _bg }}; border-radius:10px; padding:1rem 1.125rem">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap">
+      <div style="display:flex; align-items:center; gap:.75rem">
+        <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Recommended decision</span>
+        <span style="font-size:18px; font-weight:800; color:{{ _accent }}; letter-spacing:-.01em">{{ route_intelligence.decision }}</span>
+      </div>
+      <span class="badge" style="background:{{ _accent }}1a; color:{{ _accent }}; border:1px solid {{ _accent }}33; font-weight:700">{{ route_intelligence.contactability_status_label }}</span>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; margin-top:.875rem">
+      <div>
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Best route</div>
+        <div style="font-size:13px; font-weight:600; margin-top:.2rem">{{ route_intelligence.best_route_value or (route_intelligence.best_route_type | replace('_',' ') | title) }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Confidence</div>
+        <div style="font-size:13px; font-weight:600; margin-top:.2rem">{{ route_intelligence.confidence | replace('_',' ') | title }}</div>
+      </div>
+      <div>
+        <div style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Why now</div>
+        <div style="font-size:13px; font-weight:600; margin-top:.2rem">{{ why_now or "No time-sensitive signal" }}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:.875rem; padding-top:.75rem; border-top:1px solid {{ _accent }}22">
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Suggested RM next action</span>
+      <div style="font-size:13px; font-weight:600; margin-top:.2rem; color:#111827">{{ route_intelligence.next_action }}</div>
+      {% if route_intelligence.rationale %}
+      <p style="font-size:12px; color:#374151; margin:.4rem 0 0 0">{{ route_intelligence.rationale }}</p>
+      {% endif %}
+    </div>
+
+    {% if route_intelligence.evidence_summary %}
+    <div style="margin-top:.625rem; font-size:12px; color:#374151">
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Evidence</span>
+      <ul style="margin:.25rem 0 0 0; padding-left:1.1rem">
+        {% for item in route_intelligence.evidence_summary[:3] %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if route_intelligence.suggested_opener %}
+    <div style="margin-top:.625rem; background:#fff; border:1px dashed {{ _accent }}55; border-radius:8px; padding:.625rem .75rem">
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:{{ _accent }}; font-weight:700">Suggested opener · draft — RM to review</span>
+      <p style="font-size:12px; color:#374151; margin:.3rem 0 0 0; line-height:1.55">{{ route_intelligence.suggested_opener }}</p>
+    </div>
+    {% endif %}
+
+    {% if route_intelligence.status == 'suggested' %}
+    <div style="margin-top:.75rem">
+      <a href="#route-intelligence" style="font-size:12px; font-weight:600; color:{{ _accent }}; text-decoration:none">Review &amp; accept/reject route ↓</a>
+    </div>
+    {% endif %}
   </div>
+  {% else %}
+  <div class="ds-action-recommendation" id="action-panel"
+       style="margin-top:.875rem; border:1px dashed #d1d5db; background:#f9fafb; border-radius:10px; padding:.875rem 1.125rem">
+    <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Action recommendation</span>
+    <div style="font-size:13px; color:#374151; margin-top:.3rem">No route intelligence generated for this lead yet. Run the route intelligence operator to populate a recommended decision.</div>
+  </div>
+  {% endif %}
 
 </div>
 

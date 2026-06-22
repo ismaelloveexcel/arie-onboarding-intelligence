@@ -43,8 +43,10 @@ from src.ingestion.lei_backfill import backfill_lei_company_links
 from src.route_intelligence import (
     CONTACTABILITY_LABELS,
     CONTACTABILITY_STATUS_LABELS,
+    contactability_decision,
     contactability_status,
     contactability_status_label,
+    suggested_opener,
 )
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
 from src.security.write_auth import write_guard_required
@@ -1332,6 +1334,14 @@ def lead_detail(request: Request, lead_id: UUID):
             "contactability_status_label": contactability_status_label(
                 route_recommendation_row[1]
             ),
+            "decision": contactability_decision(route_recommendation_row[1]),
+            "suggested_opener": suggested_opener(
+                company_name=row[1],
+                entity_type=row[3],
+                jurisdiction=row[2],
+                contactability_bucket=route_recommendation_row[1],
+                best_route_value=route_recommendation_row[3],
+            ),
             "best_route_type": route_recommendation_row[2],
             "best_route_value": route_recommendation_row[3],
             "route_candidate_id": route_recommendation_row[4],
@@ -1358,6 +1368,22 @@ def lead_detail(request: Request, lead_id: UUID):
         }
         for r in introducer_match_rows
     ]
+
+    # "Why now" — time-sensitive freshness signals for the action panel, derived
+    # only from existing score reason codes and LEI recency (no new fetching).
+    why_now_bits = []
+    if "FRESH_LEI" in score["reason_codes"]:
+        why_now_bits.append("Fresh LEI registration")
+    if "RECENTLY_INCORPORATED" in score["reason_codes"]:
+        why_now_bits.append("Recently incorporated entity")
+    if (
+        lei
+        and lei.get("fresh")
+        and lei.get("days_ago") is not None
+        and "Fresh LEI registration" not in why_now_bits
+    ):
+        why_now_bits.append(f"LEI registered {lei['days_ago']} days ago")
+    why_now = " · ".join(dict.fromkeys(why_now_bits)) or None
 
     return templates.TemplateResponse(
         request=request,
@@ -1392,6 +1418,7 @@ def lead_detail(request: Request, lead_id: UUID):
             "timeline": timeline,
             "route_intelligence": route_intelligence,
             "introducer_matches": introducer_matches,
+            "why_now": why_now,
         },
     )
 
