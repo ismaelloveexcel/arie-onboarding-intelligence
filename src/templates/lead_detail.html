@@ -138,6 +138,81 @@
   {# ── LEFT COLUMN: Intelligence → Reference ── #}
   <div>
 
+    {# ── ROUTE INTELLIGENCE ── #}
+    {% if route_intelligence %}
+    <div class="card ds-layer-intelligence" id="route-intelligence">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem">
+        <h2 style="margin:0">Route Intelligence</h2>
+        <span class="badge badge-contact-{{ 'ready' if route_intelligence.contactability_bucket == 'ready_to_contact' else ('partial' if route_intelligence.contactability_bucket in ['route_via_introducer_csp', 'direct_candidate_found', 'management_company_route_likely'] else 'missing') }}">
+          {{ route_intelligence.contactability_label }}
+        </span>
+      </div>
+      <div style="margin-bottom:.75rem">
+        <span class="field-label">Best next action</span>
+        <strong style="display:block; font-size:13px; margin-top:.25rem">{{ route_intelligence.next_action }}</strong>
+        <p style="font-size:12px; color:#374151; margin:.4rem 0 0 0">{{ route_intelligence.rationale }}</p>
+      </div>
+      <dl style="display:grid; grid-template-columns:1fr 1fr; gap:.4rem .75rem; font-size:12px; margin:0 0 .75rem 0">
+        <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Best route</dt><dd style="margin:0; font-weight:600">{{ route_intelligence.best_route_type | replace('_', ' ') | title }}</dd></div>
+        <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Confidence</dt><dd style="margin:0; font-weight:600">{{ route_intelligence.confidence | replace('_', ' ') | title }}</dd></div>
+        <div style="grid-column:span 2"><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Route candidate</dt><dd style="margin:0; font-weight:600">{{ route_intelligence.best_route_value or 'No named route candidate' }}</dd></div>
+        {% if route_intelligence.generated_at %}
+        <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Last evaluated</dt><dd style="margin:0">{{ route_intelligence.generated_at.strftime('%d %b %Y') }}</dd></div>
+        {% endif %}
+      </dl>
+      {% if route_intelligence.evidence_summary %}
+      <div style="margin-bottom:.5rem">
+        <span class="field-label">Evidence</span>
+        <ul style="font-size:12px; margin:.25rem 0 0 0; padding-left:1.1rem; color:#374151">
+          {% for item in route_intelligence.evidence_summary %}<li>{{ item }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      {% if route_intelligence.missing_data %}
+      <div style="margin-bottom:.5rem">
+        <span class="field-label">Still missing</span>
+        <div style="font-size:12px; margin-top:.25rem; color:#6b7280">
+          {% for item in route_intelligence.missing_data %}<span style="margin-right:.4rem">{{ item }}</span>{% endfor %}
+        </div>
+      </div>
+      {% endif %}
+      {% if route_intelligence.status == 'suggested' %}
+      <div style="display:flex; gap:.5rem; margin-top:.75rem; padding-top:.75rem; border-top:1px solid #e5e7eb">
+        <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/accept">
+          <button class="btn btn-primary" type="submit" style="font-size:12px">Accept route</button>
+        </form>
+        <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/reject">
+          <button class="btn btn-secondary" type="submit" style="font-size:12px">Reject</button>
+        </form>
+      </div>
+      {% elif route_intelligence.status %}
+      <div style="margin-top:.5rem">
+        <span class="status status-{{ route_intelligence.status }}">{{ route_intelligence.status | title }}</span>
+        {% if route_intelligence.reviewed_by %}<span style="font-size:11px; color:#6b7280; margin-left:.4rem">by {{ route_intelligence.reviewed_by }}</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# ── INTRODUCER / CSP MATCHES ── #}
+    {% if introducer_matches %}
+    <div class="card ds-layer-intelligence" id="introducer-matches">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem">
+        <h2 style="margin:0">Introducer / CSP Matches</h2>
+        <span class="badge badge-contact-partial">{{ introducer_matches|length }} match{{ '' if introducer_matches|length == 1 else 'es' }}</span>
+      </div>
+      {% for match in introducer_matches %}
+      <div style="padding:.6rem 0; {% if not loop.last %}border-bottom:1px solid #f3f4f6;{% endif %}">
+        <div style="font-size:12px; font-weight:600; margin-bottom:.25rem">
+          <span class="confidence confidence-{{ match.match_strength }}" style="margin-right:.4rem">{{ match.match_strength | title }}</span>
+          {{ match.match_type | replace('_', ' ') | title }}
+        </div>
+        {% if match.evidence %}<p style="font-size:12px; color:#374151; margin:0">{{ match.evidence }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
     {# ── INTELLIGENCE: Contact Intelligence ── #}
     <div class="card ds-layer-intelligence">
       <h2>Key Contacts</h2>

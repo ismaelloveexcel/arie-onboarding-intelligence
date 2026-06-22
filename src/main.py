@@ -40,6 +40,7 @@ from src.domain.statuses import (
 )
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
+from src.route_intelligence import CONTACTABILITY_LABELS
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
 from src.security.write_auth import write_guard_required
 from src.security.url_safety import sanitize_external_url
@@ -530,6 +531,29 @@ def dashboard(request: Request):
             """)
             rm_summary = cur.fetchone()
 
+            cur.execute("""
+                WITH latest_routes AS (
+                    SELECT DISTINCT ON (lead_id)
+                           lead_id, contactability_bucket, status
+                    FROM route_recommendations
+                    WHERE status <> 'superseded'
+                    ORDER BY lead_id, generated_at DESC
+                )
+                SELECT
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'ready_to_contact'),
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'route_via_introducer_csp'),
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'direct_candidate_found'),
+                    COUNT(*) FILTER (WHERE contactability_bucket IN (
+                        'management_company_route_likely', 'registry_evidence_only',
+                        'needs_route_research'
+                    )),
+                    COUNT(*) FILTER (WHERE contactability_bucket = 'no_usable_route'),
+                    COUNT(*) FILTER (WHERE status = 'accepted'),
+                    COUNT(*) FILTER (WHERE status = 'rejected')
+                FROM latest_routes
+            """)
+            route_metrics_row = cur.fetchone()
+
     def _ts(ts: datetime | None) -> datetime | None:
         if ts is None:
             return None
@@ -643,6 +667,15 @@ def dashboard(request: Request):
                     if rm_summary and rm_summary[0] else 0
                 ),
             },
+            "route_metrics": {
+                "ready_to_contact": route_metrics_row[0] if route_metrics_row else 0,
+                "via_introducer_csp": route_metrics_row[1] if route_metrics_row else 0,
+                "direct_candidate": route_metrics_row[2] if route_metrics_row else 0,
+                "needs_research": route_metrics_row[3] if route_metrics_row else 0,
+                "no_usable_route": route_metrics_row[4] if route_metrics_row else 0,
+                "accepted_routes": route_metrics_row[5] if route_metrics_row else 0,
+                "rejected_routes": route_metrics_row[6] if route_metrics_row else 0,
+            },
         }
     )
 
@@ -657,6 +690,9 @@ def queue(request: Request):
         "date_from": request.query_params.get("date_from", ""),
         "date_to": request.query_params.get("date_to", ""),
         "sort": request.query_params.get("sort", "score"),
+        "route_bucket": request.query_params.get("route_bucket", ""),
+        "named_route": request.query_params.get("named_route", ""),
+        "introducer_match": request.query_params.get("introducer_match", ""),
     }
     try:
         page = max(int(request.query_params.get("page", 1)), 1)
@@ -686,6 +722,31 @@ def queue(request: Request):
     if filters["date_to"]:
         where_clauses.append("c.incorporation_date <= %s")
         params.append(filters["date_to"])
+    if filters.get("route_bucket") in CONTACTABILITY_LABELS:
+        where_clauses.append(
+            """(
+                SELECT rr2.contactability_bucket FROM route_recommendations rr2
+                WHERE rr2.lead_id = c.id AND rr2.status <> 'superseded'
+                ORDER BY rr2.generated_at DESC LIMIT 1
+            ) = %s"""
+        )
+        params.append(filters["route_bucket"])
+    if filters.get("named_route") == "yes":
+        where_clauses.append(
+            """EXISTS (
+                SELECT 1 FROM route_recommendations rr2
+                WHERE rr2.lead_id = c.id
+                  AND rr2.status <> 'superseded'
+                  AND NULLIF(TRIM(rr2.best_route_value), '') IS NOT NULL
+            )"""
+        )
+    if filters.get("introducer_match") == "yes":
+        where_clauses.append(
+            """EXISTS (
+                SELECT 1 FROM introducer_matches im
+                WHERE im.lead_id = c.id AND im.status IN ('pending', 'accepted')
+            )"""
+        )
 
     sort_sql = {
         "score": "qs.priority_score DESC, c.company_name ASC",
@@ -717,10 +778,27 @@ def queue(request: Request):
             qs.refreshed_at,
             c.website,
             qs.reason_codes,
-            ra.follow_up_at
+            ra.follow_up_at,
+            rr.contactability_bucket,
+            rr.best_route_type,
+            rr.best_route_value,
+            rr.confidence,
+            rr.next_action,
+            rr.route_status,
+            rr.generated_at AS route_generated_at,
+            rr.route_candidate_id
         FROM queue_snapshot qs
         JOIN companies c ON c.id = qs.canonical_company_id
         LEFT JOIN rm_actions ra ON ra.company_id = c.id
+        LEFT JOIN LATERAL (
+            SELECT contactability_bucket, best_route_type, best_route_value,
+                   confidence, next_action, status AS route_status, generated_at,
+                   route_candidate_id
+            FROM route_recommendations
+            WHERE lead_id = c.id AND status <> 'superseded'
+            ORDER BY generated_at DESC
+            LIMIT 1
+        ) rr ON TRUE
         WHERE {' AND '.join(where_clauses)}
         ORDER BY {sort_sql}
         LIMIT %s OFFSET %s
@@ -753,6 +831,15 @@ def queue(request: Request):
             "website": sanitize_external_url(row[12]),
             "reason_codes": row[13] or [],
             "follow_up_at": row[14],
+            "route_bucket": row[15],
+            "contactability_label": CONTACTABILITY_LABELS.get(row[15] or "", ""),
+            "best_route_type": row[16],
+            "best_route_value": row[17],
+            "route_confidence": row[18],
+            "route_next_action": row[19],
+            "route_status": row[20],
+            "route_generated_at": row[21],
+            "route_candidate_id": row[22],
         }
         for row in rows
     ]
@@ -775,6 +862,7 @@ def queue(request: Request):
             "actor_names": ACTOR_NAMES,
             "current_actor": (_read_actor(request) or ""),
             "now_date": date.today(),
+            "contactability_labels": CONTACTABILITY_LABELS,
         },
     )
 
@@ -1065,6 +1153,34 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             timeline_rows = cur.fetchall()
 
+            cur.execute(
+                """
+                SELECT id, contactability_bucket, best_route_type, best_route_value,
+                       route_candidate_id, rationale, evidence_summary, missing_data,
+                       next_action, confidence, generated_by, generated_at,
+                       reviewed_by, reviewed_at, status
+                FROM route_recommendations
+                WHERE lead_id = %s
+                ORDER BY generated_at DESC
+                LIMIT 1
+                """,
+                (lead_id,),
+            )
+            route_recommendation_row = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT id, status, match_type, match_strength, evidence, source
+                FROM introducer_matches
+                WHERE lead_id = %s AND status IN ('pending', 'accepted')
+                ORDER BY
+                    CASE match_strength WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                    created_at DESC
+                """,
+                (lead_id,),
+            )
+            introducer_match_rows = cur.fetchall()
+
     score = {
         "score": row[10] if row[10] is not None else 0,
         "tier": row[11] if row[11] is not None else "LOW",
@@ -1180,6 +1296,41 @@ def lead_detail(request: Request, lead_id: UUID):
         for r in timeline_rows
     ]
 
+    route_intelligence = None
+    if route_recommendation_row:
+        route_intelligence = {
+            "id": route_recommendation_row[0],
+            "contactability_bucket": route_recommendation_row[1],
+            "contactability_label": CONTACTABILITY_LABELS.get(
+                route_recommendation_row[1] or "", ""
+            ),
+            "best_route_type": route_recommendation_row[2],
+            "best_route_value": route_recommendation_row[3],
+            "route_candidate_id": route_recommendation_row[4],
+            "rationale": route_recommendation_row[5],
+            "evidence_summary": route_recommendation_row[6] or [],
+            "missing_data": route_recommendation_row[7] or [],
+            "next_action": route_recommendation_row[8],
+            "confidence": route_recommendation_row[9],
+            "generated_by": route_recommendation_row[10],
+            "generated_at": route_recommendation_row[11],
+            "reviewed_by": route_recommendation_row[12],
+            "reviewed_at": route_recommendation_row[13],
+            "status": route_recommendation_row[14],
+        }
+
+    introducer_matches = [
+        {
+            "id": r[0],
+            "status": r[1],
+            "match_type": r[2],
+            "match_strength": r[3],
+            "evidence": r[4],
+            "source": r[5],
+        }
+        for r in introducer_match_rows
+    ]
+
     return templates.TemplateResponse(
         request=request,
         name="lead_detail.html",
@@ -1211,6 +1362,8 @@ def lead_detail(request: Request, lead_id: UUID):
             "current_actor": (_read_actor(request) or ""),
             "signal_details": SIGNAL_DETAILS,
             "timeline": timeline,
+            "route_intelligence": route_intelligence,
+            "introducer_matches": introducer_matches,
         },
     )
 
@@ -1463,6 +1616,49 @@ def lead_assign(
             </td>
             <td>{verify}</td>
         </tr>""")
+
+
+def _review_route_recommendation(
+    lead_id: UUID, recommendation_id: UUID, new_status: str, actor: str
+) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE route_recommendations
+                SET status = %s, reviewed_by = %s, reviewed_at = NOW()
+                WHERE id = %s AND lead_id = %s
+                """,
+                (new_status, actor, recommendation_id, lead_id),
+            )
+            if cur.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Route recommendation not found")
+
+
+@app.post(
+    "/leads/{lead_id}/route-recommendations/{recommendation_id}/accept",
+    response_class=HTMLResponse,
+)
+@write_guard_required
+def accept_route_recommendation(
+    request: Request, lead_id: UUID, recommendation_id: UUID
+):
+    actor = _read_actor(request)
+    _review_route_recommendation(lead_id, recommendation_id, "accepted", actor)
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+
+
+@app.post(
+    "/leads/{lead_id}/route-recommendations/{recommendation_id}/reject",
+    response_class=HTMLResponse,
+)
+@write_guard_required
+def reject_route_recommendation(
+    request: Request, lead_id: UUID, recommendation_id: UUID
+):
+    actor = _read_actor(request)
+    _review_route_recommendation(lead_id, recommendation_id, "rejected", actor)
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 @app.get("/upload", response_class=HTMLResponse)

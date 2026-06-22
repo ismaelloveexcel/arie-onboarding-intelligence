@@ -210,6 +210,83 @@
 </div>
 
 <!-- =========================================================================
+     ROUTE INTELLIGENCE ZONE — Contactability breakdown
+     (answers: "can we reach these prospects?")
+     ========================================================================= -->
+{% if route_metrics %}
+<div class="ds-layer-intelligence ds-card" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Route Intelligence</span>
+    <span class="ds-meta">Contactability breakdown · latest per lead</span>
+  </div>
+
+  {# ── ACTIONABLE STRIP ── #}
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:1rem">
+    <div class="ds-stat-tile {% if route_metrics.ready_to_contact > 0 %}ds-stat-tile-positive{% endif %}">
+      <div class="ds-stat-tile-value">{{ route_metrics.ready_to_contact }}</div>
+      <div class="ds-stat-tile-label">Ready to Contact</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ route_metrics.via_introducer_csp }}</div>
+      <div class="ds-stat-tile-label">Route via Introducer / CSP</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ route_metrics.direct_candidate }}</div>
+      <div class="ds-stat-tile-label">Direct Candidate Found</div>
+    </div>
+    <div class="ds-stat-tile {% if route_metrics.no_usable_route > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ route_metrics.no_usable_route }}</div>
+      <div class="ds-stat-tile-label">No Usable Route</div>
+    </div>
+  </div>
+
+  {# ── FULL BREAKDOWN ── #}
+  <details>
+    <summary style="font-size:12px; font-weight:600; color:#0B3D91; cursor:pointer; padding:.25rem 0; user-select:none">
+      Full breakdown
+      <span class="ds-meta" style="font-weight:400; margin-left:.5rem">
+        {{ route_metrics.accepted_routes }} accepted · {{ route_metrics.rejected_routes }} rejected
+      </span>
+    </summary>
+    <div style="margin-top:.875rem">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Contactability Bucket</th>
+              <th style="text-align:right">Leads</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-contact-ready">Ready to Contact</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.ready_to_contact }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-partial">Route via Introducer / CSP</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.via_introducer_csp }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-partial">Direct Candidate Found</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.direct_candidate }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-missing">Needs Research</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.needs_research }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-missing">No Usable Route</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.no_usable_route }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+</div>
+{% endif %}
+
+<!-- =========================================================================
      REFERENCE ZONE — Queue breakdown + Enrichment Coverage
      (operational data, low urgency)
      ========================================================================= -->

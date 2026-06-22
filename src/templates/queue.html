@@ -100,6 +100,34 @@
       <option value="name" {% if filters.sort == "name" %}selected{% endif %}>Name A–Z</option>
     </select>
   </label>
+  <label>Route Intelligence
+    <select name="route_bucket">
+      <option value="">All buckets</option>
+      {% for value, label in [
+        ('ready_to_contact', 'Ready to Contact'),
+        ('route_via_introducer_csp', 'Route via CSP'),
+        ('direct_candidate_found', 'Direct Candidate Found'),
+        ('management_company_route_likely', 'Management Company Route'),
+        ('registry_evidence_only', 'Registry Evidence Only'),
+        ('needs_route_research', 'Needs Research'),
+        ('no_usable_route', 'No Usable Route')
+      ] %}
+      <option value="{{ value }}" {% if filters.route_bucket == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Named Route
+    <select name="named_route">
+      <option value="">All</option>
+      <option value="yes" {% if filters.named_route == 'yes' %}selected{% endif %}>Has named candidate</option>
+    </select>
+  </label>
+  <label>Introducer Match
+    <select name="introducer_match">
+      <option value="">All</option>
+      <option value="yes" {% if filters.introducer_match == 'yes' %}selected{% endif %}>Existing match</option>
+    </select>
+  </label>
   <button type="submit">Filter</button>
   <a href="/" class="btn btn-secondary">Reset</a>
 </form>
@@ -118,6 +146,7 @@
         <th class="ds-col-hidden">Type</th>
         <th class="ds-col-hidden">Incorporated</th>
         <th class="col-num">Score</th>
+        <th>Route</th>
         <th>Status</th>
         <th class="ds-col-secondary">Assigned</th>
         <th class="ds-col-secondary">Web</th>
@@ -174,6 +203,20 @@
           </div>
         </td>
 
+        {# ── ROUTE INTELLIGENCE BUCKET ── #}
+        <td>
+          {% if row.route_bucket %}
+            <span class="badge badge-contact-{{ 'ready' if row.route_bucket == 'ready_to_contact' else ('partial' if row.route_bucket in ['route_via_introducer_csp', 'direct_candidate_found', 'management_company_route_likely'] else 'missing') }}" title="{{ row.best_route_value or row.route_next_action or '' }}">
+              {{ row.contactability_label }}
+            </span>
+            {% if row.best_route_value %}
+            <div style="font-size:10px; color:#374151; margin-top:2px; font-weight:500">{{ row.best_route_value }}</div>
+            {% endif %}
+          {% else %}
+            <span style="color:#e5e7eb; font-size:11px">—</span>
+          {% endif %}
+        </td>
+
         {# ── STATUS + FOLLOW-UP INDICATOR + ACTION HINT ── #}
         <td>
           <span class="status status-{{ (row.status or 'new')|lower|replace(' ', '-') }}">{{ row.status_label }}</span>
@@ -216,7 +259,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="9" style="padding:3rem 2rem">
+        <td colspan="10" style="padding:3rem 2rem">
           <div class="ds-empty-state">
             <span class="ds-empty-state-icon">🔍</span>
             <span class="ds-empty-state-title">No leads match the current filters</span>
