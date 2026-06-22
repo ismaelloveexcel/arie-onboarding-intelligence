@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 
 from scripts.route_intelligence import _args
 from src import route_intelligence
+from src.config import ACTOR_NAMES
 from src.main import app
+from src.security.write_auth import _SIGNER
 from src.route_intelligence import (
     CONTACTABILITY_LABELS,
     CONTACTABILITY_STATUS_LABELS,
@@ -336,6 +338,10 @@ def _lead_detail_conn_mock(*, route_recommendation_row):
         "",                                       # notes
         None,                                     # contacted_at
         None,                                     # follow_up_at
+        None,                                     # next_action
+        None,                                     # next_action_due_date
+        None,                                     # feedback
+        None,                                     # feedback_note
     )
     cur = MagicMock()
     cur.fetchone.side_effect = [lead_row, None, route_recommendation_row]
@@ -369,6 +375,12 @@ def test_lead_detail_renders_action_recommendation_panel():
         None,                               # reviewed_by
         None,                               # reviewed_at
         "suggested",                        # status
+        None,                               # secondary_contact_route
+        None,                               # route_source_url
+        "MNS registry",                     # route_source_label
+        "registry",                         # route_source_type
+        "system_detected",                  # route_entry_method
+        None,                               # route_last_checked_at
     )
     with patch(
         "src.main.get_conn",
@@ -382,6 +394,10 @@ def test_lead_detail_renders_action_recommendation_panel():
     assert "Suggested RM next action" in resp.text
     # Opener is offered for a ready route, clearly flagged as a draft.
     assert "Suggested opener" in resp.text
+    # RM feedback capture + route provenance are exposed.
+    assert "RM Feedback" in resp.text
+    assert "Provenance" in resp.text
+    assert "MNS registry" in resp.text  # route_source_label
 
 
 def test_lead_detail_without_route_intelligence_shows_fallback():
@@ -393,3 +409,80 @@ def test_lead_detail_without_route_intelligence_shows_fallback():
 
     assert resp.status_code == 200
     assert "No route intelligence generated for this lead yet" in resp.text
+
+
+# --- RM feedback update flow ------------------------------------------------
+
+def _signed_actor_cookie():
+    actor = ACTOR_NAMES[0] if ACTOR_NAMES else "pilot-user"
+    return _SIGNER.sign(actor.encode("utf-8")).decode("ascii")
+
+
+def test_lead_feedback_update_flow_writes_rm_actions_and_audit():
+    lead_id = uuid.uuid4()
+    cursor = MagicMock()
+    cursor.fetchone.return_value = (None, None, None, None)  # existing feedback row
+    cursor_cm = MagicMock()
+    cursor_cm.__enter__.return_value = cursor
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_cm
+    connection_cm = MagicMock()
+    connection_cm.__enter__.return_value = connection
+
+    client.cookies.set("actor", _signed_actor_cookie())
+    try:
+        with patch("src.main.get_conn", return_value=connection_cm):
+            response = client.post(
+                f"/leads/{lead_id}/feedback",
+                data={
+                    "feedback": "meeting_booked",
+                    "feedback_note": "Intro call booked for next week",
+                    "next_action": "Send proposal pack",
+                    "next_action_due_date": "2026-07-01",
+                },
+                follow_redirects=False,
+            )
+    finally:
+        client.cookies.clear()
+
+    assert response.status_code == 303
+    sql = "\n".join(str(call.args[0]) for call in cursor.execute.call_args_list)
+    assert "INSERT INTO rm_actions" in sql
+    assert "INSERT INTO audit_log" in sql
+    assert "lead_scores" not in sql
+    assert "outreach" not in sql.lower()
+    assert any(
+        "meeting_booked" in call.args[1]
+        for call in cursor.execute.call_args_list
+        if len(call.args) > 1 and isinstance(call.args[1], tuple)
+    )
+    connection.commit.assert_called_once()
+
+
+def test_lead_feedback_rejects_unknown_value_before_db():
+    lead_id = uuid.uuid4()
+    client.cookies.set("actor", _signed_actor_cookie())
+    try:
+        with patch("src.main.get_conn") as get_conn:
+            response = client.post(
+                f"/leads/{lead_id}/feedback",
+                data={"feedback": "definitely_not_valid"},
+                follow_redirects=False,
+            )
+    finally:
+        client.cookies.clear()
+
+    assert response.status_code == 422
+    get_conn.assert_not_called()
+
+
+def test_lead_feedback_requires_write_actor():
+    lead_id = uuid.uuid4()
+    with patch("src.main.get_conn") as get_conn:
+        response = client.post(
+            f"/leads/{lead_id}/feedback",
+            data={"feedback": "useful"},
+            follow_redirects=False,
+        )
+    assert response.status_code == 401
+    get_conn.assert_not_called()

@@ -1067,7 +1067,8 @@ def lead_detail(request: Request, lead_id: UUID):
                        c.incorporation_date, c.registered_address, c.source_system,
                        c.source_ref, c.verify_url, c.website,
                        ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
-                       ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at
+                       ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at,
+                       ra.next_action, ra.next_action_due_date, ra.feedback, ra.feedback_note
                 FROM companies c
                 LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
                 LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -1213,7 +1214,9 @@ def lead_detail(request: Request, lead_id: UUID):
                 SELECT id, contactability_bucket, best_route_type, best_route_value,
                        route_candidate_id, rationale, evidence_summary, missing_data,
                        next_action, confidence, generated_by, generated_at,
-                       reviewed_by, reviewed_at, status
+                       reviewed_by, reviewed_at, status,
+                       secondary_contact_route, route_source_url, route_source_label,
+                       route_source_type, route_entry_method, route_last_checked_at
                 FROM route_recommendations
                 WHERE lead_id = %s
                 ORDER BY generated_at DESC
@@ -1249,6 +1252,10 @@ def lead_detail(request: Request, lead_id: UUID):
         "notes": row[17] or "",
         "contacted_at": row[18],
         "follow_up_at": row[19],
+        "next_action": row[20] or "",
+        "next_action_due_date": row[21],
+        "feedback": row[22] or "",
+        "feedback_note": row[23] or "",
     }
     audit_rendered = [
         {
@@ -1384,6 +1391,12 @@ def lead_detail(request: Request, lead_id: UUID):
             "reviewed_by": route_recommendation_row[12],
             "reviewed_at": route_recommendation_row[13],
             "status": route_recommendation_row[14],
+            "secondary_contact_route": route_recommendation_row[15],
+            "route_source_url": sanitize_external_url(route_recommendation_row[16]),
+            "route_source_label": route_recommendation_row[17],
+            "route_source_type": route_recommendation_row[18],
+            "route_entry_method": route_recommendation_row[19] or "system_detected",
+            "route_last_checked_at": route_recommendation_row[20],
         }
 
     introducer_matches = [
@@ -1541,6 +1554,99 @@ def lead_action(
         None if not effective_follow_up else datetime.strptime(effective_follow_up, "%Y-%m-%d"),
         saved=True,
     )
+
+
+_FEEDBACK_VALUES = {
+    "useful",
+    "wrong_contact",
+    "not_relevant",
+    "duplicate",
+    "contacted",
+    "meeting_booked",
+    "won",
+    "lost",
+}
+
+
+@app.post("/leads/{lead_id}/feedback", response_class=HTMLResponse)
+@write_guard_required
+def lead_feedback(
+    request: Request,
+    lead_id: UUID,
+    feedback: str = Form(""),
+    feedback_note: str = Form(""),
+    next_action: str = Form(""),
+    next_action_due_date: str = Form(""),
+):
+    """Record RM feedback and next-action on the lead's rm_actions row.
+
+    Additive to the existing RM action flow: it touches only the feedback /
+    next-action columns and writes an audit_log entry. Status, notes, and
+    follow-up handled by /action are left untouched.
+    """
+    feedback_value = (feedback or "").strip()
+    if feedback_value and feedback_value not in _FEEDBACK_VALUES:
+        raise HTTPException(status_code=422, detail="Unknown feedback value")
+    actor = _read_actor(request) or "unknown"
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT feedback, feedback_note, next_action, next_action_due_date "
+                "FROM rm_actions WHERE company_id = %s",
+                (lead_id,),
+            )
+            existing = cur.fetchone()
+            old_value = None if existing is None else {
+                "feedback": existing[0],
+                "feedback_note": existing[1],
+                "next_action": existing[2],
+                "next_action_due_date": (
+                    existing[3].isoformat() if existing[3] else None
+                ),
+            }
+
+            cur.execute(
+                """
+                INSERT INTO rm_actions
+                    (company_id, feedback, feedback_note, next_action, next_action_due_date)
+                VALUES (
+                    %s, NULLIF(%s, ''), NULLIF(%s, ''), NULLIF(%s, ''),
+                    NULLIF(%s, '')::date
+                )
+                ON CONFLICT (company_id) DO UPDATE SET
+                    feedback = EXCLUDED.feedback,
+                    feedback_note = EXCLUDED.feedback_note,
+                    next_action = EXCLUDED.next_action,
+                    next_action_due_date = EXCLUDED.next_action_due_date,
+                    updated_at = NOW()
+                """,
+                (
+                    lead_id,
+                    feedback_value,
+                    feedback_note,
+                    next_action,
+                    next_action_due_date,
+                ),
+            )
+
+            new_value = {
+                "feedback": feedback_value or None,
+                "feedback_note": feedback_note or None,
+                "next_action": next_action or None,
+                "next_action_due_date": next_action_due_date or None,
+            }
+            cur.execute(
+                """
+                INSERT INTO audit_log
+                    (entity_type, entity_id, action, actor, old_value, new_value, ip_address)
+                VALUES ('company', %s, 'rm_feedback_updated', %s, %s, %s, NULL)
+                """,
+                (lead_id, actor, Jsonb(old_value), Jsonb(new_value)),
+            )
+            conn.commit()
+
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 @app.post("/leads/{lead_id}/contacts", response_class=HTMLResponse)
@@ -1968,6 +2074,9 @@ def upload_confirm(request: Request, upload_id: UUID):
 
 _AUDIT_ACTION_LABELS = {
     "rm_action_updated": "Lead updated",
+    "rm_feedback_updated": "RM feedback recorded",
+    "route_recommendation_accepted": "Route accepted",
+    "route_recommendation_rejected": "Route rejected",
     "quick_assign": "Quick assign",
     "lead_status_changed": "Status changed",
     "lead_assigned": "Reassigned",

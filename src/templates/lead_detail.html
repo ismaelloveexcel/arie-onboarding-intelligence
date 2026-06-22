@@ -129,7 +129,7 @@
       'research_required': '#fffbeb',
       'no_compliant_route_found': '#f9fafb'
      }[_status] %}
-  <div class="ds-action-recommendation" id="action-panel"
+  <div class="ds-action-recommendation" id="action-recommendation"
        style="margin-top:.875rem; border:1.5px solid {{ _accent }}33; background:{{ _bg }}; border-radius:10px; padding:1rem 1.125rem">
     <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap">
       <div style="display:flex; align-items:center; gap:.75rem">
@@ -185,7 +185,7 @@
     {% endif %}
   </div>
   {% else %}
-  <div class="ds-action-recommendation" id="action-panel"
+  <div class="ds-action-recommendation" id="action-recommendation"
        style="margin-top:.875rem; border:1px dashed #d1d5db; background:#f9fafb; border-radius:10px; padding:.875rem 1.125rem">
     <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Action recommendation</span>
     <div style="font-size:13px; color:#374151; margin-top:.3rem">No route intelligence generated for this lead yet. Run the route intelligence operator to populate a recommended decision.</div>
@@ -240,6 +240,26 @@
         </div>
       </div>
       {% endif %}
+      {# ── PROVENANCE — source, entry method, freshness ── #}
+      <div style="margin-bottom:.25rem; display:flex; gap:.4rem; flex-wrap:wrap; align-items:center">
+        <span class="field-label" style="margin-right:.2rem">Provenance</span>
+        <span class="ds-chip ds-chip-blue" style="font-size:10px" title="How this route entered the system">
+          {{ route_intelligence.route_entry_method | replace('_', ' ') | title }}
+        </span>
+        {% if route_intelligence.confidence %}
+        <span class="confidence confidence-{{ route_intelligence.confidence }}" style="font-size:10px">{{ route_intelligence.confidence | replace('_',' ') | title }} confidence</span>
+        {% endif %}
+        {% if route_intelligence.route_source_label %}
+          {% if route_intelligence.route_source_url %}
+          <a href="{{ route_intelligence.route_source_url }}" target="_blank" rel="noopener noreferrer" style="font-size:11px; color:#0057b8">↗ {{ route_intelligence.route_source_label }}</a>
+          {% else %}
+          <span style="font-size:11px; color:#374151">{{ route_intelligence.route_source_label }}</span>
+          {% endif %}
+        {% endif %}
+        {% if route_intelligence.route_last_checked_at %}
+        <span class="ds-meta" style="font-size:10px">checked {{ route_intelligence.route_last_checked_at.strftime('%d %b %Y') }}</span>
+        {% endif %}
+      </div>
       {% if route_intelligence.status == 'suggested' %}
       <div style="display:flex; gap:.5rem; margin-top:.75rem; padding-top:.75rem; border-top:1px solid #e5e7eb">
         <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/accept">
@@ -706,6 +726,50 @@
         </div>
         <button type="submit" class="btn btn-primary">Save</button>
         {% if saved %}<div class="saved-flag">✓ Saved</div>{% endif %}
+      </form>
+    </div>
+
+    {# ── DECISION: RM Feedback + Next Action ── #}
+    <div class="card ds-layer-decision" id="feedback-panel">
+      <h2>RM Feedback</h2>
+      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
+        Tell the system whether this lead was useful and what happens next. Feeds
+        the acquisition dashboard and future prioritisation.
+      </p>
+      <form method="post" action="/leads/{{ lead.id }}/feedback" class="form-stack">
+        <div>
+          <label>Outcome / feedback</label>
+          <select name="feedback">
+            <option value="">— No feedback —</option>
+            {% for value, label in [
+              ('useful', 'Useful lead'),
+              ('wrong_contact', 'Wrong contact'),
+              ('not_relevant', 'Not relevant'),
+              ('duplicate', 'Duplicate'),
+              ('contacted', 'Contacted'),
+              ('meeting_booked', 'Meeting booked'),
+              ('won', 'Won'),
+              ('lost', 'Lost')
+            ] %}
+              <option value="{{ value }}" {% if action and action.feedback == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Feedback note</label>
+          <textarea name="feedback_note" placeholder="Optional context for the team">{{ action.feedback_note if action else "" }}</textarea>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>Next action</label>
+            <input type="text" name="next_action" value="{{ action.next_action if action else '' }}" placeholder="e.g. Send proposal pack">
+          </div>
+          <div>
+            <label>Next action due</label>
+            <input type="date" name="next_action_due_date" value="{{ action.next_action_due_date if action and action.next_action_due_date else '' }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save feedback</button>
       </form>
     </div>
 
