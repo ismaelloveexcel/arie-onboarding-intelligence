@@ -698,6 +698,35 @@ def dashboard(request: Request):
                 ),
             },
             "contactability_status_labels": CONTACTABILITY_STATUS_LABELS,
+            # Management-facing acquisition rollup. Built only from data we hold:
+            # the contactability projection, the route review state, and RM
+            # follow-up/contact counts. Meetings/replies/won are intentionally
+            # absent — no field backs them yet (see RM workflow stage).
+            "client_acquisition": {
+                "rm_ready": route_metrics_row[0] if route_metrics_row else 0,
+                "warm_introducer": route_metrics_row[1] if route_metrics_row else 0,
+                "with_contact_route": (
+                    (route_metrics_row[0] + route_metrics_row[1])
+                    if route_metrics_row else 0
+                ),
+                "requires_research": (
+                    (route_metrics_row[2] + route_metrics_row[3])
+                    if route_metrics_row else 0
+                ),
+                "no_compliant_route": route_metrics_row[4] if route_metrics_row else 0,
+                "accepted_routes": route_metrics_row[5] if route_metrics_row else 0,
+                "overdue_followups": rm_summary[3] if rm_summary else 0,
+                "contacted": rm_summary[1] if rm_summary else 0,
+                "coverage_pct": _pct(
+                    (
+                        route_metrics_row[0] + route_metrics_row[1]
+                        + route_metrics_row[2] + route_metrics_row[3]
+                        + route_metrics_row[4]
+                    )
+                    if route_metrics_row else 0,
+                    vol_row[0] if vol_row else 0,
+                ),
+            },
         }
     )
 

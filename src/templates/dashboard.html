@@ -210,34 +210,62 @@
 </div>
 
 <!-- =========================================================================
-     ROUTE INTELLIGENCE ZONE — Contactability breakdown
-     (answers: "can we reach these prospects?")
+     CLIENT ACQUISITION ZONE — management-facing acquisition readiness
+     (answers: "how many leads can we actually act on, and how covered are we?")
      ========================================================================= -->
-{% if route_metrics %}
-<div class="ds-layer-intelligence ds-card" style="margin-bottom:1.25rem">
+{% if client_acquisition %}
+<div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
   <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
-    <span>Route Intelligence</span>
-    <span class="ds-meta">Contactability breakdown · latest per lead</span>
+    <span>Client Acquisition</span>
+    <span class="ds-meta">Acquisition readiness · latest route per lead</span>
   </div>
 
-  {# ── ACTIONABLE STRIP ── #}
+  {# ── ACQUISITION KPIs ── #}
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:.875rem">
+    <div class="ds-stat-tile {% if client_acquisition.rm_ready > 0 %}ds-stat-tile-positive{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.rm_ready }}</div>
+      <div class="ds-stat-tile-label">RM-Ready Leads</div>
+      <div class="ds-stat-tile-sub">Contact route confirmed</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.with_contact_route }}</div>
+      <div class="ds-stat-tile-label">With Contact Route</div>
+      <div class="ds-stat-tile-sub">Direct or introducer</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.warm_introducer }}</div>
+      <div class="ds-stat-tile-label">Warm Introducer Routes</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.requires_research }}</div>
+      <div class="ds-stat-tile-label">Requires Research</div>
+    </div>
+  </div>
+
+  {# ── COVERAGE + WORKFLOW ── #}
   <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:1rem">
-    <div class="ds-stat-tile {% if route_metrics.ready_to_contact > 0 %}ds-stat-tile-positive{% endif %}">
-      <div class="ds-stat-tile-value">{{ route_metrics.ready_to_contact }}</div>
-      <div class="ds-stat-tile-label">Ready to Contact</div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ "%.1f"|format(client_acquisition.coverage_pct) }}%</div>
+      <div class="ds-stat-tile-label">Contactability Coverage</div>
+      <div class="ds-stat-tile-sub">Leads with a route assessed</div>
     </div>
     <div class="ds-stat-tile">
-      <div class="ds-stat-tile-value">{{ route_metrics.via_introducer_csp }}</div>
-      <div class="ds-stat-tile-label">Route via Introducer / CSP</div>
+      <div class="ds-stat-tile-value">{{ client_acquisition.contacted }}</div>
+      <div class="ds-stat-tile-label">Contacted</div>
+    </div>
+    <div class="ds-stat-tile {% if client_acquisition.overdue_followups > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.overdue_followups }}</div>
+      <div class="ds-stat-tile-label">Overdue Follow-ups</div>
     </div>
     <div class="ds-stat-tile">
-      <div class="ds-stat-tile-value">{{ route_metrics.direct_candidate }}</div>
-      <div class="ds-stat-tile-label">Direct Candidate Found</div>
+      <div class="ds-stat-tile-value">{{ client_acquisition.accepted_routes }}</div>
+      <div class="ds-stat-tile-label">Routes Accepted</div>
     </div>
-    <div class="ds-stat-tile {% if route_metrics.no_usable_route > 0 %}ds-stat-tile-risk{% endif %}">
-      <div class="ds-stat-tile-value">{{ route_metrics.no_usable_route }}</div>
-      <div class="ds-stat-tile-label">No Usable Route</div>
-    </div>
+  </div>
+
+  <div class="ds-meta" style="margin-bottom:.5rem">
+    Meetings booked, replies, and won clients will appear here once RM outcome
+    feedback is captured.
   </div>
 
   {# ── FULL BREAKDOWN ── #}

@@ -123,6 +123,10 @@ def test_dashboard_seeded_data():
     assert "12" in resp.text    # leads_7d
     assert "New" in resp.text
     assert "Acme Partners" in resp.text
+    # Client Acquisition section renders with coverage and RM-ready framing
+    assert "Client Acquisition" in resp.text
+    assert "Contactability Coverage" in resp.text
+    assert "RM-Ready Leads" in resp.text
 
 
 def test_dashboard_stale_source_flag():
