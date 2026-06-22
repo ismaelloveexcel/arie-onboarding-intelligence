@@ -11,8 +11,12 @@ from scripts.route_intelligence import _args
 from src import route_intelligence
 from src.main import app
 from src.route_intelligence import (
+    CONTACTABILITY_LABELS,
+    CONTACTABILITY_STATUS_LABELS,
     build_registered_office_clusters,
     build_route_recommendation,
+    contactability_status,
+    contactability_status_label,
     match_introducers,
     normalise_address,
 )
@@ -130,6 +134,36 @@ def test_operator_requires_bounded_target_and_enforces_caps():
         _args(["--top-high-fit", "101"])
     args = _args(["--seeded"])
     assert args.write is False
+
+
+@pytest.mark.parametrize(
+    ("bucket", "expected_status"),
+    [
+        ("ready_to_contact", "ready_to_contact"),
+        ("route_via_introducer_csp", "route_via_introducer"),
+        ("direct_candidate_found", "research_required"),
+        ("management_company_route_likely", "research_required"),
+        ("registry_evidence_only", "research_required"),
+        ("needs_route_research", "research_required"),
+        ("no_usable_route", "no_compliant_route_found"),
+    ],
+)
+def test_contactability_status_projects_every_internal_bucket(bucket, expected_status):
+    assert contactability_status(bucket) == expected_status
+    assert contactability_status_label(bucket) == CONTACTABILITY_STATUS_LABELS[expected_status]
+
+
+def test_contactability_status_covers_all_internal_buckets():
+    # Every rich internal bucket must have an explicit projection — no bucket
+    # may silently fall through to the unknown default.
+    for bucket in CONTACTABILITY_LABELS:
+        assert bucket in route_intelligence._BUCKET_TO_STATUS
+
+
+def test_contactability_status_unknown_defaults_to_research_required():
+    assert contactability_status(None) == "research_required"
+    assert contactability_status("") == "research_required"
+    assert contactability_status("not_a_real_bucket") == "research_required"
 
 
 def test_route_intelligence_has_no_fetch_outreach_or_scoring_logic():

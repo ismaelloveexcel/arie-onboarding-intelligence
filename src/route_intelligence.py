@@ -23,6 +23,46 @@ CONTACTABILITY_LABELS = {
     "no_usable_route": "No Usable Route",
 }
 
+# --- Simplified contactability status (presentation/API alias layer) ---------
+# The seven CONTACTABILITY_LABELS buckets above remain the internal source of
+# truth (they carry the finer route grading used for evidence and analytics).
+# RM-facing surfaces and any external API consume a simplified four-value
+# status. This is a read-time projection only — nothing is persisted from here,
+# and no internal bucket is collapsed in storage.
+CONTACTABILITY_STATUS_LABELS = {
+    "ready_to_contact": "Ready to Contact",
+    "route_via_introducer": "Route via Introducer",
+    "research_required": "Research Required",
+    "no_compliant_route_found": "No Compliant Route Found",
+}
+
+# direct_candidate_found maps to research_required on purpose: an online route
+# (website/LinkedIn) exists but no contact channel is confirmed, so the honest
+# RM action is to research the channel rather than to contact immediately.
+_BUCKET_TO_STATUS = {
+    "ready_to_contact": "ready_to_contact",
+    "direct_candidate_found": "research_required",
+    "route_via_introducer_csp": "route_via_introducer",
+    "management_company_route_likely": "research_required",
+    "registry_evidence_only": "research_required",
+    "needs_route_research": "research_required",
+    "no_usable_route": "no_compliant_route_found",
+}
+
+
+def contactability_status(bucket: str | None) -> str:
+    """Project a 7-value internal bucket onto the 4-value contactability status.
+
+    Unknown or missing buckets fall back to ``research_required`` — the honest
+    default when we cannot assert a usable route.
+    """
+    return _BUCKET_TO_STATUS.get(bucket or "", "research_required")
+
+
+def contactability_status_label(bucket: str | None) -> str:
+    """Human-readable label for the simplified status of an internal bucket."""
+    return CONTACTABILITY_STATUS_LABELS[contactability_status(bucket)]
+
 _LEGAL_SUFFIXES = {
     "co",
     "company",

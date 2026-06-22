@@ -40,7 +40,12 @@ from src.domain.statuses import (
 )
 from src.ingestion.companies_house import run_ch_enrichment_batch
 from src.ingestion.lei_backfill import backfill_lei_company_links
-from src.route_intelligence import CONTACTABILITY_LABELS
+from src.route_intelligence import (
+    CONTACTABILITY_LABELS,
+    CONTACTABILITY_STATUS_LABELS,
+    contactability_status,
+    contactability_status_label,
+)
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
 from src.security.write_auth import write_guard_required
 from src.security.url_safety import sanitize_external_url
@@ -676,6 +681,21 @@ def dashboard(request: Request):
                 "accepted_routes": route_metrics_row[5] if route_metrics_row else 0,
                 "rejected_routes": route_metrics_row[6] if route_metrics_row else 0,
             },
+            # Simplified 4-value rollup (alias layer) over the rich route_metrics
+            # above. direct_candidate folds into research_required, consistent
+            # with contactability_status().
+            "contactability_status_metrics": {
+                "ready_to_contact": route_metrics_row[0] if route_metrics_row else 0,
+                "route_via_introducer": route_metrics_row[1] if route_metrics_row else 0,
+                "research_required": (
+                    (route_metrics_row[2] + route_metrics_row[3])
+                    if route_metrics_row else 0
+                ),
+                "no_compliant_route_found": (
+                    route_metrics_row[4] if route_metrics_row else 0
+                ),
+            },
+            "contactability_status_labels": CONTACTABILITY_STATUS_LABELS,
         }
     )
 
@@ -833,6 +853,10 @@ def queue(request: Request):
             "follow_up_at": row[14],
             "route_bucket": row[15],
             "contactability_label": CONTACTABILITY_LABELS.get(row[15] or "", ""),
+            "contactability_status": contactability_status(row[15]) if row[15] else "",
+            "contactability_status_label": (
+                contactability_status_label(row[15]) if row[15] else ""
+            ),
             "best_route_type": row[16],
             "best_route_value": row[17],
             "route_confidence": row[18],
@@ -1303,6 +1327,10 @@ def lead_detail(request: Request, lead_id: UUID):
             "contactability_bucket": route_recommendation_row[1],
             "contactability_label": CONTACTABILITY_LABELS.get(
                 route_recommendation_row[1] or "", ""
+            ),
+            "contactability_status": contactability_status(route_recommendation_row[1]),
+            "contactability_status_label": contactability_status_label(
+                route_recommendation_row[1]
             ),
             "best_route_type": route_recommendation_row[2],
             "best_route_value": route_recommendation_row[3],
