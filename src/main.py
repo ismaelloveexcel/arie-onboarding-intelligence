@@ -1619,10 +1619,38 @@ def lead_assign(
 
 
 def _review_route_recommendation(
-    lead_id: UUID, recommendation_id: UUID, new_status: str, actor: str
-) -> None:
+    request: Request, lead_id: UUID, recommendation_id: UUID, new_status: str
+) -> RedirectResponse:
+    """Accept/reject a route recommendation and record an auditable review.
+
+    Updates only the route-intelligence review surface — never scoring, RM
+    actions, or outreach. Mirrors the recommendation decision onto any linked
+    introducer match and writes a single audit_log entry. The actor check runs
+    before any DB access so unauthenticated calls never touch the database.
+    """
+    actor = _read_actor(request)
+    if not actor:
+        raise HTTPException(
+            status_code=400, detail="Actor required to review a route recommendation"
+        )
     with get_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT status, route_candidate_id, contactability_bucket,
+                       best_route_type, best_route_value, evidence_summary
+                FROM route_recommendations
+                WHERE id = %s AND lead_id = %s
+                """,
+                (recommendation_id, lead_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(
+                    status_code=404, detail="Route recommendation not found"
+                )
+            current_status, introducer_id = row[0], row[1]
+
             cur.execute(
                 """
                 UPDATE route_recommendations
@@ -1631,34 +1659,53 @@ def _review_route_recommendation(
                 """,
                 (new_status, actor, recommendation_id, lead_id),
             )
-            if cur.rowcount == 0:
-                raise HTTPException(status_code=404, detail="Route recommendation not found")
+
+            if introducer_id is not None:
+                cur.execute(
+                    """
+                    UPDATE introducer_matches
+                    SET status = %s, reviewed_by = %s, reviewed_at = NOW()
+                    WHERE lead_id = %s AND introducer_id = %s
+                    """,
+                    (new_status, actor, lead_id, introducer_id),
+                )
+
+            cur.execute(
+                """
+                INSERT INTO audit_log
+                    (entity_type, entity_id, action, actor, old_value, new_value)
+                VALUES ('company', %s, %s, %s, %s, %s)
+                """,
+                (
+                    lead_id,
+                    f"route_recommendation_{new_status}",
+                    actor,
+                    Jsonb({"recommendation_id": str(recommendation_id), "status": current_status}),
+                    Jsonb({"recommendation_id": str(recommendation_id), "status": new_status}),
+                ),
+            )
+        conn.commit()
+    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
 
 
 @app.post(
     "/leads/{lead_id}/route-recommendations/{recommendation_id}/accept",
     response_class=HTMLResponse,
 )
-@write_guard_required
 def accept_route_recommendation(
     request: Request, lead_id: UUID, recommendation_id: UUID
 ):
-    actor = _read_actor(request)
-    _review_route_recommendation(lead_id, recommendation_id, "accepted", actor)
-    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+    return _review_route_recommendation(request, lead_id, recommendation_id, "accepted")
 
 
 @app.post(
     "/leads/{lead_id}/route-recommendations/{recommendation_id}/reject",
     response_class=HTMLResponse,
 )
-@write_guard_required
 def reject_route_recommendation(
     request: Request, lead_id: UUID, recommendation_id: UUID
 ):
-    actor = _read_actor(request)
-    _review_route_recommendation(lead_id, recommendation_id, "rejected", actor)
-    return RedirectResponse(url=f"/leads/{lead_id}", status_code=303)
+    return _review_route_recommendation(request, lead_id, recommendation_id, "rejected")
 
 
 @app.get("/upload", response_class=HTMLResponse)

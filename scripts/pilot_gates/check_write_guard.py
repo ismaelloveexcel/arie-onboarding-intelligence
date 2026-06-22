@@ -27,7 +27,7 @@ def _is_write_guard_decorator(node: ast.AST) -> bool:
 def check_paths(paths: list[Path]) -> list[str]:
     failures: list[str] = []
     for path in paths:
-        source = path.read_text()
+        source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
         for node in ast.walk(tree):
             if not isinstance(node, ast.FunctionDef):

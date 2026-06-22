@@ -35,6 +35,9 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
                                       pending_followups, overdue_followups), ...]
       fetchone[7] = rm_summary  (total_with_actions, contacted, converted,
                                   overdue, avg_days_to_contact)
+      fetchone[8] = route_metrics_row (ready_to_contact, via_introducer_csp,
+                                       direct_candidate, needs_research,
+                                       no_usable_route, accepted, rejected)
     """
     mock_cur = MagicMock()
     mock_cur.fetchone.side_effect = fetchone_returns
@@ -63,6 +66,7 @@ _EMPTY_FETCHONE = [
     (0, 0, 0, 0, 0),    # score_row
     (0, 0, 0, 0, 0, 0, 0),  # cov_row
     (0, 0, 0, 0, None), # rm_summary
+    (0, 0, 0, 0, 0, 0, 0),  # route_metrics_row
 ]
 _EMPTY_FETCHALL = [[], [], []]  # status_counts, top_introducers, rm_productivity
 
@@ -103,6 +107,7 @@ def test_dashboard_seeded_data():
         (80, 120, 200, 100, 500),                             # score_row
         (300, 150, 80, 70, 1200, 900, 200),                   # cov_row
         (60, 40, 10, 2, 3.5),                                 # rm_summary
+        (25, 18, 12, 40, 6, 9, 3),                            # route_metrics_row
     ]
     fetchall_returns = [
         [("New", 150), ("Reviewing", 80), ("Qualified", 60)],
@@ -133,6 +138,7 @@ def test_dashboard_stale_source_flag():
         (0, 0, 0, 0, 0),                                       # score_row
         (50, 25, 10, 8, 200, 150, 30),                         # cov_row
         (0, 0, 0, 0, None),                                    # rm_summary
+        (0, 0, 0, 0, 0, 0, 0),                                 # route_metrics_row
     ]
     fetchall_returns = [[], [], []]  # status_counts, top_introducers, rm_productivity
 
