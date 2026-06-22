@@ -38,6 +38,9 @@ def _make_conn_mock(fetchone_returns: list, fetchall_returns: list):
       fetchone[8] = route_metrics_row (ready_to_contact, via_introducer_csp,
                                        direct_candidate, needs_research,
                                        no_usable_route, accepted, rejected)
+      fetchall[3] = top_opportunity_rows [(company_name, jurisdiction,
+                       entity_type, id, score, tier, bucket, best_route_type,
+                       best_route_value, confidence, next_action, has_evidence)]
     """
     mock_cur = MagicMock()
     mock_cur.fetchone.side_effect = fetchone_returns
@@ -68,7 +71,7 @@ _EMPTY_FETCHONE = [
     (0, 0, 0, 0, None), # rm_summary
     (0, 0, 0, 0, 0, 0, 0),  # route_metrics_row
 ]
-_EMPTY_FETCHALL = [[], [], []]  # status_counts, top_introducers, rm_productivity
+_EMPTY_FETCHALL = [[], [], [], []]  # status_counts, top_introducers, rm_productivity, top_opportunities
 
 
 # ---------------------------------------------------------------------------
@@ -113,6 +116,14 @@ def test_dashboard_seeded_data():
         [("New", 150), ("Reviewing", 80), ("Qualified", 60)],
         [("Acme Partners", 45), ("Global Funds Ltd", 30)],
         [],  # rm_productivity (empty for this test)
+        [   # top_opportunity_rows
+            (
+                "Zephyr Holdings Ltd", "Mauritius", "GLOBAL BUSINESS COMPANY",
+                "00000000-0000-0000-0000-0000000000aa", 88, "HIGH",
+                "ready_to_contact", "direct", "info@zephyr.mu", "high",
+                "RM to verify the saved route.", True,
+            ),
+        ],
     ]
 
     with patch("src.main.get_conn", return_value=_make_conn_mock(fetchone_returns, fetchall_returns)):
@@ -127,6 +138,9 @@ def test_dashboard_seeded_data():
     assert "Client Acquisition" in resp.text
     assert "Contactability Coverage" in resp.text
     assert "RM-Ready Leads" in resp.text
+    # Top Opportunities section renders the actionable lead
+    assert "Top Opportunities" in resp.text
+    assert "Zephyr Holdings Ltd" in resp.text
 
 
 def test_dashboard_stale_source_flag():
@@ -144,7 +158,7 @@ def test_dashboard_stale_source_flag():
         (0, 0, 0, 0, None),                                    # rm_summary
         (0, 0, 0, 0, 0, 0, 0),                                 # route_metrics_row
     ]
-    fetchall_returns = [[], [], []]  # status_counts, top_introducers, rm_productivity
+    fetchall_returns = [[], [], [], []]  # status, introducers, rm_productivity, top_opportunities
 
     with patch("src.main.get_conn", return_value=_make_conn_mock(fetchone_returns, fetchall_returns)):
         resp = client.get("/dashboard")

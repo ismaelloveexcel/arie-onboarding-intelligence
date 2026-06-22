@@ -21,6 +21,7 @@ from src.route_intelligence import (
     contactability_decision,
     contactability_status,
     contactability_status_label,
+    lead_readiness,
     match_introducers,
     normalise_address,
     suggested_opener,
@@ -233,6 +234,65 @@ def test_suggested_opener_introducer_route_names_the_route():
     assert "Example Corporate Services Limited" in opener
 
 
+def test_lead_readiness_rm_ready_when_all_gates_pass():
+    gate = lead_readiness(
+        recommendation={
+            "contactability_bucket": "ready_to_contact",
+            "confidence": "high",
+            "evidence_summary": ["Stored company contact route with provenance."],
+            "next_action": "RM to verify the saved route.",
+        },
+        tier="HIGH",
+    )
+    assert gate["is_rm_ready"] is True
+    assert gate["readiness"] == "rm_ready"
+    assert gate["blocking_reasons"] == []
+
+
+def test_lead_readiness_blocks_ready_route_without_evidence():
+    gate = lead_readiness(
+        recommendation={
+            "contactability_bucket": "ready_to_contact",
+            "confidence": "high",
+            "evidence_summary": [],
+            "next_action": "RM to verify the saved route.",
+        },
+        tier="HIGH",
+    )
+    assert gate["is_rm_ready"] is False
+    assert gate["readiness"] == "research_first"
+    assert "No source/evidence attached" in gate["blocking_reasons"]
+
+
+def test_lead_readiness_no_route_is_no_compliant_route():
+    gate = lead_readiness(
+        recommendation={
+            "contactability_bucket": "no_usable_route",
+            "confidence": "low",
+            "evidence_summary": [],
+            "next_action": "Research a route.",
+        },
+        tier="HIGH",
+    )
+    assert gate["is_rm_ready"] is False
+    assert gate["readiness"] == "no_compliant_route"
+    assert "No compliant contact or introducer route" in gate["blocking_reasons"]
+
+
+def test_lead_readiness_low_tier_blocks_even_with_route():
+    gate = lead_readiness(
+        recommendation={
+            "contactability_bucket": "route_via_introducer_csp",
+            "confidence": "high",
+            "evidence_summary": ["Exact registered-office match."],
+            "next_action": "RM to review the match.",
+        },
+        tier="LOW",
+    )
+    assert gate["is_rm_ready"] is False
+    assert "Commercial fit too weak (low tier)" in gate["blocking_reasons"]
+
+
 def test_route_intelligence_has_no_fetch_outreach_or_scoring_logic():
     source = inspect.getsource(route_intelligence)
     assert "requests" not in source
@@ -398,6 +458,8 @@ def test_lead_detail_renders_action_recommendation_panel():
     assert "RM Feedback" in resp.text
     assert "Provenance" in resp.text
     assert "MNS registry" in resp.text  # route_source_label
+    # Readiness gate verdict is shown (ready route + evidence + HIGH tier).
+    assert "RM-Ready" in resp.text
 
 
 def test_lead_detail_without_route_intelligence_shows_fallback():

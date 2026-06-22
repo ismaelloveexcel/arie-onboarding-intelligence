@@ -79,6 +79,70 @@ def contactability_decision(bucket: str | None) -> str:
     return CONTACTABILITY_DECISIONS[contactability_status(bucket)]
 
 
+SUPPORTED_JURISDICTIONS = {"Mauritius", "UK", "United Kingdom"}
+
+READINESS_RM_READY = "rm_ready"
+READINESS_RESEARCH_FIRST = "research_first"
+READINESS_NO_ROUTE = "no_compliant_route"
+
+READINESS_LABELS = {
+    READINESS_RM_READY: "RM-Ready",
+    READINESS_RESEARCH_FIRST: "Research First",
+    READINESS_NO_ROUTE: "No Compliant Route",
+}
+
+
+def lead_readiness(
+    *,
+    recommendation: dict[str, object],
+    tier: str | None = None,
+) -> dict[str, object]:
+    """Deterministic RM-readiness gate over a route recommendation.
+
+    A lead is only RM-ready when it has ALL of: a usable route (direct or
+    introducer), confidence of at least medium, attached evidence, a recommended
+    next action, and a commercial-fit tier (HIGH/MEDIUM). This is an explainable
+    readiness layer on top of scoring and route intelligence — it never changes
+    scores or buckets, it only decides whether a lead is honestly worth an RM's
+    time right now and, if not, why.
+
+    Returns {'is_rm_ready', 'readiness', 'blocking_reasons'}.
+    """
+    bucket = recommendation.get("contactability_bucket")
+    status = contactability_status(str(bucket) if bucket is not None else None)
+    confidence = str(recommendation.get("confidence") or "").lower()
+    evidence = recommendation.get("evidence_summary") or []
+    next_action = str(recommendation.get("next_action") or "").strip()
+    tier_value = str(tier or "").upper()
+
+    reasons: list[str] = []
+    if status not in {"ready_to_contact", "route_via_introducer"}:
+        reasons.append("No compliant contact or introducer route")
+    if confidence not in {"high", "medium"}:
+        reasons.append("Route confidence below medium")
+    if not evidence:
+        reasons.append("No source/evidence attached")
+    if not next_action:
+        reasons.append("No recommended next action")
+    if tier_value and tier_value not in {"HIGH", "MEDIUM"}:
+        reasons.append("Commercial fit too weak (low tier)")
+
+    is_rm_ready = not reasons
+    if is_rm_ready:
+        readiness = READINESS_RM_READY
+    elif status == "no_compliant_route_found":
+        readiness = READINESS_NO_ROUTE
+    else:
+        readiness = READINESS_RESEARCH_FIRST
+
+    return {
+        "is_rm_ready": is_rm_ready,
+        "readiness": readiness,
+        "readiness_label": READINESS_LABELS[readiness],
+        "blocking_reasons": reasons,
+    }
+
+
 def suggested_opener(
     *,
     company_name: str | None,

@@ -136,8 +136,24 @@
         <span style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Recommended decision</span>
         <span style="font-size:18px; font-weight:800; color:{{ _accent }}; letter-spacing:-.01em">{{ route_intelligence.decision }}</span>
       </div>
-      <span class="badge" style="background:{{ _accent }}1a; color:{{ _accent }}; border:1px solid {{ _accent }}33; font-weight:700">{{ route_intelligence.contactability_status_label }}</span>
+      <div style="display:flex; align-items:center; gap:.4rem; flex-wrap:wrap">
+        {% if route_intelligence.is_rm_ready %}
+        <span class="badge badge-contact-ready" style="font-weight:700">✓ RM-Ready</span>
+        {% else %}
+        <span class="badge badge-contact-missing" style="font-weight:700">{{ route_intelligence.readiness_label }}</span>
+        {% endif %}
+        <span class="badge" style="background:{{ _accent }}1a; color:{{ _accent }}; border:1px solid {{ _accent }}33; font-weight:700">{{ route_intelligence.contactability_status_label }}</span>
+      </div>
     </div>
+
+    {% if not route_intelligence.is_rm_ready and route_intelligence.blocking_reasons %}
+    <div style="margin-top:.625rem; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:.5rem .75rem">
+      <span style="font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:#9a3412; font-weight:700">Not RM-ready because</span>
+      <ul style="margin:.25rem 0 0 0; padding-left:1.1rem; font-size:12px; color:#7c2d12">
+        {% for reason in route_intelligence.blocking_reasons %}<li>{{ reason }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
 
     <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; margin-top:.875rem">
       <div>

@@ -1,0 +1,3 @@
+company_id,company_name,jurisdiction,website,generic_email,contact_form_url,linkedin_company_url,introducer_or_csp,source_url,source_label,route_entry_method,confidence,evidence_summary,checked_by,checked_at
+,Example Holdings Limited,Mauritius,https://example.mu,info@example.mu,https://example.mu/contact,https://www.linkedin.com/company/example-mu,,https://example.mu,Company website,manual,high,Generic company email published on official website,Ismael,2026-06-22
+,Acme Fund Ltd,Mauritius,,,,,Example Corporate Services Limited,https://fsc.mu/register,FSC register,manual,medium,Administered by licensed CSP per FSC register,Tasneem,2026-06-22

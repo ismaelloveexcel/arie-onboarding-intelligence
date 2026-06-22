@@ -46,6 +46,7 @@ from src.route_intelligence import (
     contactability_decision,
     contactability_status,
     contactability_status_label,
+    lead_readiness,
     suggested_opener,
 )
 from src.scoring import SCORING_VERSION, SIGNAL_DETAILS
@@ -561,6 +562,39 @@ def dashboard(request: Request):
             """)
             route_metrics_row = cur.fetchone()
 
+            # Top Opportunities — the few leads an RM should actually work now.
+            # Deterministic ordering over actionable routes only; the readiness
+            # gate is applied in Python to flag genuinely RM-ready rows.
+            cur.execute("""
+                SELECT c.company_name, c.jurisdiction, c.entity_type, c.id,
+                       ls.priority_score, ls.tier,
+                       rr.contactability_bucket, rr.best_route_type,
+                       rr.best_route_value, rr.confidence, rr.next_action,
+                       (rr.evidence_summary IS NOT NULL
+                        AND jsonb_array_length(rr.evidence_summary) > 0) AS has_evidence
+                FROM companies c
+                JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
+                JOIN LATERAL (
+                    SELECT contactability_bucket, best_route_type, best_route_value,
+                           confidence, next_action, evidence_summary
+                    FROM route_recommendations
+                    WHERE lead_id = c.id AND status <> 'superseded'
+                    ORDER BY generated_at DESC
+                    LIMIT 1
+                ) rr ON TRUE
+                WHERE rr.contactability_bucket IN (
+                    'ready_to_contact', 'route_via_introducer_csp'
+                )
+                ORDER BY
+                    CASE rr.contactability_bucket
+                        WHEN 'ready_to_contact' THEN 0 ELSE 1 END,
+                    CASE rr.confidence
+                        WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+                    ls.priority_score DESC NULLS LAST
+                LIMIT 10
+            """)
+            top_opportunity_rows = cur.fetchall()
+
     def _ts(ts: datetime | None) -> datetime | None:
         if ts is None:
             return None
@@ -568,6 +602,32 @@ def dashboard(request: Request):
 
     def _pct(num: int, denom: int) -> float:
         return round(num * 100 / denom, 1) if denom else 0.0
+
+    top_opportunities = [
+        {
+            "id": r[3],
+            "company_name": r[0],
+            "jurisdiction": r[1],
+            "entity_type": _format_entity_type(r[2]),
+            "priority_score": r[4],
+            "tier": r[5],
+            "decision": contactability_decision(r[6]),
+            "contactability_status_label": contactability_status_label(r[6]),
+            "best_route": r[8] or (r[7] or "").replace("_", " ").title(),
+            "confidence": r[9],
+            "next_action": r[10],
+            "is_rm_ready": lead_readiness(
+                recommendation={
+                    "contactability_bucket": r[6],
+                    "confidence": r[9],
+                    "evidence_summary": [True] if r[11] else [],
+                    "next_action": r[10],
+                },
+                tier=r[5],
+            )["is_rm_ready"],
+        }
+        for r in top_opportunity_rows
+    ]
 
     last_run_at = _ts(last_run_row[0]) if last_run_row else None
     last_enriched = _ts(last_enriched_at)
@@ -698,6 +758,7 @@ def dashboard(request: Request):
                 ),
             },
             "contactability_status_labels": CONTACTABILITY_STATUS_LABELS,
+            "top_opportunities": top_opportunities,
             # Management-facing acquisition rollup. Built only from data we hold:
             # the contactability projection, the route review state, and RM
             # follow-up/contact counts. Meetings/replies/won are intentionally
@@ -1398,6 +1459,17 @@ def lead_detail(request: Request, lead_id: UUID):
             "route_entry_method": route_recommendation_row[19] or "system_detected",
             "route_last_checked_at": route_recommendation_row[20],
         }
+        route_intelligence.update(
+            lead_readiness(
+                recommendation={
+                    "contactability_bucket": route_intelligence["contactability_bucket"],
+                    "confidence": route_intelligence["confidence"],
+                    "evidence_summary": route_intelligence["evidence_summary"],
+                    "next_action": route_intelligence["next_action"],
+                },
+                tier=score["tier"],
+            )
+        )
 
     introducer_matches = [
         {

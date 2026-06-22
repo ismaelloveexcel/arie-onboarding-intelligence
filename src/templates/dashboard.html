@@ -210,6 +210,57 @@
 </div>
 
 <!-- =========================================================================
+     TOP OPPORTUNITIES — the few leads an RM should work right now
+     ========================================================================= -->
+<div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Top Opportunities</span>
+    <span class="ds-meta">Actionable routes · ranked · work these first</span>
+  </div>
+  {% if top_opportunities %}
+  <div class="table-wrap">
+    <table class="ds-table-premium">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Decision</th>
+          <th>Best route</th>
+          <th>Confidence</th>
+          <th style="text-align:right">Score</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for opp in top_opportunities %}
+        <tr>
+          <td>
+            <a href="/leads/{{ opp.id }}" class="ds-company-link" style="font-weight:600">{{ opp.company_name }}</a>
+            <div class="ds-meta">{{ opp.jurisdiction }}{% if opp.entity_type %} · {{ opp.entity_type }}{% endif %}</div>
+          </td>
+          <td>
+            <span class="badge {% if opp.is_rm_ready %}badge-contact-ready{% else %}badge-contact-partial{% endif %}">{{ opp.decision }}</span>
+            {% if opp.is_rm_ready %}<div class="ds-meta" style="color:#15803d; font-weight:600; font-size:10px; margin-top:2px">✓ RM-Ready</div>{% endif %}
+          </td>
+          <td style="font-size:12px">{{ opp.best_route or "—" }}</td>
+          <td style="font-size:12px">{{ (opp.confidence or "")|replace('_',' ')|title }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ opp.priority_score }}</td>
+          <td><a href="/leads/{{ opp.id }}" style="font-size:12px; color:#0B3D91">Open →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="ds-empty-state" style="text-align:left">
+    <span class="ds-empty-state-title">No actionable routes yet</span>
+    No leads currently have a confirmed direct or introducer route. The fastest
+    fix is to import company contact routes (website / generic email / contact
+    form) and introducer/CSP records — see the route import path.
+  </div>
+  {% endif %}
+</div>
+
+<!-- =========================================================================
      CLIENT ACQUISITION ZONE — management-facing acquisition readiness
      (answers: "how many leads can we actually act on, and how covered are we?")
      ========================================================================= -->
