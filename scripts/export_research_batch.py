@@ -21,10 +21,17 @@ from src.route_intelligence import (
     lead_readiness,
     match_introducers,
     normalise_address,
+    normalise_name,
 )
 from scripts.route_intelligence import _load_address_population, _load_introducers
+from src.prospect_enrichment import (
+    ENRICHMENT_FIELDS,
+    PROVENANCE_FIELDS,
+    ROUTE_DISCOVERY_FIELDS,
+)
 
-EXPORT_COLUMNS = [
+# The system-derived columns we already produce.
+BASE_EXPORT_COLUMNS = [
     "company_id",
     "company_number",
     "company_name",
@@ -46,8 +53,32 @@ EXPORT_COLUMNS = [
     "missing_reason",
     "research_instruction",
 ]
+# Blank columns researchers (Manus + Perplexity) fill in, matching the import schema.
+ENRICHMENT_TEMPLATE_COLUMNS = ROUTE_DISCOVERY_FIELDS + PROVENANCE_FIELDS + ENRICHMENT_FIELDS
+EXPORT_COLUMNS = BASE_EXPORT_COLUMNS + ENRICHMENT_TEMPLATE_COLUMNS
 
 _RESEARCH_NEEDED = {"research_required", "no_compliant_route_found"}
+
+# Terms that make a lead more relevant to ARIE's payment/intermediary services.
+_PAYMENT_RELEVANT_TERMS = (
+    "global business", "gbc", "authorised company", "fund", "holding",
+    "investment", "capital", "payment", "fintech", "financial", "mauritius",
+)
+
+
+def _export_sort_key(lead: dict[str, object]) -> tuple:
+    """Deterministic top-N ranking (Phase 1, point 6): HIGH first, latest
+    incorporation, payment-relevant terms, then score."""
+    tier_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}.get(str(lead.get("tier") or ""), 3)
+    text = f"{lead.get('company_name') or ''} {lead.get('entity_type') or ''} {lead.get('jurisdiction') or ''}".lower()
+    relevant = 0 if any(term in text for term in _PAYMENT_RELEVANT_TERMS) else 1
+    inc = str(lead.get("incorporation_date") or "")
+    return (tier_rank, relevant, _neg_date(inc), -(lead.get("priority_score") or 0))
+
+
+def _neg_date(value: str) -> str:
+    # Latest incorporation first: invert the ISO date string ordering.
+    return "".join(chr(255 - ord(c)) for c in value) if value else "\xff" * 10
 
 
 def _args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -91,9 +122,17 @@ def build_research_rows(
     clusters: dict[str, list[str]],
     limit: int,
 ) -> list[dict[str, object]]:
-    """Pure: rank research-needed leads and shape export rows. No DB, no I/O."""
+    """Pure: rank research-needed leads and shape export rows. No DB, no I/O.
+
+    Applies the deterministic top-N rule (HIGH first, latest incorporation,
+    payment-relevant terms, score) and excludes duplicate company names.
+    """
     rows: list[dict[str, object]] = []
-    for lead in leads:
+    seen_names: set[str] = set()
+    for lead in sorted(leads, key=_export_sort_key):
+        dedupe = normalise_name(str(lead.get("company_name") or ""), strip_legal_suffixes=True)
+        if dedupe and dedupe in seen_names:
+            continue
         matches = match_introducers(lead, introducers)
         address_key = normalise_address(str(lead.get("registered_address") or ""))
         rec = build_route_recommendation(
@@ -120,7 +159,8 @@ def build_research_rows(
             or lead.get("website")
             or ""
         )
-        rows.append(
+        row = {column: "" for column in EXPORT_COLUMNS}  # enrichment cols blank
+        row.update(
             {
                 "company_id": lead.get("company_id"),
                 "company_number": lead.get("company_number") or "",
@@ -147,6 +187,9 @@ def build_research_rows(
                 ),
             }
         )
+        rows.append(row)
+        if dedupe:
+            seen_names.add(dedupe)
         if len(rows) >= limit:
             break
     return rows

@@ -27,7 +27,10 @@ return an enriched CSV. The output feeds `scripts/import_contact_routes.py`.
 > - `source_url` — the exact URL the evidence came from (**required**)
 > - `source_label` — short name of the source (e.g. "Company website", "FSC register")
 > - `source_type` — one of: company_website, registry, regulator, csp_directory, other
-> - `confidence` — high / medium / low
+> - `source_reliability` — one of: official, regulator, registry, reputable_third_party, weak
+> - `route_quality` — one of: high, medium, low, unusable (how usable the best route is)
+> - `best_contact_route` — the single best route value (the email / contact form URL /
+>   website / introducer name) — **never a personal email, never `registry_only`**
 > - `evidence_summary` — one line explaining what you found and where (**required**)
 > - `route_entry_method` — always `manual`
 > - `notes` — anything the RM should know
@@ -52,5 +55,10 @@ return an enriched CSV. The output feeds `scripts/import_contact_routes.py`.
 
 `company_id, company_number, company_name, jurisdiction, website_url,
 contact_page_url, generic_business_email, contact_form_url, linkedin_company_url,
-introducer_or_csp_name, introducer_or_csp_route, source_url, source_label,
-source_type, confidence, evidence_summary, route_entry_method, notes`
+introducer_or_csp_name, introducer_or_csp_route, best_contact_route, route_quality,
+source_url, source_label, source_type, source_reliability, evidence_summary,
+route_entry_method, notes`
+
+The combined Manus + Perplexity output (see `docs/perplexity_commercial_research_prompt.md`)
+imports via `python -m scripts.import_prospect_enrichment enriched.csv` (dry-run by
+default). See `docs/prospect_enrichment_import_template.csv` for the full schema.

@@ -3,7 +3,32 @@
 The repeatable loop that turns hundreds of scored leads into a short list of
 RM-ready prospects. Free / manual / search-only — no scraping, no paid APIs.
 
-## The loop
+## Phase 1 — RM/commercial enrichment (Manus + Perplexity)
+
+The research batch now carries blank RM/commercial columns (see
+`docs/prospect_enrichment_import_template.csv`). Two assistants fill them:
+
+- **Manus** → contact-route fields (website, contact page/form, generic email,
+  introducer/CSP, `best_contact_route`, `route_quality`, `source_reliability`,
+  `source_url`, `evidence_summary`). Prompt: `docs/manus_contact_research_prompt.md`.
+- **Perplexity** → commercial fields (`business_model_summary`, `prospect_segment`,
+  `likely_arie_service_need`, `likely_payment_use_case`, `target_buyer_type`,
+  `suggested_opening_angle`, `prospect_quality_grade`, `source_url`,
+  `evidence_summary`, `source_reliability`). Prompt:
+  `docs/perplexity_commercial_research_prompt.md`.
+
+Import the combined CSV (dry-run by default; writes blocked on production):
+```
+python -m scripts.import_prospect_enrichment enriched.csv            # dry-run
+python -m scripts.import_prospect_enrichment enriched.csv --write    # staging only
+```
+A row only becomes **Ready to Work** when it is grade A with a non-weak source,
+a usable named route, evidence + source URL, a known ARIE service need, a business
+model summary, an opening angle, and a `contact_now` / `route_via_introducer`
+next action. Everything else falls into Research Route, Hold, or Reject. Stored
+in the dedicated `prospect_enrichment` table (never the core company tables).
+
+## The loop (contact-route only — legacy/simple path)
 
 1. **Export a research batch**
    ```
