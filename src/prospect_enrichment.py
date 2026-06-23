@@ -144,6 +144,14 @@ def rm_readiness_bucket(row) -> str:
     return RESEARCH_ROUTE
 
 
+def _is_int(value: str) -> bool:
+    try:
+        int(str(value).strip())
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
 def _check_allowed(row, key, allowed, errors, *, lower=True):
     raw = _g(row, key)
     if not raw:
@@ -179,6 +187,10 @@ def validate_enrichment_row(row: dict[str, str]) -> dict[str, object]:
     _check_allowed(row, "management_shortlist_flag", SHORTLIST_FLAGS, errors)
     _check_allowed(row, "route_entry_method", ROUTE_ENTRY_METHODS, errors)
 
+    rank = _g(row, "rm_priority_rank")
+    if rank and not _is_int(rank):
+        errors.append(f"rm_priority_rank must be an integer (got '{rank}')")
+
     source_url = _g(row, "source_url")
     if source_url and not is_valid_url(source_url):
         errors.append("Malformed source_url")
@@ -198,7 +210,10 @@ def validate_enrichment_row(row: dict[str, str]) -> dict[str, object]:
     if grade == "A":
         if _g(row, "route_quality").lower() not in {"high", "medium"}:
             errors.append("A rows require route_quality high or medium")
-        if _g(row, "source_reliability").lower() == "weak":
+        reliability = _g(row, "source_reliability").lower()
+        if not reliability:
+            errors.append("A rows require source_reliability")
+        elif reliability == "weak":
             errors.append("A rows require source_reliability not weak")
         if not _has(_g(row, "likely_arie_service_need")):
             errors.append("A rows require likely_arie_service_need (not unknown)")

@@ -98,6 +98,36 @@ def test_lost_status_requires_lost_reason():
     assert any("lost_reason" in e for e in r["errors"])
 
 
+def test_not_suitable_status_requires_lost_reason():
+    r = validate_enrichment_row(_a_row(rm_status="not_suitable"))
+    assert r["ok"] is False
+    assert any("lost_reason" in e for e in r["errors"])
+
+
+@pytest.mark.parametrize("status", ["ready", "rejected"])
+def test_ready_or_rejected_requires_last_researched_date(status):
+    r = validate_enrichment_row(_a_row(research_status=status, last_researched_date=""))
+    assert r["ok"] is False
+    assert any("last_researched_date" in e for e in r["errors"])
+
+
+def test_a_grade_blank_source_reliability_rejected():
+    r = validate_enrichment_row(_a_row(source_reliability=""))
+    assert r["ok"] is False
+    assert any("source_reliability" in e for e in r["errors"])
+
+
+def test_non_integer_rm_priority_rank_rejected():
+    r = validate_enrichment_row(_a_row(rm_priority_rank="high"))
+    assert r["ok"] is False
+    assert any("rm_priority_rank" in e for e in r["errors"])
+
+
+def test_valid_integer_rm_priority_rank_accepted():
+    r = validate_enrichment_row(_a_row(rm_priority_rank="3"))
+    assert r["ok"] is True
+
+
 def test_researched_requires_last_researched_date():
     r = validate_enrichment_row(_a_row(research_status="researched", last_researched_date=""))
     assert r["ok"] is False
@@ -217,3 +247,16 @@ def test_prompts_include_fields_and_prohibitions():
         assert f in perplexity
     assert "scrap" in perplexity.lower()
     assert "source_url" in perplexity
+
+
+def test_manus_prompt_explicitly_prohibits_all_required():
+    manus = (ROOT / "docs" / "manus_contact_research_prompt.md").read_text(encoding="utf-8").lower()
+    for phrase in (
+        "guessed emails",
+        "personal email guessing",
+        "scrape linkedin",
+        "unsupported claims",
+        "unsupported speculation",
+        "without a `source_url`",
+    ):
+        assert phrase in manus, f"Manus prompt missing prohibition: {phrase}"

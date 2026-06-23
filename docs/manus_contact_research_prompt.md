@@ -35,12 +35,15 @@ return an enriched CSV. The output feeds `scripts/import_contact_routes.py`.
 > - `route_entry_method` — always `manual`
 > - `notes` — anything the RM should know
 >
-> **Rules — do not break these:**
-> - Do NOT invent or guess contact details.
-> - Do NOT guess email address formats (no "firstname.lastname@" guesses).
+> **Rules — do not break these (prohibitions):**
+> - Do NOT use guessed emails or invented contact details.
+> - Do NOT do personal email guessing or guess email address formats (no
+>   "firstname.lastname@" guesses).
 > - Do NOT scrape LinkedIn or any closed/login-walled platform; use public search results only.
 > - Do NOT return personal/private individual emails. Company mailboxes only.
 > - Do NOT mark a personal email as a verified company route.
+> - Do NOT make unsupported claims or unsupported speculation; every field must be
+>   backed by what the source actually shows.
 > - Do NOT return any route without a `source_url`.
 > - If you cannot find a compliant route, leave the route fields blank and set
 >   `evidence_summary` to "No compliant route found" with your `source_url` of the

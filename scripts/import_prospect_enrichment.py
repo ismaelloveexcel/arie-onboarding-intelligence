@@ -163,13 +163,15 @@ def _persist(conn, item) -> None:
         "source_type": n.get("source_type"),
         "evidence_summary": n.get("evidence_summary"),
     }
+    rank = n.get("rm_priority_rank")
+    rank_value = int(rank) if rank and str(rank).strip() else None
     fields = list(cols.keys()) + [
-        "company_id", "management_shortlist_flag", "ready_to_work",
-        "readiness_bucket", "checked_at", "raw_payload",
+        "company_id", "rm_priority_rank", "management_shortlist_flag",
+        "ready_to_work", "readiness_bucket", "checked_at", "raw_payload",
     ]
     values = list(cols.values()) + [
-        cid, _to_bool(n.get("management_shortlist_flag")), item["ready_to_work"],
-        item["bucket"], None, Jsonb(item["raw"]),
+        cid, rank_value, _to_bool(n.get("management_shortlist_flag")),
+        item["ready_to_work"], item["bucket"], None, Jsonb(item["raw"]),
     ]
     placeholders = ", ".join(["%s"] * len(fields))
     updates = ", ".join(f"{c} = EXCLUDED.{c}" for c in fields if c != "company_id")
