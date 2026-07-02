@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARIE weekly prospects</title>
+</head>
+<body style="margin:0;background:#f4f0e7;color:#15193a;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f0e7;padding:24px 0">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="680" cellspacing="0" cellpadding="0" style="width:680px;max-width:94%;background:#ffffff;border:1px solid #e5decc">
+          <tr>
+            <td style="background:#10142b;color:#ffffff;padding:30px 34px">
+              <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a44a">ARIE Finance</div>
+              <h1 style="margin:10px 0 8px;font-size:28px;line-height:1.15;font-family:Georgia,serif;color:#ffffff">Weekly prospect action list</h1>
+              <p style="margin:0;color:#c7cadd;font-size:14px">Enriched leads ready for RM review · {{ week_label }}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:22px 34px 8px">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td style="font-size:22px;font-family:Georgia,serif;font-weight:bold;color:#c0973e">{{ email_leads|length }}</td>
+                  <td style="font-size:22px;font-family:Georgia,serif;font-weight:bold;color:#c0973e">{{ email_leads|selectattr("contact_route_kind", "equalto", "Route via Introducer")|list|length }}</td>
+                </tr>
+                <tr>
+                  <td style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3">Eligible leads</td>
+                  <td style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3">Introducer routes</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {% for lead in email_leads %}
+          <tr>
+            <td style="padding:10px 34px">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5decc;border-radius:8px">
+                <tr>
+                  <td style="padding:16px 18px">
+                    <h2 style="margin:0;color:#15193a;font-size:17px">{{ lead.name }}</h2>
+                    <p style="margin:2px 0 10px;color:#8a8fa3;font-size:12px">{{ lead.jurisdiction }} · {{ lead.category }}</p>
+                    <p style="margin:0 0 12px;color:#4a4f6e;font-size:13px">{{ lead.why_relevant }}</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #efe9db;padding-top:10px">
+                      <tr>
+                        <td style="width:50%;padding:8px 8px 4px 0;vertical-align:top">
+                          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Contact route</div>
+                          <div style="font-size:13px;color:#15193a;font-weight:bold">{{ lead.contact_route }}</div>
+                        </td>
+                        <td style="width:50%;padding:8px 0 4px 8px;vertical-align:top">
+                          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Source</div>
+                          <div style="font-size:13px;color:#15193a">{{ lead.source_label }}</div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding:8px 0 4px;vertical-align:top">
+                          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Next action</div>
+                          <div style="font-size:13px;color:#15193a">{{ lead.next_action }}</div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding:8px 0 4px;vertical-align:top">
+                          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Draft opening angle</div>
+                          <div style="font-size:13px;color:#4a4f6e;font-style:italic">{{ lead.suggested_opening_angle }}</div>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:14px 0 0"><a href="{{ lead.open_url }}" style="color:#c0973e;font-size:13px;font-weight:bold;text-decoration:none">Open in Tool</a></p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td style="padding:28px 34px;color:#6b7088">No eligible leads for this week's email yet.</td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td style="background:#fbf9f3;border-top:1px solid #e5decc;padding:18px 34px;color:#8a8fa3;font-size:11px">
+              {{ footer_text }}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

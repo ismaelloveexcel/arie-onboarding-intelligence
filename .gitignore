@@ -13,5 +13,14 @@ venv/
 .venv_old_force/
 *.log
 
+# Local editor/agent config
+.claude/
+
+# Generated operating/research exports (keep docs/*.csv templates tracked)
+/full_prospect_research_pack.csv
+/operating_test_10_leads.csv
+/research_batch.csv
+/top_50_prospect_research_pack.csv
+
 backups/
 _snapshot.py

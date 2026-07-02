@@ -33,6 +33,11 @@ RM_NAMES: list[str] = [
 ACTOR_NAMES: list[str] = [
     name.strip() for name in os.getenv("ACTOR_NAMES", "").split(",") if name.strip()
 ]
+ADMIN_ACTOR_NAMES: list[str] = [
+    name.strip()
+    for name in os.getenv("ADMIN_ACTOR_NAMES", "").split(",")
+    if name.strip()
+]
 LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
 CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200"))
@@ -62,6 +67,13 @@ ACTIVE_TERMINAL_STATUSES: tuple[str, ...] = tuple(
         "ACTIVE_TERMINAL_STATUSES", "Client,Closed - Not Fit,Not Fit,Archived"
     ).split(",")
     if item.strip()
+)
+PROSPECT_ENGINE_DEMO_MODE: bool = _env_bool("PROSPECT_ENGINE_DEMO_MODE", False)
+PROSPECT_ENGINE_FOOTER_TEXT: str = os.getenv(
+    "PROSPECT_ENGINE_FOOTER_TEXT",
+    "Internal ARIE Finance working draft. Suggested opening angles are draft notes "
+    "for RM review, not automated outreach. Regulatory wording requires approval "
+    "before production use.",
 )
 
 

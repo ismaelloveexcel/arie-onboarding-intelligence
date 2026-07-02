@@ -373,9 +373,8 @@ def test_route_review_updates_history_and_audit_only(decision, expected_status):
 def _lead_detail_conn_mock(*, route_recommendation_row):
     """Mock get_conn() for the lead_detail route.
 
-    Call order: fetchone(lead) -> fetchall(audit) -> fetchone(lei) ->
-    fetchall(officers) -> fetchall(pscs) -> fetchall(contacts) ->
-    fetchall(timeline) -> fetchone(route_rec) -> fetchall(introducer_matches).
+    Call order includes optional-column checks for backwards-compatible
+    lead detail rendering against older local schemas.
     """
     lead_row = (
         "00000000-0000-0000-0000-000000000001",  # id
@@ -405,7 +404,28 @@ def _lead_detail_conn_mock(*, route_recommendation_row):
     )
     cur = MagicMock()
     cur.fetchone.side_effect = [lead_row, None, route_recommendation_row]
-    cur.fetchall.side_effect = [[], [], [], [], [], []]
+    cur.fetchall.side_effect = [
+        [("next_action",), ("next_action_due_date",), ("feedback",), ("feedback_note",)],
+        [],
+        [],
+        [],
+        [
+            ("email_confidence",),
+            ("linkedin_verified",),
+            ("is_decision_maker",),
+            ("contact_priority",),
+            ("enrichment_status",),
+        ],
+        [],
+        [],
+        [
+            ("route_source_url",),
+            ("route_source_label",),
+            ("route_source_type",),
+            ("route_last_checked_at",),
+        ],
+        [],
+    ]
 
     cursor_cm = MagicMock()
     cursor_cm.__enter__.return_value = cur

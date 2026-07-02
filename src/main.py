@@ -18,6 +18,8 @@ from pythonjsonlogger import jsonlogger
 
 from src.config import (
     ACTOR_NAMES,
+    ACTIVE_TERMINAL_STATUSES,
+    ADMIN_ACTOR_NAMES,
     ADMIN_TOKEN,
     APP_ENV,
     CH_ENRICHMENT_SAFE_LIMIT,
@@ -26,6 +28,8 @@ from src.config import (
     SCORING_DISPLAY_ENABLED,
     SCORING_SHADOW_MODE,
     SECRET_KEY,
+    PROSPECT_ENGINE_DEMO_MODE,
+    PROSPECT_ENGINE_FOOTER_TEXT,
     SHADOW_BACKFILL_BATCH_SIZE,
     SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
     SHADOW_BACKFILL_MAX_BATCHES,
@@ -801,7 +805,401 @@ def dashboard(request: Request):
     )
 
 
+_TERMINAL_STATUS_KEYS = {
+    key for raw in ACTIVE_TERMINAL_STATUSES if (key := normalize_status(raw))
+}
+_ACTIVE_STATUS_SQL = tuple(_TERMINAL_STATUS_KEYS or {"not_relevant", "not_fit"})
+_ELIGIBLE_ROUTE_BUCKETS = (
+    "ready_to_contact",
+    "route_via_introducer_csp",
+    "direct_candidate_found",
+)
+
+
+def _is_admin_actor(actor: str) -> bool:
+    return bool(actor and actor in ADMIN_ACTOR_NAMES)
+
+
+def _route_kind(route_type: str | None, route_bucket: str | None) -> str:
+    if route_bucket == "route_via_introducer_csp":
+        return "Route via Introducer"
+    if route_type in {"introducer", "csp", "management_company", "fiduciary"}:
+        return "Route via Introducer"
+    if route_type in {"direct", "fund_administrator"}:
+        return "Direct"
+    return "Needs Research"
+
+
+def _lead_category(reason_codes: list[str], entity_type: str | None) -> str:
+    codes = set(reason_codes or [])
+    if "INVESTMENT_VEHICLE" in codes:
+        return "Investment / fund"
+    if "HOLDING_STRUCTURE" in codes or "FINANCIAL_SIC" in codes:
+        return "Holding / finance"
+    if "MAURITIUS_GBC" in codes:
+        return "Mauritius GBC"
+    if "MAURITIUS_AC" in codes:
+        return "Authorised Company"
+    return _format_entity_type(entity_type)
+
+
+def _active_status_clause(alias: str = "ra") -> str:
+    return f"COALESCE({alias}.status, 'new') <> ALL(%s)"
+
+
+def _route_optional_exprs(cur) -> dict[str, str]:
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'route_recommendations'
+          AND column_name = ANY(%s)
+        """,
+        (
+            [
+                "route_source_url",
+                "route_source_label",
+                "route_source_type",
+                "route_last_checked_at",
+            ],
+        ),
+    )
+    present = {row[0] for row in cur.fetchall()}
+    return {
+        "route_source_url": (
+            "route_source_url" if "route_source_url" in present else "NULL::text"
+        ),
+        "route_source_label": (
+            "route_source_label" if "route_source_label" in present else "NULL::text"
+        ),
+        "route_source_type": (
+            "route_source_type" if "route_source_type" in present else "NULL::text"
+        ),
+        "route_last_checked_at": (
+            "route_last_checked_at"
+            if "route_last_checked_at" in present
+            else "NULL::timestamptz"
+        ),
+    }
+
+
+def _optional_column_exprs(
+    cur, table_name: str, column_defaults: dict[str, str]
+) -> dict[str, str]:
+    cur.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = %s
+          AND column_name = ANY(%s)
+        """,
+        (table_name, list(column_defaults)),
+    )
+    present = {row[0] for row in cur.fetchall()}
+    return {
+        column: column if column in present else default
+        for column, default in column_defaults.items()
+    }
+
+
+def _prospect_rows(where_sql: str, params: list[object], limit: int = 120) -> list[dict]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            opt = _route_optional_exprs(cur)
+            sql = f"""
+                SELECT
+                    c.id, c.company_name, c.jurisdiction, c.entity_type,
+                    qs.reason_summary, qs.reason_codes, qs.priority_score, qs.tier,
+                    ra.assigned_to, COALESCE(ra.status, 'new'), ra.follow_up_at,
+                    ra.notes,
+                    rr.contactability_bucket, rr.best_route_type, rr.best_route_value,
+                    rr.evidence_summary, rr.next_action, rr.confidence,
+                    rr.route_source_url, rr.route_source_label, rr.route_source_type,
+                    rr.route_last_checked_at, rr.generated_at,
+                    c.verify_url, c.website, c.source_ref
+                FROM queue_snapshot qs
+                JOIN companies c ON c.id = qs.canonical_company_id
+                LEFT JOIN rm_actions ra ON ra.company_id = c.id
+                LEFT JOIN LATERAL (
+                    SELECT contactability_bucket, best_route_type, best_route_value,
+                           evidence_summary, next_action, confidence,
+                           {opt["route_source_url"]} AS route_source_url,
+                           {opt["route_source_label"]} AS route_source_label,
+                           {opt["route_source_type"]} AS route_source_type,
+                           {opt["route_last_checked_at"]} AS route_last_checked_at,
+                           generated_at
+                    FROM route_recommendations
+                    WHERE lead_id = c.id AND status <> 'superseded'
+                    ORDER BY generated_at DESC
+                    LIMIT 1
+                ) rr ON TRUE
+                WHERE {where_sql}
+                ORDER BY qs.priority_score DESC, c.incorporation_date DESC NULLS LAST,
+                         c.company_name ASC
+                LIMIT %s
+            """
+            cur.execute(sql, params + [limit])
+            rows = cur.fetchall()
+
+    rendered = []
+    for row in rows:
+        reason_codes = row[5] or []
+        evidence = row[15] or []
+        route_source = row[19] or row[18] or row[20] or "Source captured"
+        has_contact_route = bool(row[14] and str(row[14]).strip())
+        route_value = row[14] or "Research route before contact"
+        status_key = normalize_status(row[9]) or "new"
+        rendered.append(
+            {
+                "id": row[0],
+                "name": row[1],
+                "lead_type": _format_entity_type(row[3]),
+                "jurisdiction": row[2],
+                "category": _lead_category(reason_codes, row[3]),
+                "why_relevant": row[4] or "Priority signals matched.",
+                "contact_route": route_value,
+                "has_contact_route": has_contact_route,
+                "contact_route_kind": (
+                    _route_kind(row[13], row[12])
+                    if has_contact_route
+                    else "Needs Research"
+                ),
+                "status": status_key,
+                "status_label": status_label(status_key),
+                "owner": row[8] or "",
+                "follow_up_date": row[10],
+                "notes": row[11] or "",
+                "route_bucket": row[12] or "",
+                "route_type": row[13] or "",
+                "evidence": evidence,
+                "evidence_text": "; ".join(str(item) for item in evidence[:3]),
+                "next_action": row[16] or "",
+                "confidence": row[17] or "",
+                "source_url": sanitize_external_url(row[18]),
+                "source_label": route_source,
+                "source_type": row[20] or "",
+                "last_checked_at": row[21],
+                "route_generated_at": row[22],
+                "verify_url": sanitize_external_url(row[23]),
+                "website": sanitize_external_url(row[24]),
+                "source_ref": row[25] or "",
+                "score": row[6],
+                "tier": row[7],
+                "open_url": f"/leads/{row[0]}",
+                "suggested_opening_angle": (
+                    suggested_opener(
+                        company_name=row[1],
+                        entity_type=row[3],
+                        jurisdiction=row[2],
+                        contactability_bucket=row[12] or "needs_route_research",
+                        best_route_value=route_value,
+                    )
+                    or "Draft a short RM note from the route evidence before contact."
+                ),
+            }
+        )
+    return rendered
+
+
+def _eligible_prospect_rows(limit: int = 120) -> list[dict]:
+    where_sql = f"""
+        {_active_status_clause()}
+        AND rr.contactability_bucket = ANY(%s)
+        AND NULLIF(TRIM(rr.best_route_value), '') IS NOT NULL
+        AND NULLIF(TRIM(rr.next_action), '') IS NOT NULL
+        AND jsonb_array_length(COALESCE(rr.evidence_summary, '[]'::jsonb)) > 0
+    """
+    return _prospect_rows(where_sql, [list(_ACTIVE_STATUS_SQL), list(_ELIGIBLE_ROUTE_BUCKETS)], limit)
+
+
+def _build_prospect_tabs(is_admin: bool) -> dict[str, dict]:
+    eligible = _eligible_prospect_rows()
+    intro = [
+        row for row in eligible
+        if row["route_bucket"] == "route_via_introducer_csp"
+        or row["route_type"] in {"introducer", "csp", "management_company", "fiduciary"}
+    ]
+    assigned = [row for row in eligible if row["owner"]]
+    followups = [row for row in eligible if row["follow_up_date"]]
+    tabs = {
+        "enriched": {"label": "Enriched Leads", "rows": eligible},
+        "route-introducer": {"label": "Route via Introducer", "rows": intro},
+        "introducers": {"label": "Introducers", "rows": []},
+        "assigned": {"label": "Assigned to Team", "rows": assigned},
+        "followups": {"label": "Follow-ups", "rows": followups},
+    }
+    if is_admin:
+        this_week = _prospect_rows("1=1", [], 120)
+        eligible_ids = {row["id"] for row in eligible}
+        tabs = {
+            "this-week": {"label": "This Week's Leads", "rows": this_week},
+            "needs-enrichment": {
+                "label": "Needs Enrichment",
+                "rows": [
+                    row
+                    for row in this_week
+                    if row["id"] not in eligible_ids and not row["has_contact_route"]
+                ],
+            },
+            "enriched": {"label": "Enriched Leads", "rows": eligible},
+            "introducers": {"label": "Introducers", "rows": []},
+            "route-introducer": {"label": "Route via Introducer", "rows": intro},
+            "assigned": {"label": "Assigned to Team", "rows": assigned},
+            "archived": {
+                "label": "Rejected / Archived",
+                "rows": _prospect_rows(_active_status_clause().replace("<> ALL", "= ANY"), [list(_ACTIVE_STATUS_SQL)], 80),
+            },
+        }
+    return tabs
+
+
+def _usable_introducers(limit: int = 80) -> list[dict]:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT i.id, i.company_name, i.jurisdiction, i.entity_type,
+                       i.contact_name, i.contact_email, i.phone_number,
+                       i.verify_url, ia.assigned_to, COALESCE(ia.status, 'new')
+                FROM introducers i
+                LEFT JOIN introducer_actions ia ON ia.introducer_id = i.id
+                WHERE (
+                    NULLIF(TRIM(COALESCE(i.contact_email, '')), '') IS NOT NULL
+                    OR NULLIF(TRIM(COALESCE(i.phone_number, '')), '') IS NOT NULL
+                    OR NULLIF(TRIM(COALESCE(i.contact_name, '')), '') IS NOT NULL
+                )
+                ORDER BY i.company_name ASC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "id": row[0],
+            "name": row[1],
+            "lead_type": _format_entity_type(row[3]),
+            "jurisdiction": row[2],
+            "category": "Introducer",
+            "why_relevant": "Usable introducer contact route captured.",
+            "contact_route": row[5] or row[6] or row[4] or "Contact route captured",
+            "contact_route_kind": "Route via Introducer",
+            "status": normalize_status(row[9]) or "new",
+            "status_label": status_label(row[9]),
+            "owner": row[8] or "",
+            "follow_up_date": None,
+            "notes": "",
+            "evidence_text": "Introducer record includes a usable contact route.",
+            "next_action": "RM to verify fit and decide whether to use this route.",
+            "source_label": "Introducer directory",
+            "source_url": sanitize_external_url(row[7]),
+            "open_url": f"/introducers/{row[0]}",
+            "suggested_opening_angle": "Use only where the introducer relationship is appropriate and approved.",
+        }
+        for row in rows
+    ]
+
+
+def _weekly_email_leads(limit: int = 12) -> list[dict]:
+    return _eligible_prospect_rows(limit)
+
+
+def _prospect_counts(tabs: dict[str, dict], email_leads: list[dict]) -> dict[str, int]:
+    return {
+        "enriched": len(tabs.get("enriched", {}).get("rows", [])),
+        "route_intro": len(tabs.get("route-introducer", {}).get("rows", [])),
+        "introducers": len(tabs.get("introducers", {}).get("rows", [])),
+        "assigned": len(tabs.get("assigned", {}).get("rows", [])),
+        "followups": len(tabs.get("followups", {}).get("rows", [])),
+        "email_eligible": len(email_leads),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
+def prospect_engine(request: Request):
+    actor = _read_actor(request)
+    requested_view = request.query_params.get("view", "team")
+    is_demo_admin = PROSPECT_ENGINE_DEMO_MODE and requested_view == "admin"
+    is_admin = _is_admin_actor(actor) or is_demo_admin
+    logger.info(
+        "prospect_engine_view",
+        extra={
+            "actor": actor or "",
+            "requested_view": requested_view,
+            "admin_actor_names": ADMIN_ACTOR_NAMES,
+            "is_admin": is_admin,
+        },
+    )
+    if requested_view == "admin" and not is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    mode = "admin" if requested_view == "admin" and is_admin else "team"
+    tabs = _build_prospect_tabs(is_admin=(mode == "admin"))
+    tabs["introducers"]["rows"] = _usable_introducers()
+    default_tab = "this-week" if mode == "admin" else "enriched"
+    active_tab = request.query_params.get("tab", default_tab)
+    if active_tab not in tabs:
+        active_tab = default_tab
+    email_leads = _weekly_email_leads()
+    counts = _prospect_counts(tabs, email_leads)
+    current_rows = tabs[active_tab]["rows"]
+
+    return templates.TemplateResponse(
+        request=request,
+        name="prospect_engine.html",
+        context={
+            "mode": mode,
+            "tabs": tabs,
+            "active_tab": active_tab,
+            "rows": current_rows,
+            "counts": counts,
+            "email_leads": email_leads,
+            "actor_names": ACTOR_NAMES,
+            "admin_actor_names": ADMIN_ACTOR_NAMES,
+            "current_actor": actor,
+            "is_admin": is_admin,
+            "demo_mode": PROSPECT_ENGINE_DEMO_MODE,
+            "rm_names": RM_NAMES,
+            "statuses": _STATUS_OPTIONS,
+            "footer_text": PROSPECT_ENGINE_FOOTER_TEXT,
+            "week_label": date.today().strftime("Week of %d %b %Y"),
+        },
+    )
+
+
+@app.get("/weekly-email", response_class=HTMLResponse)
+def weekly_email_preview(request: Request):
+    actor = _read_actor(request)
+    email_leads = _weekly_email_leads()
+    return templates.TemplateResponse(
+        request=request,
+        name="weekly_email_preview.html",
+        context={
+            "email_leads": email_leads,
+            "counts": {"email_eligible": len(email_leads)},
+            "footer_text": PROSPECT_ENGINE_FOOTER_TEXT,
+            "week_label": date.today().strftime("Week of %d %b %Y"),
+            "actor_names": ACTOR_NAMES,
+            "current_actor": actor,
+        },
+    )
+
+
+@app.get("/weekly-email/email-safe", response_class=HTMLResponse)
+def weekly_email_safe_template(request: Request):
+    email_leads = _weekly_email_leads()
+    return templates.TemplateResponse(
+        request=request,
+        name="weekly_email_inline.html",
+        context={
+            "email_leads": email_leads,
+            "footer_text": PROSPECT_ENGINE_FOOTER_TEXT,
+            "week_label": date.today().strftime("Week of %d %b %Y"),
+        },
+    )
+
+
+@app.get("/queue", response_class=HTMLResponse)
 def queue(request: Request):
     filters = {
         "tier": request.query_params.get("tier", ""),
@@ -1131,14 +1529,25 @@ def export_leads(request: Request):
 def lead_detail(request: Request, lead_id: UUID):
     with get_conn() as conn:
         with conn.cursor() as cur:
+            rm_opt = _optional_column_exprs(
+                cur,
+                "rm_actions",
+                {
+                    "next_action": "NULL::text",
+                    "next_action_due_date": "NULL::date",
+                    "feedback": "NULL::text",
+                    "feedback_note": "NULL::text",
+                },
+            )
             cur.execute(
-                """
+                f"""
                 SELECT c.id, c.company_name, c.jurisdiction, c.entity_type,
                        c.incorporation_date, c.registered_address, c.source_system,
                        c.source_ref, c.verify_url, c.website,
                        ls.score, ls.tier, ls.reason_codes, ls.reason_summary, ls.scoring_version,
                        ra.assigned_to, ra.status, ra.notes, ra.contacted_at, ra.follow_up_at,
-                       ra.next_action, ra.next_action_due_date, ra.feedback, ra.feedback_note
+                       {rm_opt["next_action"]}, {rm_opt["next_action_due_date"]},
+                       {rm_opt["feedback"]}, {rm_opt["feedback_note"]}
                 FROM companies c
                 LEFT JOIN lead_scores ls ON ls.company_id = c.id AND ls.is_current = TRUE
                 LEFT JOIN rm_actions ra ON ra.company_id = c.id
@@ -1197,15 +1606,30 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             pscs_rows = cur.fetchall()
 
+            contact_opt = _optional_column_exprs(
+                cur,
+                "lead_contacts",
+                {
+                    "email_confidence": "NULL::text",
+                    "linkedin_verified": "FALSE",
+                    "is_decision_maker": "FALSE",
+                    "contact_priority": "(0)::int",
+                    "enrichment_status": "'manual'::text",
+                },
+            )
             cur.execute(
                 """
                 SELECT id, name, role, email, phone, linkedin_url, source, notes,
-                       created_at, email_confidence, linkedin_verified,
-                       is_decision_maker, contact_priority, enrichment_status
+                       created_at,
+                       {email_confidence} AS email_confidence,
+                       {linkedin_verified} AS linkedin_verified,
+                       {is_decision_maker} AS is_decision_maker,
+                       {contact_priority} AS contact_priority,
+                       {enrichment_status} AS enrichment_status
                 FROM lead_contacts
                 WHERE company_id = %s
                 ORDER BY contact_priority DESC, is_decision_maker DESC, created_at ASC
-                """,
+                """.format(**contact_opt),
                 (lead_id,),
             )
             contacts_rows = cur.fetchall()
@@ -1279,14 +1703,19 @@ def lead_detail(request: Request, lead_id: UUID):
             )
             timeline_rows = cur.fetchall()
 
+            route_opt = _route_optional_exprs(cur)
             cur.execute(
-                """
+                f"""
                 SELECT id, contactability_bucket, best_route_type, best_route_value,
                        route_candidate_id, rationale, evidence_summary, missing_data,
                        next_action, confidence, generated_by, generated_at,
                        reviewed_by, reviewed_at, status,
-                       secondary_contact_route, route_source_url, route_source_label,
-                       route_source_type, route_entry_method, route_last_checked_at
+                       NULL::text AS secondary_contact_route,
+                       {route_opt["route_source_url"]},
+                       {route_opt["route_source_label"]},
+                       {route_opt["route_source_type"]},
+                       'system_detected'::text AS route_entry_method,
+                       {route_opt["route_last_checked_at"]}
                 FROM route_recommendations
                 WHERE lead_id = %s
                 ORDER BY generated_at DESC
@@ -2362,4 +2791,3 @@ def audit_log(request: Request):
             "action_choices": action_choices,
         },
     )
-

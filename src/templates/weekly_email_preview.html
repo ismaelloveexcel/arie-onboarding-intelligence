@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Weekly Email Preview — ARIE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/design-system.css">
+</head>
+<body class="pe-app">
+<div class="pe-topbar">
+  <a href="/" class="pe-brand" aria-label="ARIE Finance Prospect Desk">
+    <svg viewBox="0 0 173 96" aria-hidden="true">
+      <defs>
+        <linearGradient id="peMailBrandGradient" x1="11" y1="80" x2="162" y2="20" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#151B4A"/>
+          <stop offset="1" stop-color="#06113A"/>
+        </linearGradient>
+      </defs>
+      <path d="M11.0614 80.4441L127.778 11.2672C131.539 9.03804 136.402 10.7353 137.959 14.8209L161.821 77.4418C163.579 82.0553 160.171 87.0001 155.234 87.0001L127.149 87.0001C125.138 87.0001 123.222 86.1406 121.885 84.6381L105.648 66.3987C103.515 64.0025 100.033 63.349 97.1764 64.8086L55.2553 86.2282C54.2624 86.7355 53.1633 87.0001 52.0482 87.0001L12.8583 87.0001C9.27394 87.0001 7.97797 82.2716 11.0614 80.4441Z" fill="url(#peMailBrandGradient)"/>
+      <path d="M88.1037 86.508C86.5213 86.508 85.2012 85.2031 85.6183 83.6766C86.1064 81.8899 87.0528 80.2432 88.3855 78.9106C90.4004 76.8957 93.1333 75.7637 95.9829 75.7637C98.8324 75.7637 101.565 76.8957 103.58 78.9106C104.913 80.2432 105.859 81.8899 106.347 83.6766C106.764 85.2031 105.444 86.508 103.862 86.508L88.1037 86.508Z" fill="#131313"/>
+    </svg>
+    <span><strong>ARIE</strong><small>FINANCE</small></span>
+  </a>
+  <div class="pe-workspace-seg" aria-label="Workspace navigation">
+    <a href="/">Workspace</a>
+    <a class="is-on" href="/weekly-email">Weekly email</a>
+  </div>
+  <div class="pe-run-meta"><span></span>{{ week_label }}</div>
+</div>
+<div class="pe-mail-shell">
+  <div class="pe-mail-meta">
+    <div><span>To</span> Relationship managers</div>
+    <div><span>Subject</span> ARIE weekly prospects · {{ week_label }}</div>
+    <div class="pe-mail-rule">Only enriched, eligible leads are included. Raw scraped leads are excluded.</div>
+    <div style="margin-top:.75rem">
+      <a class="pe-btn" href="/">Back to workspace</a>
+      <a class="pe-btn pe-btn-primary" href="/weekly-email/email-safe">Email-safe template</a>
+    </div>
+  </div>
+  <div class="pe-mail">
+    <div class="pe-mail-hero">
+      <div class="pe-eyebrow">ARIE Finance</div>
+      <h1>Weekly prospect action list</h1>
+      <p>{{ email_leads|length }} enriched leads ready for RM review. Suggested openers are draft notes only.</p>
+      <div class="pe-mail-stats">
+        <div><strong>{{ email_leads|length }}</strong><span>Ready</span></div>
+        <div><strong>{{ email_leads|selectattr("contact_route_kind", "equalto", "Route via Introducer")|list|length }}</strong><span>Introducer route</span></div>
+      </div>
+    </div>
+    <div class="pe-mail-body">
+      {% for lead in email_leads %}
+      <article class="pe-mail-card">
+        <div>
+          <h2>{{ lead.name }}</h2>
+          <span>{{ lead.jurisdiction }} · {{ lead.category }}</span>
+        </div>
+        <p>{{ lead.why_relevant }}</p>
+        <dl>
+          <div><dt>Contact route</dt><dd>{{ lead.contact_route }}</dd></div>
+          <div><dt>Source</dt><dd>{{ lead.source_label }}</dd></div>
+          <div><dt>Next action</dt><dd>{{ lead.next_action }}</dd></div>
+          <div><dt>Opening angle</dt><dd>{{ lead.suggested_opening_angle }}</dd></div>
+        </dl>
+        <a href="{{ lead.open_url }}">Open in Tool</a>
+      </article>
+      {% else %}
+      <div class="pe-empty">No eligible leads for this week's email yet.</div>
+      {% endfor %}
+    </div>
+    <div class="pe-mail-footer">
+      {{ footer_text }}
+    </div>
+  </div>
+</div>
+</body>
+</html>

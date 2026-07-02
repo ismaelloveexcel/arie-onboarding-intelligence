@@ -54,7 +54,7 @@
 {# ============================================================
    FILTER BAR — structure and names unchanged; high-impact first
    ============================================================ #}
-<form class="filters" method="get" action="/">
+<form class="filters" method="get" action="/queue">
   <label>Tier
     <select name="tier">
       <option value="">All</option>
@@ -129,7 +129,7 @@
     </select>
   </label>
   <button type="submit">Filter</button>
-  <a href="/" class="btn btn-secondary">Reset</a>
+  <a href="/queue" class="btn btn-secondary">Reset</a>
 </form>
 
 {# ============================================================
@@ -264,7 +264,7 @@
             <span class="ds-empty-state-icon">🔍</span>
             <span class="ds-empty-state-title">No leads match the current filters</span>
             System is monitoring new incorporations daily across UK and Mauritius registries.<br>
-            <a href="/" style="font-size:12px; color:#0B3D91; margin-top:.5rem; display:inline-block">Clear filters</a>
+            <a href="/queue" style="font-size:12px; color:#0B3D91; margin-top:.5rem; display:inline-block">Clear filters</a>
           </div>
         </td>
       </tr>
@@ -279,19 +279,19 @@
 {% if total_pages > 1 %}
 <div class="pagination">
   {% if page > 1 %}
-    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page-1 }}">‹ Prev</a>
+    <a href="/queue?{% if query_string %}{{ query_string }}&{% endif %}page={{ page-1 }}">‹ Prev</a>
   {% endif %}
   {% for p in range(1, total_pages + 1) %}
     {% if p == page %}
       <span class="active">{{ p }}</span>
     {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page + 2) %}
-      <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
+      <a href="/queue?{% if query_string %}{{ query_string }}&{% endif %}page={{ p }}">{{ p }}</a>
     {% elif p == 4 or p == total_pages - 3 %}
       <span>…</span>
     {% endif %}
   {% endfor %}
   {% if page < total_pages %}
-    <a href="/?{% if query_string %}{{ query_string }}&{% endif %}page={{ page+1 }}">Next ›</a>
+    <a href="/queue?{% if query_string %}{{ query_string }}&{% endif %}page={{ page+1 }}">Next ›</a>
   {% endif %}
 </div>
 {% endif %}

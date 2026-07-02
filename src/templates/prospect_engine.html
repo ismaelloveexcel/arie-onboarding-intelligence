@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ARIE Weekly Prospect Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,500;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/design-system.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body class="pe-app">
+<div class="pe-topbar">
+  <a href="/" class="pe-brand" aria-label="ARIE Finance Prospect Desk">
+    <svg viewBox="0 0 173 96" aria-hidden="true">
+      <defs>
+        <linearGradient id="peBrandGradient" x1="11" y1="80" x2="162" y2="20" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stop-color="#151B4A"/>
+          <stop offset="1" stop-color="#06113A"/>
+        </linearGradient>
+      </defs>
+      <path d="M11.0614 80.4441L127.778 11.2672C131.539 9.03804 136.402 10.7353 137.959 14.8209L161.821 77.4418C163.579 82.0553 160.171 87.0001 155.234 87.0001L127.149 87.0001C125.138 87.0001 123.222 86.1406 121.885 84.6381L105.648 66.3987C103.515 64.0025 100.033 63.349 97.1764 64.8086L55.2553 86.2282C54.2624 86.7355 53.1633 87.0001 52.0482 87.0001L12.8583 87.0001C9.27394 87.0001 7.97797 82.2716 11.0614 80.4441Z" fill="url(#peBrandGradient)"/>
+      <path d="M88.1037 86.508C86.5213 86.508 85.2012 85.2031 85.6183 83.6766C86.1064 81.8899 87.0528 80.2432 88.3855 78.9106C90.4004 76.8957 93.1333 75.7637 95.9829 75.7637C98.8324 75.7637 101.565 76.8957 103.58 78.9106C104.913 80.2432 105.859 81.8899 106.347 83.6766C106.764 85.2031 105.444 86.508 103.862 86.508L88.1037 86.508Z" fill="#131313"/>
+    </svg>
+    <span><strong>ARIE</strong><small>FINANCE</small></span>
+  </a>
+  <div class="pe-workspace-seg" aria-label="Workspace navigation">
+    <a class="is-on" href="/">Workspace</a>
+    <a href="/weekly-email">Weekly email</a>
+  </div>
+  <div class="pe-run-meta"><span></span>{{ week_label }}</div>
+</div>
+<div class="pe-shell">
+  <div class="pe-version-marker">ARIE Prospect Desk v2 — active</div>
+  <div class="pe-head">
+    <div>
+      <div class="pe-eyebrow">ARIE Prospect Desk</div>
+      <h1>{% if mode == "admin" %}Weekly prospect control room{% else %}Ready to work{% endif %}</h1>
+      <p>
+        {% if mode == "admin" %}
+          Full weekly pipeline view for enrichment, review, and handoff.
+        {% else %}
+          Enriched, researched prospects with a usable route and next action.
+        {% endif %}
+        <span>{{ week_label }}</span>
+      </p>
+    </div>
+    <div class="pe-actions">
+      {% if demo_mode %}
+      <div class="pe-seg" aria-label="Demo role switch">
+        <a href="/?view=team" class="{% if mode == 'team' %}is-on{% endif %}">Team</a>
+        <a href="/?view=admin" class="{% if mode == 'admin' %}is-on{% endif %}">Admin</a>
+      </div>
+      {% elif is_admin %}
+      <a class="pe-btn" href="/?view={{ 'team' if mode == 'admin' else 'admin' }}">
+        {{ "Team view" if mode == "admin" else "Admin view" }}
+      </a>
+      {% endif %}
+      <a class="pe-btn pe-btn-primary" href="/weekly-email">Weekly email preview</a>
+    </div>
+  </div>
+
+  {% if mode == "admin" %}
+  <div class="pe-flow" aria-label="Weekly workflow">
+    <span><b>1</b> Monday scrape</span>
+    <span><b>2</b> Export for Manus</span>
+    <span><b>3</b> Import enriched file</span>
+    <span><b>4</b> RM handoff</span>
+  </div>
+  <div class="pe-admin-actions">
+    <a class="pe-btn" href="/leads/export">Export for Manus</a>
+    <a class="pe-btn pe-btn-primary" href="/upload">Import Enriched File</a>
+  </div>
+  {% endif %}
+
+  <div class="pe-stats">
+    <div><strong>{{ counts.enriched }}</strong><span>Enriched leads</span></div>
+    <div><strong>{{ counts.route_intro }}</strong><span>Introducer routes</span></div>
+    <div><strong>{{ counts.introducers }}</strong><span>Usable introducers</span></div>
+    <div><strong>{{ counts.assigned }}</strong><span>Assigned</span></div>
+    <div><strong>{{ counts.email_eligible }}</strong><span>Email eligible</span></div>
+  </div>
+
+  <nav class="pe-tabs" aria-label="Prospect tabs">
+    {% for key, tab in tabs.items() %}
+    <a href="/?view={{ mode }}&tab={{ key }}" class="{% if key == active_tab %}is-on{% endif %}">
+      {{ tab.label }} <span>{{ tab.rows|length }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="pe-panel">
+    <div class="pe-table-wrap">
+      <table class="pe-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Lead type</th>
+            <th>Jurisdiction</th>
+            <th>Category</th>
+            <th>Why relevant</th>
+            <th>Contact route</th>
+            <th>Status</th>
+            <th>Owner</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>
+              <button
+                class="pe-link"
+                type="button"
+                data-name="{{ row.name }}"
+                data-type="{{ row.lead_type }}"
+                data-jurisdiction="{{ row.jurisdiction }}"
+                data-category="{{ row.category }}"
+                data-why="{{ row.why_relevant }}"
+                data-route="{{ row.contact_route }}"
+                data-route-kind="{{ row.contact_route_kind }}"
+                data-evidence="{{ row.evidence_text or row.source_label }}"
+                data-source="{{ row.source_label }}"
+                data-source-url="{{ row.source_url }}"
+                data-next="{{ row.next_action }}"
+                data-angle="{{ row.suggested_opening_angle }}"
+                data-followup="{{ row.follow_up_date or '' }}"
+                data-notes="{{ row.notes }}"
+                data-owner="{{ row.owner }}"
+                data-status="{{ row.status }}"
+                data-open-url="{{ row.open_url }}"
+                onclick="openProspectDrawer(this)"
+              >{{ row.name }}</button>
+            </td>
+            <td>{{ row.lead_type }}</td>
+            <td>{{ row.jurisdiction }}</td>
+            <td>{{ row.category }}</td>
+            <td class="pe-why">{{ row.why_relevant }}</td>
+            <td>
+              <span class="pe-route pe-route-{{ row.contact_route_kind|lower|replace(' ', '-') }}">{{ row.contact_route_kind }}</span>
+              <small>{{ row.contact_route }}</small>
+            </td>
+            <td><span class="pe-status pe-status-{{ row.status|lower|replace(' ', '-')|replace('_', '-') }}">{{ row.status_label }}</span></td>
+            <td>{{ row.owner or "Unassigned" }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="8">
+              <div class="pe-empty">No prospects in this view yet.</div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="pe-compliance">
+    No guessed emails. No automated outreach. Suggested openers are drafts only.
+    {{ footer_text }}
+  </p>
+</div>
+
+<div class="pe-scrim" id="peScrim" onclick="closeProspectDrawer()"></div>
+<aside class="pe-drawer" id="peDrawer" aria-hidden="true">
+  <button class="pe-drawer-close" type="button" onclick="closeProspectDrawer()">Close</button>
+  <div class="pe-drawer-head">
+    <div class="pe-eyebrow" id="drawerRouteKind">Prospect</div>
+    <h2 id="drawerName">Lead</h2>
+    <p id="drawerMeta"></p>
+  </div>
+  <div class="pe-drawer-body">
+    <section><h3>Why this lead matters</h3><p id="drawerWhy"></p></section>
+    <section><h3>Source / evidence</h3><p id="drawerEvidence"></p><a id="drawerSource" href="#" target="_blank" rel="noopener noreferrer"></a></section>
+    <section><h3>How to reach them</h3><p id="drawerRoute"></p></section>
+    <section><h3>Suggested opening angle</h3><p id="drawerAngle"></p></section>
+    <section><h3>Follow-up date</h3><p id="drawerFollowup"></p></section>
+    <section><h3>Notes</h3><p id="drawerNotes"></p></section>
+    <section>
+      <h3>Update in tool</h3>
+      <p id="drawerAction"></p>
+      <form
+        id="drawerQuickForm"
+        method="post"
+        hx-swap="none"
+        class="pe-drawer-form"
+      >
+        <label>Assign owner
+          <select name="assigned_to" id="drawerOwnerSelect">
+            <option value="">Unassigned</option>
+            {% for rm in rm_names %}
+            <option value="{{ rm }}">{{ rm }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Update status
+          <select name="status" id="drawerStatusSelect">
+            {% for status in statuses %}
+            <option value="{{ status.value }}">{{ status.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <button class="pe-btn" type="submit">Save owner/status</button>
+      </form>
+      <a class="pe-btn pe-btn-primary" id="drawerOpen" href="#">Open in Tool</a>
+    </section>
+  </div>
+</aside>
+
+<script>
+  function openProspectDrawer(el) {
+    const drawer = document.getElementById('peDrawer');
+    const scrim = document.getElementById('peScrim');
+    document.getElementById('drawerName').textContent = el.dataset.name || 'Lead';
+    document.getElementById('drawerRouteKind').textContent = el.dataset.routeKind || 'Prospect';
+    document.getElementById('drawerMeta').textContent = [el.dataset.type, el.dataset.jurisdiction, el.dataset.category].filter(Boolean).join(' · ');
+    document.getElementById('drawerWhy').textContent = el.dataset.why || 'No summary captured.';
+    document.getElementById('drawerEvidence').textContent = el.dataset.evidence || 'Evidence/source required before RM handoff.';
+    document.getElementById('drawerRoute').textContent = el.dataset.route || 'Research route before contact.';
+    document.getElementById('drawerAngle').textContent = el.dataset.angle || 'Draft only; personalise before use.';
+    document.getElementById('drawerFollowup').textContent = el.dataset.followup || 'Not set';
+    document.getElementById('drawerNotes').textContent = el.dataset.notes || 'No RM notes yet.';
+    document.getElementById('drawerAction').textContent = 'Owner: ' + (el.dataset.owner || 'Unassigned') + ' · Status: ' + (el.dataset.status || 'new');
+    const form = document.getElementById('drawerQuickForm');
+    form.action = (el.dataset.openUrl || '#') + '/assign';
+    form.setAttribute('hx-post', form.action);
+    document.getElementById('drawerOwnerSelect').value = el.dataset.owner || '';
+    document.getElementById('drawerStatusSelect').value = el.dataset.status || 'new';
+    const source = document.getElementById('drawerSource');
+    source.textContent = el.dataset.sourceUrl ? 'Open source' : '';
+    source.href = el.dataset.sourceUrl || '#';
+    const open = document.getElementById('drawerOpen');
+    open.href = el.dataset.openUrl || '#';
+    drawer.classList.add('is-open');
+    scrim.classList.add('is-open');
+    drawer.setAttribute('aria-hidden', 'false');
+  }
+  function closeProspectDrawer() {
+    const drawer = document.getElementById('peDrawer');
+    const scrim = document.getElementById('peScrim');
+    drawer.classList.remove('is-open');
+    scrim.classList.remove('is-open');
+    drawer.setAttribute('aria-hidden', 'true');
+  }
+</script>
+</body>
+</html>
