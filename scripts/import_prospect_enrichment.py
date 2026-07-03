@@ -182,6 +182,24 @@ def _persist(conn, item) -> None:
             f"ON CONFLICT (company_id) DO UPDATE SET {updates}, updated_at = NOW()",
             values,
         )
+        cur.execute(
+            """
+            INSERT INTO audit_log (entity_type, entity_id, action, actor, old_value, new_value, ip_address)
+            VALUES ('company', %s, 'prospect_enrichment_imported', 'manual-import', NULL, %s, NULL)
+            """,
+            (
+                cid,
+                Jsonb(
+                    {
+                        "prospect_quality_grade": n.get("prospect_quality_grade"),
+                        "route_quality": n.get("route_quality"),
+                        "source_reliability": n.get("source_reliability"),
+                        "readiness_bucket": item["bucket"],
+                        "ready_to_work": item["ready_to_work"],
+                    }
+                ),
+            ),
+        )
 
 
 def run(csv_path, *, write, update_existing, allow_production) -> dict:

@@ -198,13 +198,15 @@ def _make_resolver(conn):
                 """
                 SELECT c.company_name, c.jurisdiction, c.entity_type,
                        c.registered_address, c.verify_url, c.website,
-                       ls.priority_score, ls.tier,
+                       ls.score, ls.tier,
                        (cc.generic_email IS NOT NULL OR cc.contact_form_url IS NOT NULL
-                        OR cc.website IS NOT NULL)
+                        OR cc.website IS NOT NULL OR rr.lead_id IS NOT NULL)
                 FROM companies c
                 LEFT JOIN lead_scores ls
                     ON ls.company_id = c.id AND ls.is_current = TRUE
                 LEFT JOIN company_contacts cc ON cc.company_id = c.id
+                LEFT JOIN route_recommendations rr
+                    ON rr.lead_id = c.id AND rr.status <> 'superseded'
                 WHERE c.id = %s
                 LIMIT 1
                 """,
@@ -298,6 +300,25 @@ def _persist(conn, item: dict[str, object]) -> None:
                 rec["next_action"], rec["confidence"], "manual-import", "suggested",
                 rec["fingerprint"], norm.get("source_url"), norm.get("source_label"),
                 norm.get("source_type"), norm.get("route_entry_method"),
+            ),
+        )
+        cur.execute(
+            """
+            INSERT INTO audit_log (entity_type, entity_id, action, actor, old_value, new_value, ip_address)
+            VALUES ('company', %s, 'contact_route_imported', 'manual-import', NULL, %s, NULL)
+            """,
+            (
+                company_id,
+                Jsonb(
+                    {
+                        "route_source_url": norm.get("source_url"),
+                        "route_source_label": norm.get("source_label"),
+                        "route_source_type": norm.get("source_type"),
+                        "route_entry_method": norm.get("route_entry_method"),
+                        "contactability_bucket": rec.get("contactability_bucket"),
+                        "best_route_type": rec.get("best_route_type"),
+                    }
+                ),
             ),
         )
 

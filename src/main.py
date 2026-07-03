@@ -1008,6 +1008,13 @@ def _eligible_prospect_rows(limit: int = 120) -> list[dict]:
         AND NULLIF(TRIM(rr.best_route_value), '') IS NOT NULL
         AND NULLIF(TRIM(rr.next_action), '') IS NOT NULL
         AND jsonb_array_length(COALESCE(rr.evidence_summary, '[]'::jsonb)) > 0
+        AND EXISTS (
+            SELECT 1
+            FROM prospect_enrichment pe
+            WHERE pe.company_id = c.id
+              AND pe.ready_to_work = TRUE
+              AND pe.readiness_bucket = 'ready_to_work'
+        )
     """
     return _prospect_rows(where_sql, [list(_ACTIVE_STATUS_SQL), list(_ELIGIBLE_ROUTE_BUCKETS)], limit)
 

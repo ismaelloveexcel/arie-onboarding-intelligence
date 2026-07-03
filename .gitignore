@@ -21,6 +21,7 @@ venv/
 /operating_test_10_leads.csv
 /research_batch.csv
 /top_50_prospect_research_pack.csv
+/artifacts/
 
 backups/
 _snapshot.py
