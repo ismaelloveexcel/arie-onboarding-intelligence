@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
@@ -52,6 +53,18 @@ def write_guard_required(func: Callable[..., Any]) -> Callable[..., Any]:
             raise HTTPException(status_code=401, detail="Write authentication required")
         setattr(request.state, "write_actor", actor)
         return func(*args, **kwargs)
+
+    # Preserve the wrapped handler's *resolved* signature. functools.wraps sets
+    # __wrapped__ (so inspect.signature reads the original params) but cannot copy
+    # __globals__ — the wrapper's globals belong to this module. With
+    # `from __future__ import annotations` in the route modules, string
+    # annotations like "UploadFile" would otherwise be resolved against this
+    # module's globals and fail (ForwardRef('UploadFile')). Resolving them here
+    # against the handler's own module keeps FastAPI dependency analysis working.
+    try:
+        wrapper.__signature__ = inspect.signature(func, eval_str=True)
+    except (NameError, TypeError, ValueError):
+        pass
 
     setattr(wrapper, "_write_guard_required", True)
     setattr(wrapper, "_write_guard_key", registry_key)

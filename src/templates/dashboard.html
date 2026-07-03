@@ -210,6 +210,183 @@
 </div>
 
 <!-- =========================================================================
+     TOP OPPORTUNITIES — the few leads an RM should work right now
+     ========================================================================= -->
+<div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>This Week's Best Prospects</span>
+    <span class="ds-meta">Ranked · work these first</span>
+  </div>
+  {% if top_opportunities %}
+  <div class="table-wrap">
+    <table class="ds-table-premium">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Action</th>
+          <th>How to reach them</th>
+          <th>Source</th>
+          <th style="text-align:right">Score</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for opp in top_opportunities %}
+        <tr>
+          <td>
+            <a href="/leads/{{ opp.id }}" class="ds-company-link" style="font-weight:600">{{ opp.company_name }}</a>
+            <div class="ds-meta">{{ opp.jurisdiction }}{% if opp.entity_type %} · {{ opp.entity_type }}{% endif %}</div>
+          </td>
+          <td>
+            <span class="badge {% if opp.is_rm_ready %}badge-contact-ready{% else %}badge-contact-partial{% endif %}">{{ opp.decision }}</span>
+            <div class="ds-meta" style="font-size:10px; margin-top:2px">{{ opp.rm_status_label }}</div>
+          </td>
+          <td style="font-size:12px">{{ opp.best_route or "—" }}</td>
+          <td style="font-size:12px">{{ opp.source_reliability_label }}</td>
+          <td style="text-align:right; font-variant-numeric:tabular-nums">{{ opp.priority_score }}</td>
+          <td><a href="/leads/{{ opp.id }}" style="font-size:12px; color:#0B3D91">Open →</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="ds-empty-state" style="text-align:left">
+    <span class="ds-empty-state-title">No prospects ready to work yet</span>
+    Most leads still need a contact route before an RM can act. Run this week's
+    research workflow below — export a batch and enrich contact routes through Manus.
+  </div>
+  {% endif %}
+</div>
+
+<!-- =========================================================================
+     RESEARCH BATCH — the weekly enrichment loop (turns leads into routes)
+     ========================================================================= -->
+<div class="ds-layer-reference ds-card ds-card-reference" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Weekly Research Workflow</span>
+    <span class="ds-meta">Turns scored leads into reachable prospects</span>
+  </div>
+  <p style="font-size:13px; color:#374151; margin:0 0 .75rem 0; line-height:1.6">
+    Most leads are scored but lack a contact route. Run the weekly loop to make
+    them RM-ready — export the best leads, research routes (Manus or manual),
+    then import the results.
+  </p>
+  <ol style="font-size:13px; color:#374151; margin:0; padding-left:1.25rem; line-height:1.9">
+    <li><strong>Export</strong> — <code>python -m scripts.export_research_batch --limit 50</code></li>
+    <li><strong>Research</strong> — upload <code>research_batch.csv</code> to Manus (see <code>docs/manus_contact_research_prompt.md</code>)</li>
+    <li><strong>Dry-run import</strong> — <code>python -m scripts.import_contact_routes enriched.csv</code></li>
+    <li><strong>Fix &amp; import</strong> — fix rejected rows, then <code>--write</code> on staging</li>
+    <li><strong>Review</strong> — refresh this page and work <strong>This Week's Best Prospects</strong></li>
+  </ol>
+  <div class="ds-meta" style="margin-top:.5rem">Full guide: <code>docs/weekly_research_workflow.md</code></div>
+</div>
+
+<!-- =========================================================================
+     CLIENT ACQUISITION ZONE — management-facing acquisition readiness
+     (answers: "how many leads can we actually act on, and how covered are we?")
+     ========================================================================= -->
+{% if client_acquisition %}
+<div class="ds-layer-decision ds-card ds-card-decision" style="margin-bottom:1.25rem">
+  <div class="ds-card-header" style="display:flex; justify-content:space-between; align-items:center">
+    <span>Acquisition Snapshot</span>
+    <span class="ds-meta">Where this week's pipeline stands</span>
+  </div>
+
+  {# ── ACQUISITION KPIs ── #}
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:.875rem">
+    <div class="ds-stat-tile {% if client_acquisition.rm_ready > 0 %}ds-stat-tile-positive{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.rm_ready }}</div>
+      <div class="ds-stat-tile-label">Ready to work</div>
+      <div class="ds-stat-tile-sub">Contact route confirmed</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.warm_introducer }}</div>
+      <div class="ds-stat-tile-label">Route via introducer</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.requires_research }}</div>
+      <div class="ds-stat-tile-label">Needs research</div>
+    </div>
+    <div class="ds-stat-tile {% if client_acquisition.no_compliant_route > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.no_compliant_route }}</div>
+      <div class="ds-stat-tile-label">Missing contact route</div>
+    </div>
+  </div>
+
+  {# ── COVERAGE + WORKFLOW ── #}
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:.875rem; margin-bottom:1rem">
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ "%.1f"|format(client_acquisition.coverage_pct) }}%</div>
+      <div class="ds-stat-tile-label">Route coverage</div>
+      <div class="ds-stat-tile-sub">Leads with a route assessed</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.contacted }}</div>
+      <div class="ds-stat-tile-label">Contacted</div>
+    </div>
+    <div class="ds-stat-tile {% if client_acquisition.overdue_followups > 0 %}ds-stat-tile-risk{% endif %}">
+      <div class="ds-stat-tile-value">{{ client_acquisition.overdue_followups }}</div>
+      <div class="ds-stat-tile-label">Overdue follow-ups</div>
+    </div>
+    <div class="ds-stat-tile">
+      <div class="ds-stat-tile-value">{{ client_acquisition.accepted_routes }}</div>
+      <div class="ds-stat-tile-label">Routes confirmed</div>
+    </div>
+  </div>
+
+  <div class="ds-meta" style="margin-bottom:.5rem">
+    Meetings booked, replies, and won clients will appear here once RM outcome
+    feedback is captured.
+  </div>
+
+  {# ── FULL BREAKDOWN ── #}
+  <details>
+    <summary style="font-size:12px; font-weight:600; color:#0B3D91; cursor:pointer; padding:.25rem 0; user-select:none">
+      Full breakdown
+      <span class="ds-meta" style="font-weight:400; margin-left:.5rem">
+        {{ route_metrics.accepted_routes }} accepted · {{ route_metrics.rejected_routes }} rejected
+      </span>
+    </summary>
+    <div style="margin-top:.875rem">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Contact route status</th>
+              <th style="text-align:right">Leads</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge badge-contact-ready">Ready to Contact</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.ready_to_contact }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-partial">Route via Introducer / CSP</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.via_introducer_csp }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-partial">Direct Candidate Found</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.direct_candidate }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-missing">Needs Research</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.needs_research }}</td>
+            </tr>
+            <tr>
+              <td><span class="badge badge-contact-missing">No Usable Route</span></td>
+              <td style="text-align:right; font-variant-numeric:tabular-nums">{{ route_metrics.no_usable_route }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </details>
+</div>
+{% endif %}
+
+<!-- =========================================================================
      REFERENCE ZONE — Queue breakdown + Enrichment Coverage
      (operational data, low urgency)
      ========================================================================= -->

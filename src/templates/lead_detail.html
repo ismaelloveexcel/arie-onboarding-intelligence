@@ -7,7 +7,7 @@
    ====================================================================== #}
 <div class="page-head">
   <h1>{{ lead.company_name }}</h1>
-  <a href="/" class="back-link">← Back to queue</a>
+  <a href="/queue" class="back-link">← Back to queue</a>
 </div>
 
 {# ======================================================================
@@ -109,24 +109,105 @@
     <span class="ds-meta">· Score {{ score.score }} · {{ score.tier | title }}</span>
   </div>
 
-  {# Decision framing strip — Contact Now is primary (filled); others are subordinate #}
-  <div class="ds-action-strip" style="margin-top:.875rem">
-    {# PRIMARY — filled navy/gold, visually dominant #}
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:6px; padding:7px 20px; background:var(--arie-navy); border:none; border-radius:var(--radius-chip); font-size:13px; font-weight:700; color:var(--arie-gold); text-decoration:none; box-shadow:var(--shadow-sm); letter-spacing:.01em">
-      ✓ Contact Now
-    </a>
-    {# SECONDARY — outline only, no fill #}
-    <span class="ds-action-strip-divider"></span>
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:5px; padding:6px 14px; background:transparent; border:1.5px solid #fde68a; border-radius:var(--radius-chip); font-size:12px; font-weight:600; color:#d97706; text-decoration:none">
-      ⏱ Review Later
-    </a>
-    <a href="#action-panel"
-       style="display:inline-flex; align-items:center; gap:5px; padding:6px 10px; background:transparent; border:none; border-radius:var(--radius-chip); font-size:12px; font-weight:500; color:#9ca3af; text-decoration:none">
-      ✕ Do Not Contact
-    </a>
+  {# ============================================================
+     ACTION RECOMMENDATION — driven by Route Intelligence v1.
+     The headline decision an RM should act on. The full Route
+     Intelligence card (accept/reject + complete evidence/missing
+     data) lives lower in the left column under #route-intelligence.
+     ============================================================ #}
+  {% if route_intelligence %}
+  {% set _status = route_intelligence.contactability_status %}
+  {% set _accent = {
+      'ready_to_contact': '#15803d',
+      'route_via_introducer': '#0B3D91',
+      'research_required': '#d97706',
+      'no_compliant_route_found': '#6b7280'
+     }[_status] %}
+  {% set _bg = {
+      'ready_to_contact': '#f0fdf4',
+      'route_via_introducer': '#eff6ff',
+      'research_required': '#fffbeb',
+      'no_compliant_route_found': '#f9fafb'
+     }[_status] %}
+  <div class="ds-action-recommendation" id="action-recommendation"
+       style="margin-top:.875rem; border:1.5px solid {{ _accent }}33; background:{{ _bg }}; border-radius:10px; padding:1rem 1.125rem">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap">
+      <div style="display:flex; align-items:center; gap:.75rem">
+        <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Recommended action</span>
+        <span style="font-size:20px; font-weight:800; color:{{ _accent }}; letter-spacing:-.01em">{{ route_intelligence.decision }}</span>
+      </div>
+      <span class="badge" style="background:{{ _accent }}1a; color:{{ _accent }}; border:1px solid {{ _accent }}33; font-weight:700; font-size:12px; padding:4px 12px">{{ route_intelligence.rm_status_label }}</span>
+    </div>
+
+    {% if not route_intelligence.is_rm_ready and route_intelligence.blocking_reasons %}
+    <div style="margin-top:.75rem; background:#fff7ed; border:1px solid #fed7aa; border-radius:8px; padding:.6rem .85rem">
+      <span style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#9a3412; font-weight:700">Not ready because</span>
+      <ul style="margin:.3rem 0 0 0; padding-left:1.1rem; font-size:13px; color:#7c2d12; line-height:1.6">
+        {% for reason in route_intelligence.blocking_reasons %}<li>{{ reason }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-top:1rem">
+      <div>
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">How to reach them</div>
+        <div style="font-size:14px; font-weight:600; margin-top:.25rem">{{ route_intelligence.best_route_label }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Source reliability</div>
+        <div style="font-size:14px; font-weight:600; margin-top:.25rem">{{ route_intelligence.source_reliability_label }}</div>
+      </div>
+      <div>
+        <div style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Why now</div>
+        <div style="font-size:14px; font-weight:600; margin-top:.25rem">{{ why_now or "No time-sensitive trigger" }}</div>
+      </div>
+    </div>
+
+    <div style="margin-top:1rem; padding-top:.85rem; border-top:1px solid {{ _accent }}22">
+      <span style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">What to do next</span>
+      <div style="font-size:14px; font-weight:600; margin-top:.25rem; color:#111827">{{ route_intelligence.next_action }}</div>
+    </div>
+
+    {% if route_intelligence.evidence_summary %}
+    <div style="margin-top:.85rem; font-size:13px; color:#374151">
+      <span style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#6b7280; font-weight:600">Why this lead</span>
+      <ul style="margin:.3rem 0 0 0; padding-left:1.1rem; line-height:1.6">
+        {% for item in route_intelligence.evidence_summary[:2] %}<li>{{ item }}</li>{% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    {% if route_intelligence.suggested_opener %}
+    <div style="margin-top:.85rem; background:#fff; border:1px dashed {{ _accent }}55; border-radius:8px; padding:.7rem .85rem">
+      <span style="font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:{{ _accent }}; font-weight:700">Suggested opener · draft to personalise</span>
+      <p style="font-size:13px; color:#374151; margin:.35rem 0 0 0; line-height:1.6">{{ route_intelligence.suggested_opener }}</p>
+    </div>
+    {% endif %}
+
+    {% if route_intelligence.status == 'suggested' %}
+    <div style="display:flex; gap:.5rem; margin-top:1rem; padding-top:.85rem; border-top:1px solid {{ _accent }}22">
+      <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/accept">
+        <button class="btn btn-primary" type="submit" style="font-size:13px">Mark route as usable</button>
+      </form>
+      <form method="post" action="/leads/{{ lead.id }}/route-recommendations/{{ route_intelligence.id }}/reject">
+        <button class="btn btn-secondary" type="submit" style="font-size:13px">Mark route as not usable</button>
+      </form>
+    </div>
+    {% elif route_intelligence.status %}
+    <div style="margin-top:.85rem; padding-top:.85rem; border-top:1px solid {{ _accent }}22; font-size:12px; color:#6b7280">
+      Route marked
+      <strong style="color:#374151">{{ 'usable' if route_intelligence.status == 'accepted' else ('not usable' if route_intelligence.status == 'rejected' else route_intelligence.status) }}</strong>
+      {% if route_intelligence.reviewed_by %}by {{ route_intelligence.reviewed_by }}{% endif %}
+    </div>
+    {% endif %}
   </div>
+  {% else %}
+  <div class="ds-action-recommendation" id="action-recommendation"
+       style="margin-top:.875rem; border:1px dashed #d1d5db; background:#f9fafb; border-radius:10px; padding:1rem 1.125rem">
+    <span style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:#6b7280">Recommended action</span>
+    <div style="font-size:14px; color:#374151; margin-top:.35rem; line-height:1.6">No contact route found for this lead yet. Add it to a research batch and enrich the contact route, then a recommended action will appear here.</div>
+  </div>
+  {% endif %}
 
 </div>
 
@@ -137,6 +218,49 @@
 
   {# ── LEFT COLUMN: Intelligence → Reference ── #}
   <div>
+
+    {# ── SOURCE DETAILS — collapsed; technical route data only if expanded ── #}
+    {% if route_intelligence %}
+    <div class="card ds-layer-reference" id="route-intelligence">
+      <details>
+        <summary style="font-size:13px; font-weight:600; color:#0B3D91; cursor:pointer; user-select:none; padding:.15rem 0">View source details</summary>
+        <dl style="display:grid; grid-template-columns:1fr 1fr; gap:.55rem .85rem; font-size:12px; margin:.85rem 0 0 0">
+          <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Source</dt>
+            <dd style="margin:0; font-weight:600">
+              {% if route_intelligence.route_source_url %}<a href="{{ route_intelligence.route_source_url }}" target="_blank" rel="noopener noreferrer" style="color:#0057b8">↗ {{ route_intelligence.route_source_label or 'Open source' }}</a>{% else %}{{ route_intelligence.route_source_label or '—' }}{% endif %}
+            </dd></div>
+          <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Source type</dt><dd style="margin:0; font-weight:600">{{ (route_intelligence.route_source_type or '—') | replace('_',' ') | title }}</dd></div>
+          <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Reliability</dt><dd style="margin:0; font-weight:600">{{ route_intelligence.source_reliability_label }}</dd></div>
+          <div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Added by</dt><dd style="margin:0; font-weight:600">{{ route_intelligence.route_entry_method | replace('_',' ') | title }}</dd></div>
+          {% if route_intelligence.route_last_checked_at %}<div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Last checked</dt><dd style="margin:0">{{ route_intelligence.route_last_checked_at.strftime('%d %b %Y') }}</dd></div>{% endif %}
+          {% if route_intelligence.generated_at %}<div><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Last evaluated</dt><dd style="margin:0">{{ route_intelligence.generated_at.strftime('%d %b %Y') }}</dd></div>{% endif %}
+          <div style="grid-column:span 2"><dt style="color:#6b7280; font-size:10px; text-transform:uppercase; letter-spacing:.04em">Route type (internal)</dt><dd style="margin:0; color:#6b7280">{{ route_intelligence.contactability_label }}</dd></div>
+        </dl>
+        {% if route_intelligence.missing_data %}
+        <div style="margin-top:.6rem; font-size:12px; color:#6b7280">Still missing: {% for item in route_intelligence.missing_data %}{{ item }}{% if not loop.last %}, {% endif %}{% endfor %}</div>
+        {% endif %}
+      </details>
+    </div>
+    {% endif %}
+
+    {# ── INTRODUCER / CSP ROUTES ── #}
+    {% if introducer_matches %}
+    <div class="card ds-layer-intelligence" id="introducer-matches">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:.75rem">
+        <h2 style="margin:0">Introducer / CSP routes</h2>
+        <span class="badge badge-contact-partial">{{ introducer_matches|length }} found</span>
+      </div>
+      {% for match in introducer_matches %}
+      <div style="padding:.6rem 0; {% if not loop.last %}border-bottom:1px solid #f3f4f6;{% endif %}">
+        <div style="font-size:12px; font-weight:600; margin-bottom:.25rem">
+          <span class="confidence confidence-{{ match.match_strength }}" style="margin-right:.4rem">{{ match.match_strength | title }}</span>
+          {{ match.match_type | replace('_', ' ') | title }}
+        </div>
+        {% if match.evidence %}<p style="font-size:12px; color:#374151; margin:0">{{ match.evidence }}</p>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
     {# ── INTELLIGENCE: Contact Intelligence ── #}
     <div class="card ds-layer-intelligence">
@@ -203,48 +327,14 @@
         </tbody>
       </table>
       {% else %}
-      <div style="padding:.625rem 0 .75rem 0; border-bottom:1px solid #f3f4f6; margin-bottom:.75rem">
-        <div style="font-size:12px; font-weight:600; color:#374151; margin-bottom:4px">No key contacts yet</div>
-        <div style="font-size:12px; color:#6b7280; line-height:1.6; margin-bottom:.625rem">
-          Add the first key contact to begin the outreach workflow for this lead.
-        </div>
-        <details open>
-          <summary style="font-size:12px; font-weight:700; color:#0B3D91; cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:5px; padding:5px 12px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-chip)">
-            + Add key contact
-          </summary>
-          <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
-            <input type="hidden" name="source" value="manual">
-            <div class="grid-2">
-              <div>
-                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Name <span style="color:#dc2626">*</span></label>
-                <input name="name" required style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-              </div>
-              <div>
-                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Role</label>
-                <input name="role" placeholder="e.g. Director, CEO" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-              </div>
-            </div>
-            <div class="grid-2">
-              <div>
-                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">Email</label>
-                <input name="email" type="email" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-              </div>
-              <div>
-                <label style="display:block; font-size:12px; color:#6b7280; margin-bottom:2px">LinkedIn URL</label>
-                <input name="linkedin_url" style="width:100%; border:1px solid #d1d5db; border-radius:4px; padding:6px 8px; font-size:12px">
-              </div>
-            </div>
-            <div style="display:flex; gap:.5rem; align-items:center">
-              <button type="submit" style="font-size:12px; border:none; background:#0B3D91; color:#fff; border-radius:4px; padding:6px 14px; cursor:pointer; font-weight:600">Add contact</button>
-              <span class="ds-meta">Phone and notes can be added after saving.</span>
-            </div>
-          </form>
-        </details>
+      <div style="padding:.5rem 0 .25rem 0; font-size:13px; color:#6b7280; line-height:1.6">
+        <div style="font-weight:600; color:#374151">No named contact saved yet.</div>
+        Use the contact route above first, or add a named contact if you already know one.
       </div>
       {% endif %}
 
-      <details style="margin-top:.75rem">
-        <summary style="font-size:12px; color:#111827; cursor:pointer">Add a key contact</summary>
+      <details style="margin-top:.85rem">
+        <summary style="font-size:13px; font-weight:600; color:#0B3D91; cursor:pointer; list-style:none; display:inline-flex; align-items:center; gap:5px; padding:6px 14px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:var(--radius-chip)">+ Add contact</summary>
         <form method="post" action="/leads/{{ lead.id }}/contacts" style="margin-top:.75rem; display:flex; flex-direction:column; gap:.5rem">
           <input type="hidden" name="source" value="manual">
           <div>
@@ -567,6 +657,50 @@
         </div>
         <button type="submit" class="btn btn-primary">Save</button>
         {% if saved %}<div class="saved-flag">✓ Saved</div>{% endif %}
+      </form>
+    </div>
+
+    {# ── DECISION: RM Feedback + Next Action ── #}
+    <div class="card ds-layer-decision" id="feedback-panel">
+      <h2>RM Feedback</h2>
+      <p style="font-size:12px; color:#6b7280; margin:0 0 .75rem 0; line-height:1.6">
+        Tell the system whether this lead was useful and what happens next. Feeds
+        the acquisition dashboard and future prioritisation.
+      </p>
+      <form method="post" action="/leads/{{ lead.id }}/feedback" class="form-stack">
+        <div>
+          <label>Outcome / feedback</label>
+          <select name="feedback">
+            <option value="">— No feedback —</option>
+            {% for value, label in [
+              ('useful', 'Useful lead'),
+              ('wrong_contact', 'Wrong contact'),
+              ('not_relevant', 'Not relevant'),
+              ('duplicate', 'Duplicate'),
+              ('contacted', 'Contacted'),
+              ('meeting_booked', 'Meeting booked'),
+              ('won', 'Won'),
+              ('lost', 'Lost')
+            ] %}
+              <option value="{{ value }}" {% if action and action.feedback == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Feedback note</label>
+          <textarea name="feedback_note" placeholder="Optional context for the team">{{ action.feedback_note if action else "" }}</textarea>
+        </div>
+        <div class="grid-2">
+          <div>
+            <label>Next action</label>
+            <input type="text" name="next_action" value="{{ action.next_action if action else '' }}" placeholder="e.g. Send proposal pack">
+          </div>
+          <div>
+            <label>Next action due</label>
+            <input type="date" name="next_action_due_date" value="{{ action.next_action_due_date if action and action.next_action_due_date else '' }}">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Save feedback</button>
       </form>
     </div>
 
