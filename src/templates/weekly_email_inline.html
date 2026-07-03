@@ -14,7 +14,7 @@
             <td style="background:#10142b;color:#ffffff;padding:30px 34px">
               <div style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#c9a44a">ARIE Finance</div>
               <h1 style="margin:10px 0 8px;font-size:28px;line-height:1.15;font-family:Georgia,serif;color:#ffffff">Weekly prospect action list</h1>
-              <p style="margin:0;color:#c7cadd;font-size:14px">Enriched leads ready for RM review · {{ week_label }}</p>
+              <p style="margin:0;color:#c7cadd;font-size:14px">Admin-published leads ready for RM action · {{ week_label }}</p>
             </td>
           </tr>
           <tr>
@@ -49,6 +49,12 @@
                         <td style="width:50%;padding:8px 0 4px 8px;vertical-align:top">
                           <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Source</div>
                           <div style="font-size:13px;color:#15193a">{{ lead.source_label }}</div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding:8px 0 4px;vertical-align:top">
+                          <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#8a8fa3;font-weight:bold">Owner</div>
+                          <div style="font-size:13px;color:#15193a">{{ lead.owner or "Unassigned" }}</div>
                         </td>
                       </tr>
                       <tr>

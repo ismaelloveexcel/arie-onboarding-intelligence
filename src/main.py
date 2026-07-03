@@ -814,6 +814,8 @@ _ELIGIBLE_ROUTE_BUCKETS = (
     "route_via_introducer_csp",
     "direct_candidate_found",
 )
+_TEAM_VISIBLE_STATUSES = ("sent_to_team", "in_progress", "follow_up")
+_EMAIL_PUBLISHED_STATUSES = ("sent_to_team",)
 
 
 def _is_admin_actor(actor: str) -> bool:
@@ -845,6 +847,15 @@ def _lead_category(reason_codes: list[str], entity_type: str | None) -> str:
 
 def _active_status_clause(alias: str = "ra") -> str:
     return f"COALESCE({alias}.status, 'new') <> ALL(%s)"
+
+
+def _researched_route_clause() -> str:
+    return """
+        rr.contactability_bucket = ANY(%s)
+        AND NULLIF(TRIM(rr.best_route_value), '') IS NOT NULL
+        AND NULLIF(TRIM(rr.next_action), '') IS NOT NULL
+        AND jsonb_array_length(COALESCE(rr.evidence_summary, '[]'::jsonb)) > 0
+    """
 
 
 def _route_optional_exprs(cur) -> dict[str, str]:
@@ -1001,43 +1012,76 @@ def _prospect_rows(where_sql: str, params: list[object], limit: int = 120) -> li
     return rendered
 
 
-def _eligible_prospect_rows(limit: int = 120) -> list[dict]:
+def _enriched_route_rows(limit: int = 120) -> list[dict]:
     where_sql = f"""
         {_active_status_clause()}
-        AND rr.contactability_bucket = ANY(%s)
-        AND NULLIF(TRIM(rr.best_route_value), '') IS NOT NULL
-        AND NULLIF(TRIM(rr.next_action), '') IS NOT NULL
-        AND jsonb_array_length(COALESCE(rr.evidence_summary, '[]'::jsonb)) > 0
-        AND EXISTS (
-            SELECT 1
-            FROM prospect_enrichment pe
-            WHERE pe.company_id = c.id
-              AND pe.ready_to_work = TRUE
-              AND pe.readiness_bucket = 'ready_to_work'
-        )
+        AND {_researched_route_clause()}
     """
     return _prospect_rows(where_sql, [list(_ACTIVE_STATUS_SQL), list(_ELIGIBLE_ROUTE_BUCKETS)], limit)
 
 
+def _team_visible_prospect_rows(limit: int = 120) -> list[dict]:
+    where_sql = f"""
+        {_active_status_clause()}
+        AND {_researched_route_clause()}
+        AND (
+            COALESCE(ra.status, 'new') = ANY(%s)
+            OR NULLIF(TRIM(COALESCE(ra.assigned_to, '')), '') IS NOT NULL
+        )
+    """
+    return _prospect_rows(
+        where_sql,
+        [
+            list(_ACTIVE_STATUS_SQL),
+            list(_ELIGIBLE_ROUTE_BUCKETS),
+            list(_TEAM_VISIBLE_STATUSES),
+        ],
+        limit,
+    )
+
+
+def _published_email_rows(limit: int = 12) -> list[dict]:
+    where_sql = f"""
+        {_active_status_clause()}
+        AND {_researched_route_clause()}
+        AND COALESCE(ra.status, 'new') = ANY(%s)
+    """
+    return _prospect_rows(
+        where_sql,
+        [
+            list(_ACTIVE_STATUS_SQL),
+            list(_ELIGIBLE_ROUTE_BUCKETS),
+            list(_EMAIL_PUBLISHED_STATUSES),
+        ],
+        limit,
+    )
+
+
 def _build_prospect_tabs(is_admin: bool) -> dict[str, dict]:
-    eligible = _eligible_prospect_rows()
+    enriched = _enriched_route_rows()
+    team_visible = _team_visible_prospect_rows()
     intro = [
-        row for row in eligible
+        row for row in enriched
         if row["route_bucket"] == "route_via_introducer_csp"
         or row["route_type"] in {"introducer", "csp", "management_company", "fiduciary"}
     ]
-    assigned = [row for row in eligible if row["owner"]]
-    followups = [row for row in eligible if row["follow_up_date"]]
+    team_intro = [row for row in team_visible if row["id"] in {item["id"] for item in intro}]
+    assigned = [row for row in team_visible if row["owner"]]
+    followups = [
+        row
+        for row in team_visible
+        if row["follow_up_date"] or row["status"] == "follow_up"
+    ]
     tabs = {
-        "enriched": {"label": "Enriched Leads", "rows": eligible},
-        "route-introducer": {"label": "Route via Introducer", "rows": intro},
+        "enriched": {"label": "Sent to Team", "rows": team_visible},
+        "route-introducer": {"label": "Route via Introducer", "rows": team_intro},
         "introducers": {"label": "Introducers", "rows": []},
         "assigned": {"label": "Assigned to Team", "rows": assigned},
         "followups": {"label": "Follow-ups", "rows": followups},
     }
     if is_admin:
         this_week = _prospect_rows("1=1", [], 120)
-        eligible_ids = {row["id"] for row in eligible}
+        enriched_ids = {row["id"] for row in enriched}
         tabs = {
             "this-week": {"label": "This Week's Leads", "rows": this_week},
             "needs-enrichment": {
@@ -1045,13 +1089,13 @@ def _build_prospect_tabs(is_admin: bool) -> dict[str, dict]:
                 "rows": [
                     row
                     for row in this_week
-                    if row["id"] not in eligible_ids and not row["has_contact_route"]
+                    if row["id"] not in enriched_ids and not row["has_contact_route"]
                 ],
             },
-            "enriched": {"label": "Enriched Leads", "rows": eligible},
+            "enriched": {"label": "Enriched Leads", "rows": enriched},
             "introducers": {"label": "Introducers", "rows": []},
             "route-introducer": {"label": "Route via Introducer", "rows": intro},
-            "assigned": {"label": "Assigned to Team", "rows": assigned},
+            "assigned": {"label": "Assigned to Team", "rows": [row for row in enriched if row["owner"]]},
             "archived": {
                 "label": "Rejected / Archived",
                 "rows": _prospect_rows(_active_status_clause().replace("<> ALL", "= ANY"), [list(_ACTIVE_STATUS_SQL)], 80),
@@ -1108,7 +1152,7 @@ def _usable_introducers(limit: int = 80) -> list[dict]:
 
 
 def _weekly_email_leads(limit: int = 12) -> list[dict]:
-    return _eligible_prospect_rows(limit)
+    return _published_email_rows(limit)
 
 
 def _prospect_counts(tabs: dict[str, dict], email_leads: list[dict]) -> dict[str, int]:
@@ -2338,6 +2382,59 @@ def lead_assign(
             </td>
             <td>{verify}</td>
         </tr>""")
+
+
+@app.post("/leads/{lead_id}/publish", response_class=HTMLResponse)
+@write_guard_required
+def publish_lead_to_team(request: Request, lead_id: UUID) -> RedirectResponse:
+    actor = _read_actor(request)
+    if not _is_admin_actor(actor):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rr.id
+                FROM route_recommendations rr
+                WHERE rr.lead_id = %s
+                  AND rr.status <> 'superseded'
+                  AND rr.contactability_bucket = ANY(%s)
+                  AND NULLIF(TRIM(rr.best_route_value), '') IS NOT NULL
+                  AND NULLIF(TRIM(rr.next_action), '') IS NOT NULL
+                  AND jsonb_array_length(COALESCE(rr.evidence_summary, '[]'::jsonb)) > 0
+                ORDER BY rr.generated_at DESC NULLS LAST
+                LIMIT 1
+                """,
+                (lead_id, list(_ELIGIBLE_ROUTE_BUCKETS)),
+            )
+            if cur.fetchone() is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Lead needs a compliant contact route before publishing",
+                )
+
+            cur.execute(
+                """
+                INSERT INTO rm_actions (company_id, status)
+                VALUES (%s, 'sent_to_team')
+                ON CONFLICT (company_id) DO UPDATE SET
+                    status = 'sent_to_team',
+                    updated_at = NOW()
+                """,
+                (lead_id,),
+            )
+            cur.execute(
+                """
+                INSERT INTO audit_log
+                    (entity_type, entity_id, action, actor, new_value)
+                VALUES ('company', %s, 'published_to_team', %s, %s)
+                """,
+                (lead_id, actor, Jsonb({"status": "sent_to_team"})),
+            )
+        conn.commit()
+
+    return RedirectResponse(url="/?view=admin&tab=enriched", status_code=303)
 
 
 def _review_route_recommendation(

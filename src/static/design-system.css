@@ -421,6 +421,16 @@ body.pe-app {
   color: #fff;
 }
 
+.pe-btn-compact {
+  min-height: 26px;
+  padding: 0 .55rem;
+  font-size: 10.5px;
+}
+
+.pe-publish-form {
+  margin: .35rem 0 0;
+}
+
 .pe-seg {
   display: inline-flex;
   padding: 3px;
@@ -639,7 +649,9 @@ body.pe-app {
 
 .pe-status-qualified,
 .pe-status-active,
-.pe-status-contacted {
+.pe-status-contacted,
+.pe-status-sent-to-team,
+.pe-status-in-progress {
   background: #e4efe8;
   color: #24543a;
 }

@@ -42,7 +42,7 @@
         {% if mode == "admin" %}
           Full weekly pipeline view for enrichment, review, and handoff.
         {% else %}
-          Enriched, researched prospects with a usable route and next action.
+          Published prospects with a usable contact route, evidence, and next action.
         {% endif %}
         <span>{{ week_label }}</span>
       </p>
@@ -67,7 +67,7 @@
     <span><b>1</b> Monday scrape</span>
     <span><b>2</b> Export for Manus</span>
     <span><b>3</b> Import enriched file</span>
-    <span><b>4</b> RM handoff</span>
+    <span><b>4</b> Publish to Team</span>
   </div>
   <div class="pe-admin-actions">
     <a class="pe-btn" href="/leads/export">Export for Manus</a>
@@ -141,7 +141,14 @@
               <span class="pe-route pe-route-{{ row.contact_route_kind|lower|replace(' ', '-') }}">{{ row.contact_route_kind }}</span>
               <small>{{ row.contact_route }}</small>
             </td>
-            <td><span class="pe-status pe-status-{{ row.status|lower|replace(' ', '-')|replace('_', '-') }}">{{ row.status_label }}</span></td>
+            <td>
+              <span class="pe-status pe-status-{{ row.status|lower|replace(' ', '-')|replace('_', '-') }}">{{ row.status_label }}</span>
+              {% if mode == "admin" and row.has_contact_route and row.status != "sent_to_team" %}
+              <form class="pe-publish-form" method="post" action="{{ row.open_url }}/publish">
+                <button class="pe-btn pe-btn-compact" type="submit">Publish to Team</button>
+              </form>
+              {% endif %}
+            </td>
             <td>{{ row.owner or "Unassigned" }}</td>
           </tr>
           {% else %}

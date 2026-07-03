@@ -35,7 +35,7 @@
   <div class="pe-mail-meta">
     <div><span>To</span> Relationship managers</div>
     <div><span>Subject</span> ARIE weekly prospects · {{ week_label }}</div>
-    <div class="pe-mail-rule">Only enriched, eligible leads are included. Raw scraped leads are excluded.</div>
+    <div class="pe-mail-rule">Only Admin-published leads with a compliant route and evidence are included. Raw scraped leads are excluded.</div>
     <div style="margin-top:.75rem">
       <a class="pe-btn" href="/">Back to workspace</a>
       <a class="pe-btn pe-btn-primary" href="/weekly-email/email-safe">Email-safe template</a>
@@ -45,7 +45,7 @@
     <div class="pe-mail-hero">
       <div class="pe-eyebrow">ARIE Finance</div>
       <h1>Weekly prospect action list</h1>
-      <p>{{ email_leads|length }} enriched leads ready for RM review. Suggested openers are draft notes only.</p>
+      <p>{{ email_leads|length }} published leads ready for RM action. Suggested openers are draft notes only.</p>
       <div class="pe-mail-stats">
         <div><strong>{{ email_leads|length }}</strong><span>Ready</span></div>
         <div><strong>{{ email_leads|selectattr("contact_route_kind", "equalto", "Route via Introducer")|list|length }}</strong><span>Introducer route</span></div>
@@ -62,6 +62,7 @@
         <dl>
           <div><dt>Contact route</dt><dd>{{ lead.contact_route }}</dd></div>
           <div><dt>Source</dt><dd>{{ lead.source_label }}</dd></div>
+          <div><dt>Owner</dt><dd>{{ lead.owner or "Unassigned" }}</dd></div>
           <div><dt>Next action</dt><dd>{{ lead.next_action }}</dd></div>
           <div><dt>Opening angle</dt><dd>{{ lead.suggested_opening_angle }}</dd></div>
         </dl>
