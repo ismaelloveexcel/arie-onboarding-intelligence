@@ -26,32 +26,41 @@ _NEW_CANONICAL = (
 )
 
 
+def _drop_legacy_status_constraints(table: str, canonical_constraint: str) -> None:
+    for constraint in (
+        canonical_constraint,
+        f"{table}_status_check",
+        f"{table}_status_chk",
+    ):
+        op.execute(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {constraint}")
+
+
 def _canonicalize_existing_statuses(table: str) -> None:
     op.execute(
         f"""
         UPDATE {table}
         SET status = CASE
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('new', '') THEN 'new'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('researching', 'reviewing', 'in review') THEN 'reviewing'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('qualified', 'outreach ready') THEN 'qualified'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('not relevant', 'not_relevant') THEN 'not_relevant'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('deferred', 'later') THEN 'deferred'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('contacted') THEN 'contacted'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('sent to team', 'sent_to_team', 'published') THEN 'sent_to_team'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('in progress', 'in_progress', 'working') THEN 'in_progress'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('follow up', 'follow-up', 'follow_up', 'followup') THEN 'follow_up'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('onboarding') THEN 'onboarding'
-            WHEN lower(replace(replace(trim(status), '—', '-'), '  ', ' '))
+            WHEN lower(replace(trim(status), '  ', ' '))
                 IN ('not fit', 'not_fit', 'closed - not fit', 'closed-not fit') THEN 'not_fit'
             ELSE status
         END
@@ -72,6 +81,14 @@ def _replace_constraint(table: str, constraint: str, statuses: tuple[str, ...]) 
 
 
 def upgrade() -> None:
+    _drop_legacy_status_constraints(
+        "rm_actions",
+        "ck_rm_actions_status_canonical",
+    )
+    _drop_legacy_status_constraints(
+        "introducer_actions",
+        "ck_introducer_actions_status_canonical",
+    )
     _canonicalize_existing_statuses("rm_actions")
     _canonicalize_existing_statuses("introducer_actions")
     _replace_constraint(
