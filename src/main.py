@@ -260,6 +260,11 @@ def _parse_upload_csv(file_bytes: bytes) -> tuple[list[dict], list[str], list[st
     return columns, rows, errors
 
 
+@app.get("/live")
+def live() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.get("/health")
 def health(response: Response):
     db_ok = check_connection()
