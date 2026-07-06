@@ -42,6 +42,15 @@ LEI_BACKFILL_CHUNK_SIZE: int = int(os.getenv("LEI_BACKFILL_CHUNK_SIZE", "500"))
 ADMIN_TOKEN: str = os.getenv("ADMIN_TOKEN", "").strip()
 CH_ENRICHMENT_BATCH_SIZE: int = int(os.getenv("CH_ENRICHMENT_BATCH_SIZE", "200"))
 CH_ENRICHMENT_SAFE_LIMIT: int = int(os.getenv("CH_ENRICHMENT_SAFE_LIMIT", "5"))
+PIPELINE_SOURCE_TIMEOUT_SECONDS: int = int(
+    os.getenv("PIPELINE_SOURCE_TIMEOUT_SECONDS", "600")
+)
+PIPELINE_ENRICHMENT_TIMEOUT_SECONDS: int = int(
+    os.getenv("PIPELINE_ENRICHMENT_TIMEOUT_SECONDS", "900")
+)
+PIPELINE_SHADOW_TIMEOUT_SECONDS: int = int(
+    os.getenv("PIPELINE_SHADOW_TIMEOUT_SECONDS", "600")
+)
 
 
 def _env_bool(name: str, default: bool) -> bool:

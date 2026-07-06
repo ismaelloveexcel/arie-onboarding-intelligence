@@ -5,10 +5,20 @@ Or via GitHub Actions cron.
 """
 
 import logging
+import signal
 import time
+from collections.abc import Callable
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Any
+
+from psycopg.types.json import Jsonb
 
 from src.config import (
     CH_ENRICHMENT_BATCH_SIZE,
+    PIPELINE_ENRICHMENT_TIMEOUT_SECONDS,
+    PIPELINE_SHADOW_TIMEOUT_SECONDS,
+    PIPELINE_SOURCE_TIMEOUT_SECONDS,
     SCORING_SHADOW_MODE,
     SHADOW_BACKFILL_BATCH_SIZE,
     SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
@@ -26,6 +36,91 @@ from src.scoring import SCORING_VERSION, build_reason_summary, calculate_score
 logger = logging.getLogger(__name__)
 
 _ADVISORY_LOCK_ID = 12345
+
+
+class PipelineStepTimeout(TimeoutError):
+    pass
+
+
+@dataclass
+class StepResult:
+    name: str
+    status: str
+    count: int | None = None
+    duration_seconds: float = 0.0
+    error: str | None = None
+    details: dict[str, Any] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "step_name": self.name,
+            "status": self.status,
+            "count": self.count,
+            "duration_seconds": self.duration_seconds,
+            "error": self.error,
+            "details": self.details or {},
+        }
+
+
+@contextmanager
+def _time_limit(seconds: int):
+    if seconds <= 0 or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def _raise_timeout(_signum, _frame):
+        raise PipelineStepTimeout(f"step exceeded {seconds}s timeout")
+
+    previous_handler = signal.signal(signal.SIGALRM, _raise_timeout)
+    previous_timer = signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(previous_timer)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
+def _run_step(
+    conn,
+    name: str,
+    func: Callable[[], Any],
+    *,
+    timeout_seconds: int,
+    critical: bool = False,
+) -> StepResult:
+    started = time.time()
+    try:
+        with _time_limit(timeout_seconds):
+            raw_result = func()
+        conn.commit()
+        duration = round(time.time() - started, 2)
+        count = raw_result if isinstance(raw_result, int) else None
+        details = raw_result if isinstance(raw_result, dict) else None
+        result = StepResult(
+            name=name,
+            status="completed",
+            count=count,
+            duration_seconds=duration,
+            details=details,
+        )
+        logger.info("pipeline_step_completed", extra=result.as_dict())
+        return result
+    except Exception as exc:
+        conn.rollback()
+        duration = round(time.time() - started, 2)
+        result = StepResult(
+            name=name,
+            status="failed",
+            duration_seconds=duration,
+            error=str(exc)[:500],
+        )
+        logger.warning(
+            "pipeline_step_failed" if not critical else "pipeline_critical_step_failed",
+            extra=result.as_dict(),
+        )
+        if critical:
+            raise
+        return result
 
 
 def _acquire_lock(conn) -> bool:
@@ -237,10 +332,12 @@ def _finish_run(
     status: str,
     uk_count: int | None = None,
     mu_count: int | None = None,
+    lei_count: int | None = None,
     scores_count: int | None = None,
     queue_rows: int | None = None,
     duration_seconds: float | None = None,
     error: str | None = None,
+    source_results: list[dict[str, Any]] | None = None,
 ) -> None:
     if run_id is None:
         return
@@ -253,20 +350,24 @@ def _finish_run(
                     status = %s,
                     uk_count = %s,
                     mu_count = %s,
+                    lei_count = %s,
                     scores_count = %s,
                     queue_rows = %s,
                     duration_seconds = %s,
-                    error = %s
+                    error = %s,
+                    source_results = %s
                 WHERE id = %s
                 """,
                 (
                     status,
                     uk_count,
                     mu_count,
+                    lei_count,
                     scores_count,
                     queue_rows,
                     duration_seconds,
                     error,
+                    Jsonb(source_results or []),
                     run_id,
                 ),
             )
@@ -279,6 +380,7 @@ def _finish_run(
 def run() -> None:
     start = time.time()
     logger.info("pipeline_started")
+    step_results: list[StepResult] = []
 
     with get_conn() as conn:
         _reap_stuck_runs(conn)
@@ -289,26 +391,72 @@ def run() -> None:
                 _finish_run(conn, run_id, status="skipped_locked")
                 return
 
-            uk_count = fetch_uk_incorporations(conn)
-            mu_count = fetch_mauritius_incorporations(conn)
-            lei_count = fetch_gleif_registrations(conn)
-            backfill_result = backfill_lei_company_links(conn)
-            enrichment_result = run_ch_enrichment_batch(conn, CH_ENRICHMENT_BATCH_SIZE)
-            if uk_count == 0:
-                logger.error(
-                    "pipeline_ingestion_failure",
-                    extra={
-                        "event": "pipeline_ingestion_failure",
-                        "reason": "UK ingestion returned zero records",
-                        "uk_count": uk_count,
-                        "mu_count": mu_count,
-                    },
-                )
-                raise RuntimeError(
-                    "UK ingestion returned zero records — pipeline marked as failed"
-                )
-            scores_count = _score_new_companies(conn)
-            queue_rows = _refresh_queue(conn)
+            uk_result = _run_step(
+                conn,
+                "companies_house",
+                lambda: fetch_uk_incorporations(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+            )
+            step_results.append(uk_result)
+
+            mu_result = _run_step(
+                conn,
+                "mauritius_mns",
+                lambda: fetch_mauritius_incorporations(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+            )
+            step_results.append(mu_result)
+
+            lei_result = _run_step(
+                conn,
+                "gleif",
+                lambda: fetch_gleif_registrations(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+            )
+            step_results.append(lei_result)
+
+            backfill_result_step = _run_step(
+                conn,
+                "lei_backfill",
+                lambda: backfill_lei_company_links(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+            )
+            step_results.append(backfill_result_step)
+
+            enrichment_result_step = _run_step(
+                conn,
+                "companies_house_enrichment",
+                lambda: run_ch_enrichment_batch(conn, CH_ENRICHMENT_BATCH_SIZE),
+                timeout_seconds=PIPELINE_ENRICHMENT_TIMEOUT_SECONDS,
+            )
+            step_results.append(enrichment_result_step)
+
+            successful_source_count = sum(
+                1
+                for result in (uk_result, mu_result, lei_result)
+                if result.status == "completed"
+            )
+            if successful_source_count == 0:
+                raise RuntimeError("all external source steps failed")
+
+            score_result = _run_step(
+                conn,
+                "scoring",
+                lambda: _score_new_companies(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+                critical=True,
+            )
+            step_results.append(score_result)
+
+            queue_result = _run_step(
+                conn,
+                "queue_refresh",
+                lambda: _refresh_queue(conn),
+                timeout_seconds=PIPELINE_SOURCE_TIMEOUT_SECONDS,
+                critical=True,
+            )
+            step_results.append(queue_result)
+
             shadow_result = {
                 "batches_processed": 0,
                 "scanned": 0,
@@ -316,13 +464,21 @@ def run() -> None:
                 "failed": 0,
             }
             if SCORING_SHADOW_MODE:
-                shadow_result = backfill_active_shadow_scores(
+                shadow_result_step = _run_step(
                     conn,
-                    stale_days=SHADOW_SCORE_ACTIVE_STALE_DAYS,
-                    batch_size=SHADOW_BACKFILL_BATCH_SIZE,
-                    max_batches=SHADOW_BACKFILL_MAX_BATCHES,
-                    lock_timeout_ms=SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+                    "shadow_scoring",
+                    lambda: backfill_active_shadow_scores(
+                        conn,
+                        stale_days=SHADOW_SCORE_ACTIVE_STALE_DAYS,
+                        batch_size=SHADOW_BACKFILL_BATCH_SIZE,
+                        max_batches=SHADOW_BACKFILL_MAX_BATCHES,
+                        lock_timeout_ms=SHADOW_BACKFILL_LOCK_TIMEOUT_MS,
+                    ),
+                    timeout_seconds=PIPELINE_SHADOW_TIMEOUT_SECONDS,
                 )
+                step_results.append(shadow_result_step)
+                if shadow_result_step.details:
+                    shadow_result = shadow_result_step.details
             zero_streak = _mauritius_zero_streak(conn)
 
             if zero_streak >= 3:
@@ -332,19 +488,31 @@ def run() -> None:
                 )
 
             duration = round(time.time() - start, 1)
+            failed_steps = [
+                result for result in step_results if result.status != "completed"
+            ]
+            status = "partially_completed" if failed_steps else "completed"
+            uk_count = uk_result.count
+            mu_count = mu_result.count
+            lei_count = lei_result.count
+            backfill_result = backfill_result_step.details or {}
+            enrichment_result = enrichment_result_step.details or {}
+            scores_count = score_result.count
+            queue_rows = queue_result.count
             logger.info(
                 "nightly_complete",
                 extra={
                     "event": "nightly_complete",
+                    "status": status,
                     "companies_fetched_uk": uk_count,
                     "companies_fetched_mu": mu_count,
                     "lei_matches": lei_count,
-                    "lei_backfill_scanned": backfill_result["scanned"],
-                    "lei_backfill_matched": backfill_result["matched"],
-                    "lei_backfill_unmatched": backfill_result["unmatched"],
-                    "officers_fetched": enrichment_result["officers"],
-                    "pscs_fetched": enrichment_result["pscs"],
-                    "enrichment_failures": enrichment_result["failed"],
+                    "lei_backfill_scanned": backfill_result.get("scanned", 0),
+                    "lei_backfill_matched": backfill_result.get("matched", 0),
+                    "lei_backfill_unmatched": backfill_result.get("unmatched", 0),
+                    "officers_fetched": enrichment_result.get("officers", 0),
+                    "pscs_fetched": enrichment_result.get("pscs", 0),
+                    "enrichment_failures": enrichment_result.get("failed", 0),
                     "enrichment_skipped_rate_limit": 0,
                     "scores_generated": scores_count,
                     "shadow_scoring_scanned": shadow_result["scanned"],
@@ -359,12 +527,19 @@ def run() -> None:
             _finish_run(
                 conn,
                 run_id,
-                status="success",
+                status=status,
                 uk_count=uk_count,
                 mu_count=mu_count,
+                lei_count=lei_count,
                 scores_count=scores_count,
                 queue_rows=queue_rows,
                 duration_seconds=duration,
+                error="; ".join(
+                    f"{result.name}: {result.error}" for result in failed_steps
+                )[:2000]
+                if failed_steps
+                else None,
+                source_results=[result.as_dict() for result in step_results],
             )
 
         except Exception as exc:
@@ -376,6 +551,7 @@ def run() -> None:
                 status="failed",
                 duration_seconds=duration,
                 error=str(exc)[:2000],
+                source_results=[result.as_dict() for result in step_results],
             )
             raise
         finally:

@@ -12,7 +12,7 @@ permissions:
 jobs:
   run-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 75
 
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +42,11 @@ jobs:
           APP_ENV: production
           LOG_LEVEL: INFO
           RM_NAMES: ${{ secrets.RM_NAMES }}
+          ALLOWED_DB_HOSTS: rlwy.net,kodama.proxy.rlwy.net
+          CH_ENRICHMENT_BATCH_SIZE: "25"
+          PIPELINE_SOURCE_TIMEOUT_SECONDS: "600"
+          PIPELINE_ENRICHMENT_TIMEOUT_SECONDS: "900"
+          PIPELINE_SHADOW_TIMEOUT_SECONDS: "600"
           # Pipeline never signs cookies, but src.config enforces SECRET_KEY
           # when APP_ENV=production. Workflow uses a dedicated secret distinct
           # from the Railway webserver's SECRET_KEY.

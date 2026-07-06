@@ -453,7 +453,8 @@ def dashboard(request: Request):
 
             cur.execute("""
                 SELECT started_at, uk_count, mu_count, scores_count, queue_rows
-                FROM pipeline_runs WHERE status = 'success'
+                FROM pipeline_runs
+                WHERE status IN ('success', 'completed', 'partially_completed')
                 ORDER BY started_at DESC LIMIT 1
             """)
             last_success_row = cur.fetchone()
